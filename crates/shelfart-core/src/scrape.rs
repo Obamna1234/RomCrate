@@ -669,6 +669,16 @@ impl Ctx {
         } else {
             GameStatus::Partial
         };
+        if !game.missing_files.is_empty() {
+            errors.insert(
+                0,
+                format!(
+                    "Disc data missing: {} (the {} file points to it — the download may be incomplete)",
+                    game.missing_files.join(", "),
+                    game.path.extension().and_then(|e| e.to_str()).unwrap_or("cue")
+                ),
+            );
+        }
         let msg = if errors.is_empty() {
             None
         } else {
@@ -702,11 +712,16 @@ impl Ctx {
     ) -> Option<DynamicImage> {
         let idx = self.art.per_kind.get(&k)?;
         let best = best?;
+        // The game is already identified; for the other art types only accept
+        // the same title (any region), never a fuzzy guess — otherwise
+        // "Crash Bandicoot" could get the logo of "Crash Bandicoot - Warped".
         let name = if idx.contains(best) {
             best.to_string()
         } else {
-            idx.best_match(best, &self.cfg.prefs)
-                .or_else(|| idx.best_match(&game.stem, &self.cfg.prefs))?
+            let mut strict = self.cfg.prefs.clone();
+            strict.fuzzy = false;
+            idx.best_match(best, &strict)
+                .or_else(|| idx.best_match(&game.stem, &strict))?
                 .name
         };
         match self.sources.libretro.fetch_art(self.sys, k, &name).await {

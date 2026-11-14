@@ -13,4 +13,6 @@
 - Zipped games folders are unpacked next to the zip (with zip-slip, zip-bomb, free-space and no-overwrite protection).
 - Pegasus: Skraper-style media layout (`media/box2dfront/…`) detected and kept automatically; existing art never overwritten.
 - Identification of byte-swapped N64 ROMs, ROM-header titles as a fallback, better matching of "&" titles and short names.
+- GameCube/Wii discs matched by region and revision from the disc header; .cue/.gdi sets with missing track files are flagged.
+- Extra art types (logo, title, screenshot) never fall back to a fuzzy guess once a game is identified.
 - Security review and penetration test before release (see docs/SECURITY-REVIEW.md); 51 automated tests.

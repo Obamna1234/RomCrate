@@ -117,11 +117,47 @@ impl GameDb {
     }
 
     pub fn by_serial(&self, serial: &str) -> Option<&str> {
-        let hit = if serial.len() == 4 {
-            self.by_code.get(&serial.to_uppercase())?
-        } else {
-            self.by_serial.get(&norm_serial(serial))?
+        // GameCube/Wii: "GALE:0" = game code + disc revision read from the disc header.
+        let (code, rev) = match serial.split_once(':') {
+            Some((c, r)) => (c, r.parse::<u8>().ok()),
+            None => (serial, None),
         };
+        if code.len() == 4 {
+            let hit = self.by_code.get(&code.to_uppercase())?;
+            let region = match code.as_bytes()[3].to_ascii_uppercase() {
+                b'E' => Some("USA"),
+                b'P' | b'D' | b'F' | b'S' | b'I' | b'X' | b'Y' | b'U' => Some("Europe"),
+                b'J' => Some("Japan"),
+                b'K' => Some("Korea"),
+                b'W' => Some("Taiwan"),
+                _ => None,
+            };
+            let rev_tag = rev.filter(|r| *r > 0).map(|r| format!("(Rev {r})"));
+            let score = |n: &String| {
+                let mut s = 0;
+                if region.map(|r| n.contains(r)).unwrap_or(false) {
+                    s += 10;
+                }
+                match &rev_tag {
+                    Some(t) if n.contains(t.as_str()) => s += 5,
+                    None if !n.contains("(Rev ") => s += 5,
+                    _ => {}
+                }
+                if n.contains("(Disc 1)") {
+                    s += 1;
+                }
+                s
+            };
+            // Highest score wins; ties keep database order.
+            let mut best: Option<&String> = None;
+            for n in hit {
+                if best.map(|b| score(n) > score(b)).unwrap_or(true) {
+                    best = Some(n);
+                }
+            }
+            return best.map(|s| s.as_str());
+        }
+        let hit = self.by_serial.get(&norm_serial(serial))?;
         hit.iter()
             .find(|n| n.contains("(Disc 1)"))
             .or_else(|| hit.first())
@@ -458,11 +494,12 @@ fn read_serial(sys_id: &str, path: &Path, ext: &str) -> Option<String> {
                 "ciso" => 0x8000,
                 _ => return None,
             };
-            let id = read_at(&mut f, off, 6)?;
-            let id = std::str::from_utf8(&id).ok()?;
+            // Bytes 0-3: game code (4th letter = region), 4-5: maker, 7: disc revision.
+            let head = read_at(&mut f, off, 8)?;
+            let id = std::str::from_utf8(&head[..6]).ok()?;
             id.chars()
                 .all(|c| c.is_ascii_alphanumeric())
-                .then(|| id[..4].to_string())
+                .then(|| format!("{}:{}", &id[..4], head[7]))
         }
         "psx" | "ps2" | "psp" => {
             let target = if ext == "cue" {
@@ -715,7 +752,7 @@ game (
         let mut b = vec![0u8; 0x400];
         b[0x200..0x206].copy_from_slice(b"SMNP01");
         std::fs::write(&p, &b).unwrap();
-        assert_eq!(read_serial("wii", &p, "wbfs"), Some("SMNP".into()));
+        assert_eq!(read_serial("wii", &p, "wbfs"), Some("SMNP:0".into()));
 
         // Minimal stored zip with one file "a.sfc" containing "hello".
         let data = b"hello";

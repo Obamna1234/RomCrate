@@ -65,6 +65,9 @@ pub struct Game {
     pub stem: String,
     /// Path relative to the system folder, using forward slashes.
     pub rel_path: String,
+    /// Track files a .cue/.gdi sheet points to that aren't there (incomplete download).
+    #[serde(default)]
+    pub missing_files: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -284,12 +287,56 @@ fn make_game(base: &Path, p: &Path) -> Game {
         .strip_prefix(base)
         .map(|r| r.to_string_lossy().replace('\\', "/"))
         .unwrap_or_else(|_| file_name.clone());
+    let missing_files = missing_tracks(p);
     Game {
         path: p.to_path_buf(),
         file_name,
         stem,
         rel_path,
+        missing_files,
     }
+}
+
+/// Files referenced by a cue/gdi sheet that don't exist next to it.
+fn missing_tracks(sheet: &Path) -> Vec<String> {
+    let ext = ext_of(sheet);
+    if ext != "cue" && ext != "gdi" {
+        return Vec::new();
+    }
+    let Ok(meta) = std::fs::metadata(sheet) else {
+        return Vec::new();
+    };
+    if meta.len() > 256 * 1024 {
+        return Vec::new();
+    }
+    let text = std::fs::read_to_string(sheet).unwrap_or_default();
+    let mut names = Vec::new();
+    for line in text.lines() {
+        let l = line.trim();
+        let name = if ext == "cue" {
+            if !l.to_uppercase().starts_with("FILE") {
+                continue;
+            }
+            match l.split('"').nth(1) {
+                Some(n) => n.to_string(),
+                None => l.split_whitespace().nth(1).unwrap_or_default().to_string(),
+            }
+        } else {
+            // gdi: "1 0 4 2352 track01.bin 0" (name may be quoted)
+            match l.split('"').nth(1) {
+                Some(n) => n.to_string(),
+                None => l.split_whitespace().nth(4).unwrap_or_default().to_string(),
+            }
+        };
+        // Only look in the same folder; never follow paths elsewhere.
+        if let Some(file) = Path::new(&name).file_name() {
+            if !sheet.with_file_name(file).exists() {
+                names.push(file.to_string_lossy().to_string());
+            }
+        }
+    }
+    names.dedup();
+    names
 }
 
 #[cfg(test)]
@@ -341,6 +388,30 @@ mod tests {
         let lib = scan_roots(&[t.path().to_path_buf()]);
         assert_eq!(lib.systems.len(), 1);
         assert!(lib.systems[0].path.ends_with("roms/snes"));
+    }
+
+    #[test]
+    fn flags_cue_sheets_with_missing_tracks() {
+        let t = tempfile::tempdir().unwrap();
+        let d = t.path().join("psx");
+        fs::create_dir_all(&d).unwrap();
+        fs::write(
+            d.join("A.cue"),
+            "FILE \"A.bin\" BINARY\n  TRACK 01 MODE2/2352\n",
+        )
+        .unwrap();
+        fs::write(d.join("A.bin"), b"x").unwrap();
+        fs::write(
+            d.join("B.cue"),
+            "FILE \"B (Track 1).bin\" BINARY\nFILE \"B (Track 2).bin\" BINARY\n",
+        )
+        .unwrap();
+        fs::write(d.join("B (Track 1).bin"), b"x").unwrap();
+        let ss = scan_system_folder(crate::systems::by_id("psx").unwrap(), &d);
+        let a = ss.games.iter().find(|g| g.stem == "A").unwrap();
+        let b = ss.games.iter().find(|g| g.stem == "B").unwrap();
+        assert!(a.missing_files.is_empty());
+        assert_eq!(b.missing_files, vec!["B (Track 2).bin"]);
     }
 
     #[test]
