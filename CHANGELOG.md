@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- New `shelfart-cli-…-x86_64-unknown-linux-musl` download: a fully static command-line build that runs on any 64-bit Linux, including older ones like Ubuntu 20.04/20.10 where the desktop app can't run.
+
+
 ## 0.1.2 — first full release
 
 - Windows, macOS and Linux installers are attached to the release (0.1.0 only had the command-line tools, and the 0.1.1 build was stopped, because of a release-script bug).

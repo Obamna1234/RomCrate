@@ -136,6 +136,8 @@ jobs:
           - { os: macos-latest, target: aarch64-apple-darwin, ext: "" }
           - { os: macos-latest, target: x86_64-apple-darwin, ext: "" }
           - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, ext: "" }
+          # Fully static build: runs on any 64-bit Linux, however old (e.g. Ubuntu 20.x).
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-musl, ext: "" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -145,6 +147,9 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Static build tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Build
         env:
           SS_DEVID: ${{ secrets.SS_DEVID }}

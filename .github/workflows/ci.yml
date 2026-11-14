@@ -55,6 +55,25 @@ jobs:
       - name: Tests
         run: cargo test --workspace
 
+  static-cli:
+    name: Static Linux CLI build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build
+        run: cargo build --release -p shelfart-cli --target x86_64-unknown-linux-musl
+      - name: Check it is static and runs
+        run: |
+          B=target/x86_64-unknown-linux-musl/release/shelfart-cli
+          file "$B"
+          file "$B" | grep -q "static"
+          "$B" --help | head -3
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest

@@ -66,7 +66,8 @@ Grab the installer for your system from **[Releases](../../releases/latest)**:
 |---|---|
 | Windows 10 / 11 | `ShelfArt_x.y.z_x64-setup.exe` (or `.msi`) |
 | macOS (Apple Silicon & Intel) | `ShelfArt_x.y.z_universal.dmg` |
-| Linux | `.AppImage`, `.deb` or `.rpm` |
+| Linux (Ubuntu 22.04 / Zorin 17 / Mint 21 or newer) | `.AppImage`, `.deb` or `.rpm` |
+| Any 64-bit Linux, including older ones | `shelfart-cli-…-x86_64-unknown-linux-musl` (command line) |
 
 > Builds are not code-signed yet. Windows SmartScreen may say "unknown publisher" — click **More info → Run anyway**. On macOS, right-click the app → **Open** the first time.
 
