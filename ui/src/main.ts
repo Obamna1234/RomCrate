@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { open } from "@tauri-apps/plugin-dialog";
 
 // ---------------------------------------------------------------- types
 
@@ -151,7 +150,7 @@ function renderNav() {
   const nav = document.getElementById("steps")!;
   nav.replaceChildren(
     ...STEPS.map((st, i) => {
-      const cur = STEPS.findIndex((x) => x.id === view);
+      const cur = view === "settings" ? STEPS.length : STEPS.findIndex((x) => x.id === view);
       const done = (st.id === "library" && library.systems.length > 0 && view !== "library")
         || (st.id === "launcher" && folderReady() && i < cur)
         || (st.id === "artwork" && kindsFor(launcher()).length > 0 && i < cur)
@@ -532,15 +531,13 @@ function viewScrape(): Node[] {
 async function openOutput() {
   const l = launcher();
   const target = l.needs_folder ? prefs.folders[l.id] : selectedSystems()[0]?.path;
-  if (target) await openPath(target).catch((e) => toast(String(e)));
+  if (target) await invoke("open_folder", { path: target }).catch((e) => toast(String(e)));
 }
 
 async function exportMissing() {
   if (!run.summary) return;
-  const path = await save({ title: "Save missing games list", defaultPath: "shelfart-missing.txt", filters: [{ name: "Text", extensions: ["txt"] }] });
-  if (!path) return;
   const text = `Games ShelfArt couldn't find artwork for (${new Date().toLocaleString()}):\n\n${run.summary.missingGames.join("\n")}\n`;
-  await invoke("save_report", { path, text }).then(() => toast("Saved")).catch((e) => toast(String(e)));
+  await invoke<boolean>("save_missing_report", { text }).then((ok) => ok && toast("Saved")).catch((e) => toast(String(e)));
 }
 
 // ---------------------------------------------------------------- view: settings

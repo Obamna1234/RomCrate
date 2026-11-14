@@ -126,6 +126,9 @@ pub fn scan_roots(roots: &[PathBuf]) -> Library {
             }
         }
     }
+    // Folders with nothing to scrape (e.g. an artwork output folder that
+    // happens to be called "psx") are not shown.
+    lib.systems.retain(|s| !s.games.is_empty());
     lib.systems.sort_by(|a, b| {
         a.maker
             .cmp(&b.maker)
@@ -168,7 +171,10 @@ fn child_dirs(p: &Path) -> Vec<PathBuf> {
         .flatten()
         .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
         .map(|e| e.path())
-        .filter(|p| !dir_name(p).starts_with('.'))
+        .filter(|p| {
+            let n = dir_name(p);
+            !n.starts_with('.') && !SKIP_DIRS.contains(&n.to_lowercase().as_str())
+        })
         .collect();
     v.sort();
     v
@@ -316,6 +322,25 @@ mod tests {
             names,
             vec!["Crash Bandicoot (USA).cue", "Final Fantasy VII (USA).m3u"]
         );
+    }
+
+    #[test]
+    fn output_folders_inside_library_are_ignored() {
+        let t = tempfile::tempdir().unwrap();
+        fs::create_dir_all(t.path().join("roms/snes")).unwrap();
+        fs::write(t.path().join("roms/snes/Game (USA).sfc"), b"x").unwrap();
+        // Artwork output that lives next to the games.
+        fs::create_dir_all(t.path().join("downloaded_media/snes/covers")).unwrap();
+        fs::write(
+            t.path().join("downloaded_media/snes/covers/Game (USA).png"),
+            b"x",
+        )
+        .unwrap();
+        fs::create_dir_all(t.path().join("art/psx/boxart")).unwrap();
+        fs::write(t.path().join("art/psx/boxart/Game.png"), b"x").unwrap();
+        let lib = scan_roots(&[t.path().to_path_buf()]);
+        assert_eq!(lib.systems.len(), 1);
+        assert!(lib.systems[0].path.ends_with("roms/snes"));
     }
 
     #[test]

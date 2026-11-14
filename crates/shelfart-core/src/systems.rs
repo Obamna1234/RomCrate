@@ -529,7 +529,7 @@ pub static SYSTEMS: &[System] = &[
         "Atari 8-bit",
         "Atari",
         "Atari - 8-bit Family",
-        "Atari_-_8-bit_Family",
+        "Atari_-_8-bit",
         ["atari800", "atari8bit", "atarixe"],
         ["atr", "xex", "xfd", "car", "cas", "zip", "7z"],
         "Atari 800"
@@ -868,6 +868,50 @@ mod tests {
         let n = ids.len();
         ids.dedup();
         assert_eq!(n, ids.len());
+    }
+
+    #[test]
+    fn every_system_is_complete_and_unambiguous() {
+        for s in SYSTEMS {
+            assert!(!s.extensions.is_empty(), "{} has no extensions", s.id);
+            assert!(!s.folders.is_empty(), "{} has no folder names", s.id);
+            assert!(!s.launchbox.is_empty(), "{} has no LaunchBox name", s.id);
+            assert!(
+                crate::screenscraper::system_id(s.id).is_some(),
+                "{} has no ScreenScraper id",
+                s.id
+            );
+            // Its own id and every alias must detect back to this system.
+            assert_eq!(
+                detect_from_folder(s.id).map(|x| x.id),
+                Some(s.id),
+                "id {}",
+                s.id
+            );
+            for f in s.folders {
+                assert_eq!(
+                    detect_from_folder(f).map(|x| x.id),
+                    Some(s.id),
+                    "alias '{f}' of {} detects as something else",
+                    s.id
+                );
+            }
+            assert_eq!(
+                detect_from_folder(s.libretro).map(|x| x.id),
+                Some(s.id),
+                "libretro name {}",
+                s.libretro
+            );
+            // Repository names follow libretro's convention (one documented exception).
+            if s.id != "atari800" {
+                assert_eq!(
+                    s.repo,
+                    s.libretro.replace(' ', "_"),
+                    "repo name for {}",
+                    s.id
+                );
+            }
+        }
     }
 
     #[test]

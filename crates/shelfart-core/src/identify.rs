@@ -183,7 +183,7 @@ impl Identifier {
             .unwrap_or(false);
         if !fresh {
             let mut url = Url::parse(
-                "https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/",
+                "https://raw.githubusercontent.com/libretro/libretro-database/HEAD/metadat/",
             )?;
             url.path_segments_mut()
                 .map_err(|_| anyhow::anyhow!("bad url"))?
@@ -240,18 +240,48 @@ pub fn fingerprint(sys: &System, game: &Game) -> Fingerprint {
         "zip" => fp.crc = zip_first_crc(path),
         "7z" => {}
         _ if size <= MAX_HASH_BYTES => {
-            if let Ok(bytes) = std::fs::read(path) {
-                fp.crc = Some(crc32fast::hash(&bytes));
-                let header = match ext.as_str() {
-                    "nes" if bytes.starts_with(b"NES\x1a") => 16,
-                    "fds" if bytes.starts_with(b"FDS\x1a") => 16,
-                    "a78" if bytes.len() > 128 && &bytes[1..10] == b"ATARI7800" => 128,
-                    "lnx" if bytes.starts_with(b"LYNX") => 64,
-                    "sfc" | "smc" if bytes.len() % 1024 == 512 => 512,
+            // Stream the file (no whole-file buffering) and hash it both with
+            // and without a copier/iNES header in one pass.
+            if let Ok(mut f) = File::open(path) {
+                let mut head = [0u8; 16];
+                let n = f.read(&mut head).unwrap_or(0);
+                let head = &head[..n];
+                let header: u64 = match ext.as_str() {
+                    "nes" if head.starts_with(b"NES\x1a") => 16,
+                    "fds" if head.starts_with(b"FDS\x1a") => 16,
+                    "a78" if head.len() >= 10 && &head[1..10] == b"ATARI7800" => 128,
+                    "lnx" if head.starts_with(b"LYNX") => 64,
+                    "sfc" | "smc" if size % 1024 == 512 => 512,
                     _ => 0,
                 };
-                if header > 0 && bytes.len() > header {
-                    fp.crc_headerless = Some(crc32fast::hash(&bytes[header..]));
+                if f.seek(SeekFrom::Start(0)).is_ok() {
+                    let mut full = crc32fast::Hasher::new();
+                    let mut body = crc32fast::Hasher::new();
+                    let mut pos: u64 = 0;
+                    let mut buf = vec![0u8; 1 << 20];
+                    let mut ok = true;
+                    loop {
+                        match f.read(&mut buf) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                let chunk = &buf[..n];
+                                full.update(chunk);
+                                let skip = header.saturating_sub(pos).min(n as u64) as usize;
+                                body.update(&chunk[skip..]);
+                                pos += n as u64;
+                            }
+                            Err(_) => {
+                                ok = false;
+                                break;
+                            }
+                        }
+                    }
+                    if ok {
+                        fp.crc = Some(full.finalize());
+                        if header > 0 && size > header {
+                            fp.crc_headerless = Some(body.finalize());
+                        }
+                    }
                 }
             }
         }
@@ -465,6 +495,23 @@ game (
             db.by_serial("GW7P"),
             Some("007 - Agent Under Fire (Europe)")
         );
+    }
+
+    #[test]
+    fn headered_roms_hash_both_ways() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("nes");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut rom = b"NES\x1a".to_vec();
+        rom.extend_from_slice(&[0u8; 12]);
+        let body: Vec<u8> = (0..3_000_000u32).map(|i| (i % 251) as u8).collect();
+        rom.extend_from_slice(&body);
+        std::fs::write(dir.join("x.nes"), &rom).unwrap();
+        let sys = crate::systems::by_id("nes").unwrap();
+        let ss = crate::scan::scan_system_folder(sys, &dir);
+        let fp = fingerprint(sys, &ss.games[0]);
+        assert_eq!(fp.crc, Some(crc32fast::hash(&rom)));
+        assert_eq!(fp.crc_headerless, Some(crc32fast::hash(&body)));
     }
 
     #[test]

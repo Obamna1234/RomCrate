@@ -85,7 +85,7 @@ If one source is unreachable ShelfArt tries the other mirror, and everything alr
 - **Your files are safe:** ShelfArt never deletes or modifies your games, never writes outside the folders you choose, and backs up `gamelist.xml` before changing it.
 - An optional ScreenScraper login is kept in memory for the session only — never saved to disk.
 
-See [SECURITY.md](SECURITY.md) to report a vulnerability.
+See [SECURITY.md](SECURITY.md) to report a vulnerability, and the [security review](docs/SECURITY-REVIEW.md) for the latest audit and penetration-test results.
 
 ## Roadmap — one-click setup
 

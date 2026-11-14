@@ -291,7 +291,7 @@ impl Libretro {
         };
         let body = self
             .client
-            .get(&api("master?recursive=1")?, MAX_INDEX_BYTES)
+            .get(&api("HEAD?recursive=1")?, MAX_INDEX_BYTES)
             .await?;
         let tree: Tree = serde_json::from_slice(&body)?;
         let mut out: BTreeMap<ArtKind, Vec<String>> = BTreeMap::new();
@@ -316,7 +316,7 @@ impl Libretro {
             return Ok(out);
         }
         // Huge repo: list each art folder separately.
-        let top = self.client.get(&api("master")?, MAX_INDEX_BYTES).await?;
+        let top = self.client.get(&api("HEAD")?, MAX_INDEX_BYTES).await?;
         let top: Tree = serde_json::from_slice(&top)?;
         for kind in ArtKind::DOWNLOADABLE {
             let dir = kind.libretro_dir().unwrap();
@@ -403,7 +403,7 @@ impl Libretro {
         let mut rel: Vec<String> = vec![dir.to_string(), format!("{name}.png")];
         for _hop in 0..4 {
             let mut url = Url::parse(&format!(
-                "https://raw.githubusercontent.com/libretro-thumbnails/{}/master/",
+                "https://raw.githubusercontent.com/libretro-thumbnails/{}/HEAD/",
                 sys.repo
             ))?;
             {

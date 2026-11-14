@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 crc32fast = "1"
+tempfile = "3"
 md5 = { package = "md-5", version = "0.10" }
 serde.workspace = true
 serde_json.workspace = true

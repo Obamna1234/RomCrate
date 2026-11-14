@@ -21,8 +21,11 @@ use tauri::{AppHandle, Emitter, State};
 struct AppState {
     library: Mutex<Library>,
     cancel: Mutex<Option<Arc<AtomicBool>>>,
+    running: Arc<AtomicBool>,
     /// Files ShelfArt produced or found this session; only these can be previewed.
     previewable: Arc<Mutex<HashSet<PathBuf>>>,
+    /// Folders the user chose this session; only these can be opened in the file manager.
+    openable: Mutex<HashSet<PathBuf>>,
 }
 
 #[derive(Serialize)]
@@ -75,9 +78,15 @@ fn get_catalog() -> Catalog {
 #[tauri::command]
 async fn scan_library(roots: Vec<String>, state: State<'_, AppState>) -> Result<Library, String> {
     let roots: Vec<PathBuf> = roots.into_iter().map(PathBuf::from).collect();
+    state.openable.lock().unwrap().extend(roots.iter().cloned());
     let lib = tokio::task::spawn_blocking(move || scan::scan_roots(&roots))
         .await
         .map_err(|e| e.to_string())?;
+    state
+        .openable
+        .lock()
+        .unwrap()
+        .extend(lib.systems.iter().map(|s| s.path.clone()));
     *state.library.lock().unwrap() = lib.clone();
     Ok(lib)
 }
@@ -94,6 +103,7 @@ async fn add_system_folder(
     let scanned = tokio::task::spawn_blocking(move || scan::scan_system_folder(sys, &dir))
         .await
         .map_err(|e| e.to_string())?;
+    state.openable.lock().unwrap().insert(scanned.path.clone());
     let mut lib = state.library.lock().unwrap();
     lib.systems.retain(|s| s.path != scanned.path);
     lib.systems.push(scanned);
@@ -109,20 +119,30 @@ async fn start_scrape(
     ss_password: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut cancel_slot = state.cancel.lock().unwrap();
-    if cancel_slot
-        .as_ref()
-        .map(|c| !c.load(Ordering::Relaxed))
-        .unwrap_or(false)
-    {
+    if state.running.swap(true, Ordering::SeqCst) {
         return Err("A scrape is already running".into());
     }
     let cancel = Arc::new(AtomicBool::new(false));
-    *cancel_slot = Some(cancel.clone());
-    drop(cancel_slot);
+    *state.cancel.lock().unwrap() = Some(cancel.clone());
+    let mut config = config;
+    // Only ever run the Real-ESRGAN program, never an arbitrary executable.
+    if let Some(bin) = &config.ai_binary {
+        if !shelfart_core::imaging::is_esrgan_binary(bin) {
+            config.ai_binary = None;
+        }
+    }
+    if let Some(f) = &config.folder {
+        state.openable.lock().unwrap().insert(f.clone());
+    }
 
     let lib = state.library.lock().unwrap().clone();
-    let client = SafeClient::new().map_err(|e| e.to_string())?;
+    let client = match SafeClient::new() {
+        Ok(c) => c,
+        Err(e) => {
+            state.running.store(false, Ordering::SeqCst);
+            return Err(e.to_string());
+        }
+    };
     let cache = default_cache_dir();
     let user = match (ss_user, ss_password) {
         (Some(u), Some(p)) if !u.trim().is_empty() && !p.is_empty() => {
@@ -152,11 +172,10 @@ async fn start_scrape(
         }
         let _ = app2.emit("scrape-event", &e);
     });
-    let done_flag = cancel.clone();
+    let running = state.running.clone();
     tauri::async_runtime::spawn(async move {
-        shelfart_core::run_scrape(lib, selected, config, sources, cancel.clone(), emit).await;
-        // Mark as not running.
-        done_flag.store(true, Ordering::Relaxed);
+        shelfart_core::run_scrape(lib, selected, config, sources, cancel, emit).await;
+        running.store(false, Ordering::SeqCst);
     });
     Ok(())
 }
@@ -250,18 +269,45 @@ fn clear_cache() -> Result<(), String> {
     Ok(())
 }
 
-/// Save a plain-text report to a path the user picked in a save dialog.
+/// Ask where to save the "missing games" report and write it. The path comes
+/// from the native save dialog, never from the web page.
 #[tauri::command]
-fn save_report(path: String, text: String) -> Result<(), String> {
-    let p = PathBuf::from(path);
-    if p.extension()
+async fn save_missing_report(app: AppHandle, text: String) -> Result<bool, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(choice) = app
+        .dialog()
+        .file()
+        .set_title("Save missing games list")
+        .set_file_name("shelfart-missing.txt")
+        .add_filter("Text", &["txt"])
+        .blocking_save_file()
+    else {
+        return Ok(false);
+    };
+    let mut path = choice.into_path().map_err(|e| e.to_string())?;
+    if path
+        .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.eq_ignore_ascii_case("txt"))
         != Some(true)
     {
-        return Err("Reports are saved as .txt files".into());
+        path.set_extension("txt");
     }
-    std::fs::write(p, text).map_err(|e| e.to_string())
+    std::fs::write(path, text).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+/// Open a folder in the system file manager — only folders the user chose this session.
+#[tauri::command]
+fn open_folder(app: AppHandle, path: String, state: State<'_, AppState>) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let p = PathBuf::from(&path);
+    if !p.is_dir() || !state.openable.lock().unwrap().contains(&p) {
+        return Err("That folder can't be opened from here".into());
+    }
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 fn main() {
@@ -279,7 +325,8 @@ fn main() {
             guess_folder,
             cache_size,
             clear_cache,
-            save_report
+            save_missing_report,
+            open_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running ShelfArt");

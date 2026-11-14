@@ -115,7 +115,7 @@ impl SafeClient {
             .header("Accept", "*/*")
             .send()
             .await
-            .map_err(|e| NetError::Transport(e.to_string()))?;
+            .map_err(transport)?;
         if !host_allowed(resp.url()) {
             return Err(NetError::HostNotAllowed(
                 resp.url().host_str().unwrap_or("?").to_string(),
@@ -137,7 +137,7 @@ impl SafeClient {
         let mut body = Vec::new();
         let mut stream = resp.bytes_stream();
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| NetError::Transport(e.to_string()))?;
+            let chunk = chunk.map_err(transport)?;
             if body.len() + chunk.len() > max {
                 return Err(NetError::TooLarge(max));
             }
@@ -147,9 +147,64 @@ impl SafeClient {
     }
 }
 
+/// Network errors without the request URL: ScreenScraper URLs carry the
+/// app's developer password (and optionally the user's), which must never
+/// end up in logs, the UI or a saved report.
+fn transport(e: reqwest::Error) -> NetError {
+    let e = e.without_url();
+    let mut msg = e.to_string();
+    let mut src = std::error::Error::source(&e);
+    while let Some(s) = src {
+        msg.push_str(": ");
+        msg.push_str(&s.to_string());
+        src = s.source();
+    }
+    NetError::Transport(redact(&msg))
+}
+
+/// Remove anything that looks like a credential from a message.
+pub fn redact(msg: &str) -> String {
+    let mut out = msg.to_string();
+    for key in ["devpassword=", "sspassword=", "devid=", "ssid="] {
+        let mut from = 0;
+        while let Some(rel) = out[from..].find(key) {
+            let start = from + rel + key.len();
+            let end = out[start..]
+                .find(['&', ' ', ')', '"', '\''])
+                .map(|e| start + e)
+                .unwrap_or(out.len());
+            out.replace_range(start..end, "[hidden]");
+            from = start + "[hidden]".len();
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn credentials_never_leak() {
+        let m = redact("error sending request for url (https://api.screenscraper.fr/api2/x?devid=abc&devpassword=SECRET&ssid=me&sspassword=hunter2)");
+        assert!(
+            !m.contains("SECRET")
+                && !m.contains("hunter2")
+                && !m.contains("abc")
+                && !m.contains("ssid=me"),
+            "{m}"
+        );
+    }
+
+    #[tokio::test]
+    async fn transport_errors_hide_urls() {
+        let c = SafeClient::new().unwrap();
+        // An allowed host on a port nothing listens on: fails fast, offline.
+        let url = Url::parse("https://api.screenscraper.fr:1/api2/x?devpassword=SECRET").unwrap();
+        if let Err(e) = c.get_once(&url, 10).await {
+            assert!(!e.to_string().contains("SECRET"), "{e}");
+        }
+    }
 
     #[test]
     fn allow_list() {

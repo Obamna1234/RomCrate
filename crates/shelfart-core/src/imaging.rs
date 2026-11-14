@@ -117,47 +117,55 @@ fn unsharp(img: &RgbaImage) -> RgbaImage {
     imageops::unsharpen(img, 0.8, 2)
 }
 
+/// Is this path plausibly the Real-ESRGAN ncnn-vulkan program the user installed?
+/// We only ever run a program with this name, chosen by the user.
+pub fn is_esrgan_binary(p: &Path) -> bool {
+    let name = p
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
+    p.is_file() && (name == "realesrgan-ncnn-vulkan" || name == "realesrgan-ncnn-vulkan.exe")
+}
+
 /// Upscale using an external Real-ESRGAN ncnn-vulkan executable chosen by the
-/// user. Runs it directly (no shell) on a temp copy and validates the output.
+/// user. Runs it directly (no shell) on a private temp copy and validates the output.
 pub async fn ai_upscale(binary: &Path, img: &DynamicImage) -> anyhow::Result<DynamicImage> {
-    anyhow::ensure!(binary.is_file(), "Real-ESRGAN executable not found");
-    let tmp =
-        std::env::temp_dir().join(format!("shelfart-{}-{}", std::process::id(), rand_suffix()));
-    std::fs::create_dir_all(&tmp)?;
-    let input = tmp.join("in.png");
-    let output = tmp.join("out.png");
+    anyhow::ensure!(
+        is_esrgan_binary(binary),
+        "Real-ESRGAN executable not found (expected realesrgan-ncnn-vulkan)"
+    );
+    // Unique, private directory (not a predictable name in a shared temp folder).
+    let tmp = tempfile::Builder::new()
+        .prefix("shelfart-esrgan-")
+        .tempdir()?;
+    let input = tmp.path().join("in.png");
+    let output = tmp.path().join("out.png");
     img.save(&input)?;
-    let model = "realesrgan-x4plus";
     let mut cmd = tokio::process::Command::new(binary);
     cmd.arg("-i")
         .arg(&input)
         .arg("-o")
         .arg(&output)
         .arg("-n")
-        .arg(model)
+        .arg("realesrgan-x4plus")
         .arg("-s")
         .arg("4");
     if let Some(dir) = binary.parent() {
         cmd.current_dir(dir);
     }
     cmd.kill_on_drop(true)
+        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
     let status = tokio::time::timeout(std::time::Duration::from_secs(180), cmd.status()).await??;
-    let result = (|| -> anyhow::Result<DynamicImage> {
-        anyhow::ensure!(status.success(), "Real-ESRGAN failed");
-        let bytes = std::fs::read(&output)?;
-        decode_validated(&bytes)
-    })();
-    let _ = std::fs::remove_dir_all(&tmp);
-    result
-}
-
-fn rand_suffix() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0)
+    anyhow::ensure!(status.success(), "Real-ESRGAN failed");
+    let meta = std::fs::metadata(&output)?;
+    anyhow::ensure!(
+        meta.len() <= 256 * 1024 * 1024,
+        "Real-ESRGAN output too large"
+    );
+    decode_validated(&std::fs::read(&output)?)
 }
 
 /// Compose a "mix" image: screenshot as the backdrop, box art bottom-left,

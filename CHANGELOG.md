@@ -10,3 +10,4 @@
 - Smart pixel-art-aware upscaling, size presets up to 4K, optional Real-ESRGAN.
 - Verification of the official PS3 system software file (4.93).
 - `shelfart-cli` command-line tool.
+- Security review and penetration test before release (see docs/SECURITY-REVIEW.md); 51 automated tests.
