@@ -336,11 +336,37 @@ fn open_folder(app: AppHandle, path: String, state: State<'_, AppState>) -> Resu
         .map_err(|e| e.to_string())
 }
 
+/// On small screens (e.g. 1024×768, or big display scaling) shrink the window so it
+/// isn't opened partly off-screen.
+fn fit_to_screen(app: &tauri::App) {
+    use tauri::Manager;
+    let Some(win) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(Some(mon)) = win.current_monitor() else {
+        return;
+    };
+    let scale = mon.scale_factor();
+    let screen = mon.size().to_logical::<f64>(scale);
+    let Ok(size) = win.outer_size() else { return };
+    let size = size.to_logical::<f64>(scale);
+    let w = size.width.min(screen.width * 0.95);
+    let h = size.height.min(screen.height * 0.9);
+    if w < size.width || h < size.height {
+        let _ = win.set_size(tauri::LogicalSize::new(w, h));
+        let _ = win.center();
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
+        .setup(|app| {
+            fit_to_screen(app);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_catalog,
             scan_library,

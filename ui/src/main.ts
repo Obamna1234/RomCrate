@@ -560,11 +560,13 @@ function viewScrape(): Node[] {
   out.push(h("div", { class: "filters" }, filters.map(([f, label]) =>
     h("button", { class: run.filter === f ? "on" : "", onclick: () => { run.filter = f; render(); } }, `${label}${f === "all" ? ` (${run.results.length})` : ` (${counts[f as Status] ?? 0})`}`))));
 
+  // "Ratchet _ Clank (USA) (En,Fr)" → "Ratchet & Clank": the identified game, not the file name.
+  const nice = (m: string) => m.replace(/\s*[([][^)\]]*[)\]]/g, "").replace(/ _ /g, " & ").trim() || m;
   const shown = run.results.filter((r) => run.filter === "all" || r.status === run.filter).slice(-400).reverse();
-  out.push(h("div", { class: "results" }, shown.map((r) => h("div", { class: "res", title: [r.matched ? `Matched: ${r.matched}${r.method ? ` (${r.method})` : ""}` : "No match", r.missing.length ? `Not available: ${r.missing.join(", ")}` : "", r.message ?? ""].filter(Boolean).join("\n") },
+  out.push(h("div", { class: "results" }, shown.map((r) => h("div", { class: "res", title: [`File: ${r.game}`, r.matched ? `Matched: ${r.matched}${r.method ? ` (${r.method})` : ""}` : "No match", r.missing.length ? `Not available: ${r.missing.join(", ")}` : "", r.message ?? ""].filter(Boolean).join("\n") },
     h("div", { class: "img" }, r.thumb ? h("img", { src: r.thumb, alt: "" }) : r.status === "missing" ? "No artwork found" : "…"),
     h("div", { class: "cap" },
-      h("div", { class: "g" }, h("span", { class: `dot ${r.status}` }), r.game),
+      h("div", { class: "g" }, h("span", { class: `dot ${r.status}` }), r.matched ? nice(r.matched) : r.game),
       h("div", { class: "m" }, r.matched ? `${r.method === "hash" ? "✓ identified · " : ""}${r.saved.length} saved` : r.status === "missing" ? "Not in the collections" : r.message ?? ""))))));
 
   if (run.log.length) {
