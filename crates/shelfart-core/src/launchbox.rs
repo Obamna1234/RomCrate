@@ -390,13 +390,14 @@ pub fn parse_database(
     let mut zip = zip::ZipArchive::new(std::fs::File::open(zip_path)?)?;
     for i in 0..zip.len() {
         let entry = zip.by_index(i)?;
-        let name = entry.name().to_string();
+        let name = entry.name().map(|n| n.to_string()).unwrap_or_default();
         let file_name = name.rsplit('/').next().unwrap_or(&name).to_string();
         if file_name != "Metadata.xml" && file_name != "Files.xml" {
             continue;
         }
         let mut reader = quick_xml::Reader::from_reader(BufReader::with_capacity(1 << 20, entry));
-        reader.config_mut().trim_text(true);
+        // No trimming: text around "&amp;" arrives in pieces; values are trimmed later.
+        reader.config_mut().trim_text(false);
         let mut buf = Vec::new();
         let mut depth = 0usize;
         let mut record: Option<String> = None;
@@ -406,7 +407,7 @@ pub fn parse_database(
             match reader.read_event_into(&mut buf)? {
                 Event::Start(e) => {
                     depth += 1;
-                    let tag = String::from_utf8_lossy(e.local_name().as_ref()).to_string();
+                    let tag = e.local_name().into_inner().to_string();
                     if depth == 2 {
                         record = Some(tag);
                         values.clear();
@@ -416,8 +417,25 @@ pub fn parse_database(
                 }
                 Event::Text(t) => {
                     if let (Some(f), true) = (&field, depth == 3) {
-                        let v = t.unescape().map(|c| c.to_string()).unwrap_or_default();
-                        values.entry(f.clone()).or_default().push_str(&v);
+                        values
+                            .entry(f.clone())
+                            .or_default()
+                            .push_str(&t.xml10_content());
+                    }
+                }
+                // Entities like &amp; arrive separately. Only the five standard
+                // ones and numeric character references are resolved — custom
+                // DTD entities are ignored, so "entity bombs" can't expand.
+                Event::GeneralRef(r) => {
+                    if let (Some(f), true) = (&field, depth == 3) {
+                        let out = match r.resolve_char_ref() {
+                            Ok(Some(c)) => Some(c.to_string()),
+                            _ => quick_xml::escape::resolve_predefined_entity(&r.xml10_content())
+                                .map(String::from),
+                        };
+                        if let Some(o) = out {
+                            values.entry(f.clone()).or_default().push_str(&o);
+                        }
                     }
                 }
                 Event::CData(t) => {
@@ -425,7 +443,7 @@ pub fn parse_database(
                         values
                             .entry(f.clone())
                             .or_default()
-                            .push_str(&String::from_utf8_lossy(&t));
+                            .push_str(&t.xml10_content());
                     }
                 }
                 Event::End(_) => {

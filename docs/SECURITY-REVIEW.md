@@ -54,6 +54,16 @@ hardening can't break working features.
 - 4 systems (Neo Geo, PC-98, ZX Spectrum, Amstrad CPC) have no No-Intro database → they now match by name instead of failing a download.
 - An artwork output folder inside the ROM folder (e.g. `downloaded_media/psx`) showed up as an empty "system" → output folders and empty systems are ignored.
 
+## Caught by CI after the review (first GitHub run, 14 Nov 2026)
+
+The audit job in CI flagged six newly published advisories in two libraries
+added after this review: `zip` 2.6 (RUSTSEC-2026-0367/0368/0369/0429 — all in
+`ZipArchive::extract`, which ShelfArt doesn't use; it has its own checked
+extraction) and `quick-xml` 0.37 (RUSTSEC-2026-0194/0195 — quadratic attribute
+check, `NsReader` memory use). Both were upgraded (`zip` 9.5, `quick-xml` 0.42)
+anyway; entity handling was rewritten to resolve only the five standard
+entities and numeric references. `cargo audit` is back to 0 vulnerabilities.
+
 ## Dependency audit
 
 - **Rust (`cargo audit`, 521 crates): 0 vulnerabilities.** 5 informational warnings, all inside Tauri's Linux GTK/D-Bus stack (`glib` 0.18, `zbus`/`zvariant`, `proc-macro-error`): marked unmaintained, or an unsound `glib` iterator ShelfArt never calls. They'll clear when Tauri updates its Linux dependencies; Dependabot is set up to pick that up.
