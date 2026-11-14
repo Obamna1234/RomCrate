@@ -150,7 +150,7 @@ try:
                     go_btn[0].click()
                     if wait_for(lambda: "copied and checked" in body(), 300, "import to finish"):
                         time.sleep(1)
-                        d.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", d.find_element(By.ID, "main"))
+                        d.execute_script("document.getElementById('imp-progress')?.scrollIntoView({block:'start'})")
                         time.sleep(1)
                         shot("import-done")
                         t = body()

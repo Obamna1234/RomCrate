@@ -502,7 +502,7 @@ function queueRender() {
   renderQueued = true;
   requestAnimationFrame(() => {
     renderQueued = false;
-    if (view === "scrape") render(); else renderNav();
+    if (view === "scrape" || view === "import") render(); else renderNav();
   });
 }
 
@@ -712,6 +712,7 @@ async function startImport() {
   const exclude = imp.plan.items.filter((i) => imp.exclude.has(i.id)).map((i) => i.id);
   imp.running = true; imp.done = 0; imp.total = 0; imp.log = []; imp.summary = null;
   render();
+  document.getElementById("imp-progress")?.scrollIntoView({ block: "start", behavior: "smooth" });
   try {
     await invoke("start_import", { assign: imp.assign, exclude });
   } catch (e) {
@@ -805,6 +806,32 @@ function viewImport(): Node[] {
     p.ignoredFiles ? h("div", { class: "desc", style: "color:var(--faint)" }, `${p.ignoredFiles} non-game files (text, pictures, installers…) are left alone.`) : null,
   );
 
+  // 3. Progress / result (shown right under the preview numbers)
+  const prog: (Node | null)[] = [];
+  if (imp.running || imp.summary) {
+    const pct = imp.total ? Math.round((imp.done / imp.total) * 100) : imp.summary ? 100 : 0;
+    prog.push(h("h2", { id: "imp-progress" }, imp.running ? "Importing…" : "Done"),
+      h("div", { class: "progress" }, h("div", { style: `width:${pct}%` })),
+      h("div", { class: "progress-label" }, h("span", {}, imp.running ? imp.current : imp.summary?.cancelled ? "Stopped" : "Finished"), h("span", {}, `${bytes(imp.done)} of ${bytes(imp.total)}`)));
+    if (imp.running) prog.push(h("button", { class: "btn danger", onclick: () => invoke("cancel_scrape") }, "Stop"));
+    const s = imp.summary;
+    if (s) {
+      prog.push(h("div", { class: s.failed ? "banner warn" : "banner" },
+        `${s.imported} game${s.imported === 1 ? "" : "s"} ${p.mode === "move" ? "moved" : "copied"} and checked (${bytes(s.bytes)}). ${s.alreadyThere} already there, ${s.skipped} left out${s.failed ? `, ${s.failed} failed` : ""}.`),
+        ...s.errors.map((e) => h("div", { class: "banner warn" }, e)),
+        h("div", { class: "row" },
+          h("button", { class: "btn primary big", onclick: scrapeImported }, "Get artwork for these games →"),
+          h("button", { class: "btn", onclick: () => invoke("open_folder", { path: p.dest }).catch((e) => toast(String(e))) }, "Open ROMs folder")));
+    }
+    if (imp.log.length) prog.push(h("h2", {}, "Activity"), h("div", { class: "log" }, imp.log.slice(-300).map((l) => h("div", { class: l.ok ? "" : "error" }, `${l.ok ? "✓" : "✗"} ${l.message}`))));
+  }
+  if (!imp.running && !imp.summary) {
+    out.push(h("div", { class: "footer-bar" }, h("span", {}),
+      h("button", { class: "btn primary", disabled: !todo.length || !enough, onclick: startImport },
+        `${p.mode === "move" ? "Move" : "Copy"} ${todo.length} game${todo.length === 1 ? "" : "s"} →`)));
+  }
+  out.push(...prog);
+
   const consoleOptions = [["", "Choose console…"], ["pc", "PC (Windows) discs"], ...catalog.systems.map((s) => [s.id, s.name])];
   out.push(h("div", { class: "imp-list" }, p.items.map((it) => {
     const on = willImport(it);
@@ -830,28 +857,6 @@ function viewImport(): Node[] {
       itemBadge(it));
   })));
 
-  // 3. Progress / result
-  if (imp.running || imp.summary) {
-    const pct = imp.total ? Math.round((imp.done / imp.total) * 100) : imp.summary ? 100 : 0;
-    out.push(h("h2", {}, imp.running ? "Importing…" : "Done"),
-      h("div", { class: "progress" }, h("div", { style: `width:${pct}%` })),
-      h("div", { class: "progress-label" }, h("span", {}, imp.running ? imp.current : imp.summary?.cancelled ? "Stopped" : "Finished"), h("span", {}, `${bytes(imp.done)} of ${bytes(imp.total)}`)));
-    if (imp.running) out.push(h("button", { class: "btn danger", onclick: () => invoke("cancel_scrape") }, "Stop"));
-    const s = imp.summary;
-    if (s) {
-      out.push(h("div", { class: s.failed ? "banner warn" : "banner" },
-        `${s.imported} game${s.imported === 1 ? "" : "s"} ${p.mode === "move" ? "moved" : "copied"} and checked (${bytes(s.bytes)}). ${s.alreadyThere} already there, ${s.skipped} left out${s.failed ? `, ${s.failed} failed` : ""}.`),
-        ...s.errors.map((e) => h("div", { class: "banner warn" }, e)),
-        h("div", { class: "row" },
-          h("button", { class: "btn primary big", onclick: scrapeImported }, "Get artwork for these games →"),
-          h("button", { class: "btn", onclick: () => invoke("open_folder", { path: p.dest }).catch((e) => toast(String(e))) }, "Open ROMs folder")));
-    }
-    if (imp.log.length) out.push(h("h2", {}, "Activity"), h("div", { class: "log" }, imp.log.slice(-300).map((l) => h("div", { class: l.ok ? "" : "error" }, `${l.ok ? "✓" : "✗"} ${l.message}`))));
-  } else {
-    out.push(h("div", { class: "footer-bar" }, h("span", {}),
-      h("button", { class: "btn primary", disabled: !todo.length || !enough, onclick: startImport },
-        `${p.mode === "move" ? "Move" : "Copy"} ${todo.length} game${todo.length === 1 ? "" : "s"} →`)));
-  }
   return out.filter((x): x is Node => !!x);
 }
 

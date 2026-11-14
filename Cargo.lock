@@ -3647,7 +3647,7 @@ dependencies = [
 
 [[package]]
 name = "shelfart"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3665,7 +3665,7 @@ dependencies = [
 
 [[package]]
 name = "shelfart-cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "serde_json",
@@ -3675,7 +3675,7 @@ dependencies = [
 
 [[package]]
 name = "shelfart-core"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "chrono",
