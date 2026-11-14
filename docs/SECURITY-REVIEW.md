@@ -71,9 +71,19 @@ Unzipping untrusted archives is a classic attack surface, so it shipped with its
 | Fake `.zip` that isn't a zip | Reported, nothing written |
 | Not enough disk space | Checked before anything is written |
 
+## Added after the review: LaunchBox Games Database
+
+| Risk | Handling |
+|---|---|
+| ~200 MB download filling memory | Streamed straight to disk, 1 GB cap, atomic rename |
+| Hostile or broken XML (entity bombs, truncation) | Streaming parser with no external entities; tested — error or empty result, no hang |
+| Image file names used as paths | Names containing `/`, `\` or `..` are refused; cached under sanitised names |
+| Overwriting the user's own game info | Fields are only filled when empty unless "replace existing" is on; gamelist.xml backed up |
+
 ## Not covered yet
 
 - Windows and macOS builds have not been run yet. CI runs every test on both as soon as the repository exists.
 - Installers are not code-signed (needs paid certificates).
+- The LaunchBox download itself couldn't be fetched from the build environment (network allow-list); parsing is tested against the published format and RomM's fixtures, and the live download will be exercised by the first real run.
 - The ScreenScraper extras are only partly tested until developer codes exist: URL redaction, host allow-list and file validation are tested, live responses are not.
 - Conversion, BIOS extraction and sorting don't exist yet; each will get the same test-first review when built.

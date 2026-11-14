@@ -16,6 +16,8 @@ pub const ALLOWED_HOSTS: &[&str] = &[
     "thumbnails.libretro.com",
     "raw.githubusercontent.com",
     "api.github.com",
+    "gamesdb.launchbox-app.com",
+    "images.launchbox-app.com",
 ];
 /// ScreenScraper serves its API and media from several sub-domains.
 pub const ALLOWED_DOMAIN_SUFFIXES: &[&str] = &[".screenscraper.fr"];
@@ -144,6 +146,74 @@ impl SafeClient {
             body.extend_from_slice(&chunk);
         }
         Ok(body)
+    }
+}
+
+impl SafeClient {
+    /// Stream a large download straight to disk (never held in memory),
+    /// capped at `max` bytes, written to a temporary file and renamed when done.
+    pub async fn download_to_file(
+        &self,
+        url: &Url,
+        dest: &std::path::Path,
+        max: usize,
+        progress: &(dyn Fn(u64, Option<u64>) + Send + Sync),
+    ) -> Result<(), NetError> {
+        use tokio::io::AsyncWriteExt;
+        if !host_allowed(url) {
+            return Err(NetError::HostNotAllowed(
+                url.host_str().unwrap_or("?").to_string(),
+            ));
+        }
+        let resp = self
+            .client
+            .get(url.clone())
+            .timeout(Duration::from_secs(3600))
+            .send()
+            .await
+            .map_err(transport)?;
+        if !host_allowed(resp.url()) {
+            return Err(NetError::HostNotAllowed(
+                resp.url().host_str().unwrap_or("?").to_string(),
+            ));
+        }
+        match resp.status().as_u16() {
+            200 => {}
+            404 | 410 => return Err(NetError::NotFound),
+            429 => return Err(NetError::RateLimited),
+            s => return Err(NetError::Status(s)),
+        }
+        let total = resp.content_length();
+        if total.map(|t| t as usize > max).unwrap_or(false) {
+            return Err(NetError::TooLarge(max));
+        }
+        let part = dest.with_extension("part");
+        let io = |e: std::io::Error| NetError::Transport(e.to_string());
+        let mut file = tokio::fs::File::create(&part).await.map_err(io)?;
+        let mut done: u64 = 0;
+        let mut stream = resp.bytes_stream();
+        let result: Result<(), NetError> = async {
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk.map_err(transport)?;
+                done += chunk.len() as u64;
+                if done as usize > max {
+                    return Err(NetError::TooLarge(max));
+                }
+                file.write_all(&chunk).await.map_err(io)?;
+                progress(done, total);
+            }
+            file.flush().await.map_err(io)?;
+            Ok(())
+        }
+        .await;
+        drop(file);
+        match result {
+            Ok(()) => tokio::fs::rename(&part, dest).await.map_err(io),
+            Err(e) => {
+                let _ = tokio::fs::remove_file(&part).await;
+                Err(e)
+            }
+        }
     }
 }
 

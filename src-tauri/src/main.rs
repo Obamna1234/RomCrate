@@ -58,9 +58,10 @@ fn get_catalog() -> Catalog {
             label: k.label(),
             source: match k {
                 ArtKind::Boxart | ArtKind::Snap | ArtKind::Title | ArtKind::Logo => "free",
+                ArtKind::Box3d => "launchbox+generated",
+                ArtKind::Boxback | ArtKind::Cartridge | ArtKind::Fanart => "launchbox",
                 ArtKind::Mix => "generated",
-                ArtKind::Box3d => "extras+generated",
-                _ => "extras",
+                ArtKind::Video | ArtKind::Manual => "extras",
             },
         })
         .collect();
@@ -177,6 +178,10 @@ async fn start_scrape(
         None
     };
     let sources = Arc::new(Sources {
+        launchbox: Some(shelfart_core::launchbox::LaunchBox::new(
+            client.clone(),
+            &cache,
+        )),
         libretro: Libretro::new(client.clone(), cache.clone()),
         identifier: Identifier::new(client, cache),
         screenscraper: ss,

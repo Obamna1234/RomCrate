@@ -5,6 +5,7 @@
 
 use image::{Rgba, RgbaImage};
 use shelfart_core::identify::Identifier;
+use shelfart_core::launchbox::LaunchBox;
 use shelfart_core::launchers::LauncherKind;
 use shelfart_core::net::SafeClient;
 use shelfart_core::paths::safe_component;
@@ -123,10 +124,41 @@ fn fixture() -> Fixture {
         "game (\n\tname \"Crash Bandicoot (USA)\"\n\tserial \"SCUS-94900\"\n\trom ( name \"Crash Bandicoot (USA).bin\" size 1 crc 41B5F211 )\n)\n",
     )
     .unwrap();
+    seed_launchbox(&cache);
     Fixture {
         _tmp: tmp,
         root,
         cache,
+    }
+}
+
+/// A tiny LaunchBox database + cached images, so tests run offline.
+fn seed_launchbox(cache: &Path) {
+    use std::io::Write;
+    let dir = cache.join("launchbox");
+    fs::create_dir_all(dir.join("images")).unwrap();
+    let metadata = r#"<?xml version="1.0" standalone="yes"?>
+<LaunchBox>
+  <Game><Name>Super Metroid</Name><DatabaseID>11</DatabaseID><Platform>Super Nintendo Entertainment System</Platform>
+    <Overview>Samus returns to Zebes.</Overview><ReleaseDate>1994-03-19T00:00:00-08:00</ReleaseDate>
+    <Developer>Nintendo R&amp;D1</Developer><Publisher>Nintendo</Publisher><Genres>Action; Platform</Genres><MaxPlayers>1</MaxPlayers><CommunityRating>4.8</CommunityRating></Game>
+  <Game><Name>Chrono Trigger</Name><DatabaseID>12</DatabaseID><Platform>Super Nintendo Entertainment System</Platform><Overview>Time travel.</Overview></Game>
+  <Game><Name>Crash Bandicoot</Name><DatabaseID>13</DatabaseID><Platform>Sony Playstation</Platform><Overview>A bandicoot.</Overview></Game>
+  <GameImage><DatabaseID>11</DatabaseID><FileName>lb-metroid-3d.png</FileName><Type>Box - 3D</Type><Region>North America</Region></GameImage>
+  <GameImage><DatabaseID>11</DatabaseID><FileName>lb-metroid-back.png</FileName><Type>Box - Back</Type></GameImage>
+  <GameImage><DatabaseID>11</DatabaseID><FileName>lb-metroid-fan.png</FileName><Type>Fanart - Background</Type></GameImage>
+</LaunchBox>"#;
+    let mut z = zip::ZipWriter::new(fs::File::create(dir.join("Metadata.zip")).unwrap());
+    z.start_file("Metadata.xml", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    z.write_all(metadata.as_bytes()).unwrap();
+    z.finish().unwrap();
+    for (f, w, h) in [
+        ("lb-metroid-3d.png", 333, 444),
+        ("lb-metroid-back.png", 300, 420),
+        ("lb-metroid-fan.png", 640, 360),
+    ] {
+        fs::write(dir.join("images").join(f), png(w, h, [200, 50, 50, 255])).unwrap();
     }
 }
 
@@ -147,6 +179,7 @@ fn scrape(fx: &Fixture, cfg: ScrapeConfig) -> Run {
     assert_eq!(lib.systems.len(), 2, "both systems detected");
     let client = SafeClient::new().unwrap();
     let sources = Arc::new(Sources {
+        launchbox: Some(LaunchBox::new(client.clone(), &fx.cache)),
         libretro: Libretro::new(client.clone(), fx.cache.clone()),
         identifier: Identifier::new(client, fx.cache.clone()),
         screenscraper: None,
@@ -298,6 +331,93 @@ fn pegasus_layout() {
 }
 
 #[test]
+fn launchbox_adds_art_and_game_info() {
+    let fx = fixture();
+    let run = scrape(
+        &fx,
+        cfg(
+            LauncherKind::EmulationStation,
+            None,
+            &[
+                ArtKind::Boxart,
+                ArtKind::Box3d,
+                ArtKind::Boxback,
+                ArtKind::Fanart,
+            ],
+        ),
+    );
+    check_matches(&run);
+    // Box 3D / back cover / fan art come from LaunchBox (the libretro collection has none).
+    let img = |n: &str| image::open(fx.root.join("snes/images").join(n)).unwrap();
+    let b3 = img("game1-box3d.png");
+    assert_eq!(
+        b3.width() * 444,
+        b3.height() * 333,
+        "3D box is LaunchBox's image, not a local render"
+    );
+    assert!(fx.root.join("snes/images/game1-boxback.png").exists());
+    assert!(fx.root.join("snes/images/game1-fanart.png").exists());
+    // Game info lands in gamelist.xml.
+    let xml = fs::read_to_string(fx.root.join("snes/gamelist.xml")).unwrap();
+    assert!(
+        xml.contains("<desc>Samus returns to Zebes.</desc>"),
+        "{xml}"
+    );
+    assert!(xml.contains("<releasedate>19940319T000000</releasedate>"));
+    assert!(xml.contains("<developer>Nintendo R&amp;D1</developer>"));
+    assert!(xml.contains("<genre>Action, Platform</genre>"));
+    assert!(xml.contains("<rating>0.96</rating>"));
+    assert!(xml.contains("<desc>Time travel.</desc>"));
+    // PS1 disc identified by serial also gets its description.
+    assert!(fs::read_to_string(fx.root.join("psx/gamelist.xml"))
+        .unwrap()
+        .contains("<desc>A bandicoot.</desc>"));
+    // A hand-written description is never replaced (overwrite off).
+    let edited = xml.replace("Samus returns to Zebes.", "My own words");
+    fs::write(fx.root.join("snes/gamelist.xml"), edited).unwrap();
+    scrape(
+        &fx,
+        cfg(LauncherKind::EmulationStation, None, &[ArtKind::Boxart]),
+    );
+    assert!(fs::read_to_string(fx.root.join("snes/gamelist.xml"))
+        .unwrap()
+        .contains("<desc>My own words</desc>"));
+}
+
+#[test]
+fn es_de_gets_its_own_gamelists_and_pegasus_gets_descriptions() {
+    let fx = fixture();
+    let esde = fx.root.parent().unwrap().join("ES-DE");
+    scrape(
+        &fx,
+        cfg(
+            LauncherKind::EsDe,
+            Some(esde.join("downloaded_media")),
+            &[ArtKind::Boxart],
+        ),
+    );
+    let xml = fs::read_to_string(esde.join("gamelists/snes/gamelist.xml")).unwrap();
+    assert!(
+        xml.contains("<path>./game1.sfc</path>")
+            && xml.contains("<desc>Samus returns to Zebes.</desc>")
+    );
+    assert!(
+        !xml.contains("<image>"),
+        "ES-DE finds media by name; no image paths written"
+    );
+
+    let fx = fixture();
+    scrape(&fx, cfg(LauncherKind::Pegasus, None, &[ArtKind::Boxart]));
+    let meta = fs::read_to_string(fx.root.join("snes/metadata.pegasus.txt")).unwrap();
+    assert!(
+        meta.contains("game: Super Metroid\nfile: game1.sfc\ndeveloper: Nintendo R&D1"),
+        "{meta}"
+    );
+    assert!(meta.contains("description:\n  Samus returns to Zebes."));
+    assert!(meta.contains("rating: 96%"));
+}
+
+#[test]
 fn pegasus_follows_existing_skraper_layout() {
     let fx = fixture();
     // The user already scraped box art with Skraper.
@@ -341,10 +461,14 @@ fn pegasus_3d_box_takes_box_front() {
             &[ArtKind::Boxart, ArtKind::Box3d],
         ),
     );
-    let img = image::open(fx.root.join("snes/media/game1/boxFront.png"))
+    // Super Metroid has a real 3D box in the LaunchBox database: that's used.
+    let lb = image::open(fx.root.join("snes/media/game1/boxFront.png")).unwrap();
+    assert_eq!(lb.width() * 444, lb.height() * 333);
+    // Chrono Trigger has none, so ShelfArt renders one from the 2D cover:
+    // a rendered 3D box has transparent corners; a flat cover would not.
+    let img = image::open(fx.root.join("snes/media/Chrono Trigger (USA)/boxFront.png"))
         .unwrap()
         .to_rgba8();
-    // A rendered 3D box has transparent corners; a flat cover would not.
     assert_eq!(img.get_pixel(0, 0)[3], 0);
 }
 

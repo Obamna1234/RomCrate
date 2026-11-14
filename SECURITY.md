@@ -10,8 +10,8 @@ repository. You'll get a reply within 7 days.
 
 - **No accounts and no telemetry.** Nothing identifies you to any server.
 - **Network allow-list.** The HTTP client only connects over HTTPS to
-  `raw.githubusercontent.com`, `api.github.com`, `thumbnails.libretro.com`
-  and `*.screenscraper.fr`, and refuses redirects to any other host.
+  `raw.githubusercontent.com`, `api.github.com`, `thumbnails.libretro.com`,
+  `gamesdb.launchbox-app.com`, `images.launchbox-app.com` and `*.screenscraper.fr`, and refuses redirects to any other host.
 - **Untrusted downloads are sanitised.** Images are decoded with strict size
   and memory limits and re-encoded as new PNG files; videos must be MP4 and
   manuals PDF; every download is size-capped while streaming.

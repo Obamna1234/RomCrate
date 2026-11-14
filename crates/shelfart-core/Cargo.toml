@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 crc32fast = "1"
+quick-xml = "0.37"
 zip = { version = "2", default-features = false, features = ["deflate", "deflate64"] }
 fs4 = { version = "0.13", features = ["sync"] }
 tempfile = "3"

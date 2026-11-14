@@ -401,6 +401,8 @@ pub fn art_targets(
 pub struct GameArt {
     pub game: Game,
     pub files: BTreeMap<ArtKind, PathBuf>,
+    /// Description, genre, release date… when a database knew the game.
+    pub info: Option<crate::launchbox::GameInfo>,
 }
 
 /// Write/update launcher metadata for a system after scraping. Returns notes for the log.
@@ -410,10 +412,36 @@ pub fn finalize_system(
     sys: &System,
     ss: &ScannedSystem,
     results: &[GameArt],
+    overwrite: bool,
 ) -> anyhow::Result<Vec<String>> {
     match launcher {
-        LauncherKind::EmulationStation => write_gamelist(ss, results),
-        LauncherKind::Pegasus | LauncherKind::PegasusSkraper => write_pegasus_metadata(sys, ss),
+        LauncherKind::EmulationStation => write_gamelist(
+            &ss.path.join("gamelist.xml"),
+            &ss.path,
+            ss,
+            results,
+            true,
+            overwrite,
+        ),
+        LauncherKind::EsDe => match folder.and_then(es_de_gamelist_dir) {
+            // ES-DE keeps game info in <ES-DE>/gamelists/<system>/gamelist.xml.
+            Some(dir) => {
+                let d = join_safe(&dir, &[&ss.folder_name]);
+                std::fs::create_dir_all(&d)?;
+                write_gamelist(
+                    &d.join("gamelist.xml"),
+                    &ss.path,
+                    ss,
+                    results,
+                    false,
+                    overwrite,
+                )
+            }
+            None => Ok(vec![]),
+        },
+        LauncherKind::Pegasus | LauncherKind::PegasusSkraper => {
+            write_pegasus_metadata(sys, ss, results)
+        }
         LauncherKind::RetroArch => match folder {
             Some(f) => write_retroarch_playlist(f, sys, ss),
             None => Ok(vec![]),
@@ -424,7 +452,30 @@ pub fn finalize_system(
 
 // ---------------------------------------------------------------- Pegasus
 
-fn write_pegasus_metadata(sys: &System, ss: &ScannedSystem) -> anyhow::Result<Vec<String>> {
+/// "2000-08-11" → "20000811T000000"; "1992" → "19920101T000000".
+fn es_date(d: &str) -> Option<String> {
+    let digits: String = d.chars().filter(|c| c.is_ascii_digit()).take(8).collect();
+    match digits.len() {
+        8 => Some(format!("{digits}T000000")),
+        6 => Some(format!("{digits}01T000000")),
+        4 => Some(format!("{digits}0101T000000")),
+        _ => None,
+    }
+}
+
+/// `<ES-DE>/gamelists` when the media folder is ES-DE's `downloaded_media`.
+fn es_de_gamelist_dir(media: &Path) -> Option<PathBuf> {
+    let name = media.file_name()?.to_str()?;
+    name.eq_ignore_ascii_case("downloaded_media")
+        .then(|| media.parent().map(|p| p.join("gamelists")))
+        .flatten()
+}
+
+fn write_pegasus_metadata(
+    sys: &System,
+    ss: &ScannedSystem,
+    results: &[GameArt],
+) -> anyhow::Result<Vec<String>> {
     let has_meta = ["metadata.pegasus.txt", "metadata.txt"]
         .iter()
         .any(|f| ss.path.join(f).exists());
@@ -445,11 +496,43 @@ fn write_pegasus_metadata(sys: &System, ss: &ScannedSystem) -> anyhow::Result<Ve
     s.push_str("# Add how Pegasus should start these games, for example:\n");
     s.push_str("# launch: retroarch -L \"/path/to/core\" \"{file.path}\"\n\n");
     for g in &ss.games {
+        let info = results
+            .iter()
+            .find(|r| r.game.path == g.path)
+            .and_then(|r| r.info.as_ref());
+        let title = info
+            .map(|i| i.title.clone())
+            .unwrap_or_else(|| display_title(&g.stem));
         s.push_str(&format!(
-            "game: {}\nfile: {}\n\n",
-            one_line(&display_title(&g.stem)),
+            "game: {}\nfile: {}\n",
+            one_line(&title),
             one_line(&g.rel_path)
         ));
+        if let Some(i) = info {
+            for (k, v) in [
+                ("developer", &i.developer),
+                ("publisher", &i.publisher),
+                ("genre", &i.genre),
+                ("players", &i.players),
+                ("release", &i.release_date),
+            ] {
+                if let Some(v) = v {
+                    s.push_str(&format!("{k}: {}\n", one_line(v)));
+                }
+            }
+            if let Some(r) = i.rating {
+                s.push_str(&format!("rating: {}%\n", (r * 100.0).round() as u32));
+            }
+            if let Some(d) = &i.description {
+                // Multi-line values are indented; blank lines become a lone ".".
+                s.push_str("description:\n");
+                for line in d.lines() {
+                    let l = line.trim();
+                    s.push_str(&format!("  {}\n", if l.is_empty() { "." } else { l }));
+                }
+            }
+        }
+        s.push('\n');
     }
     std::fs::write(ss.path.join("metadata.pegasus.txt"), s)?;
     Ok(vec![format!(
@@ -583,17 +666,27 @@ fn render_gamelist(entries: &[XmlEntry]) -> String {
     s
 }
 
-fn write_gamelist(ss: &ScannedSystem, results: &[GameArt]) -> anyhow::Result<Vec<String>> {
-    if results.iter().all(|r| r.files.is_empty()) {
+/// Create or update a gamelist.xml. `images` controls whether art paths are
+/// written (EmulationStation) or not (ES-DE finds media by file name).
+/// Game info only fills empty fields unless `overwrite` is on, so hand edits survive.
+fn write_gamelist(
+    path: &Path,
+    rom_dir: &Path,
+    ss: &ScannedSystem,
+    results: &[GameArt],
+    images: bool,
+    overwrite: bool,
+) -> anyhow::Result<Vec<String>> {
+    let useful = |r: &GameArt| (images && !r.files.is_empty()) || r.info.is_some();
+    if !results.iter().any(useful) {
         return Ok(vec![]);
     }
-    let path = ss.path.join("gamelist.xml");
     let mut notes = Vec::new();
     let mut entries = if path.exists() {
-        let text = std::fs::read_to_string(&path)?;
-        let backup = ss.path.join("gamelist.xml.bak");
+        let text = std::fs::read_to_string(path)?;
+        let backup = path.with_file_name("gamelist.xml.bak");
         if !backup.exists() {
-            std::fs::copy(&path, &backup)?;
+            std::fs::copy(path, &backup)?;
             notes.push(format!(
                 "{}: original gamelist.xml backed up to gamelist.xml.bak",
                 ss.system_name
@@ -607,7 +700,7 @@ fn write_gamelist(ss: &ScannedSystem, results: &[GameArt]) -> anyhow::Result<Vec
     };
 
     for r in results {
-        if r.files.is_empty() {
+        if !useful(r) {
             continue;
         }
         let rel = norm_rel(&r.game.rel_path);
@@ -629,8 +722,30 @@ fn write_gamelist(ss: &ScannedSystem, results: &[GameArt]) -> anyhow::Result<Vec
             }
         };
         let e = &mut entries[idx];
+        if let Some(i) = &r.info {
+            let date = i.release_date.as_deref().and_then(es_date);
+            let rating = i.rating.map(|r| format!("{:.2}", r));
+            for (field, value) in [
+                ("desc", &i.description),
+                ("releasedate", &date),
+                ("developer", &i.developer),
+                ("publisher", &i.publisher),
+                ("genre", &i.genre),
+                ("players", &i.players),
+                ("rating", &rating),
+            ] {
+                if let Some(v) = value {
+                    if overwrite || e.get(field).map(|x| x.trim().is_empty()).unwrap_or(true) {
+                        e.set(field, v.clone());
+                    }
+                }
+            }
+        }
+        if !images {
+            continue;
+        }
         let relp = |p: &PathBuf| -> String {
-            p.strip_prefix(&ss.path)
+            p.strip_prefix(rom_dir)
                 .map(|x| format!("./{}", x.to_string_lossy().replace('\\', "/")))
                 .unwrap_or_else(|_| p.to_string_lossy().to_string())
         };
@@ -660,10 +775,10 @@ fn write_gamelist(ss: &ScannedSystem, results: &[GameArt]) -> anyhow::Result<Vec
             }
         }
     }
-    let tmp = ss.path.join("gamelist.xml.part");
+    let tmp = path.with_file_name("gamelist.xml.part");
     std::fs::write(&tmp, render_gamelist(&entries))?;
-    std::fs::rename(&tmp, &path)?;
-    notes.push(format!("{}: gamelist.xml updated", ss.system_name));
+    std::fs::rename(&tmp, path)?;
+    notes.push(format!("{}: {} updated", ss.system_name, path.display()));
     Ok(notes)
 }
 
@@ -712,10 +827,19 @@ mod tests {
                 GameArt {
                     game: g.clone(),
                     files,
+                    info: None,
                 }
             })
             .collect();
-        finalize_system(LauncherKind::EmulationStation, None, sys, &ss, &results).unwrap();
+        finalize_system(
+            LauncherKind::EmulationStation,
+            None,
+            sys,
+            &ss,
+            &results,
+            false,
+        )
+        .unwrap();
         let xml = fs::read_to_string(dir.join("gamelist.xml")).unwrap();
         assert!(dir.join("gamelist.xml.bak").exists());
         assert!(xml.contains("<playcount>12</playcount>"));

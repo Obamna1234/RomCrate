@@ -39,6 +39,7 @@ ShelfArt is a free, open-source alternative to account-based scrapers. Point it 
 - **Zipped folders welcome.** Pick a `.zip` of your games folder and ShelfArt unzips it next to the zip (safely — no zip-slip, zip-bomb or overwrite) and carries on.
 - **Works with what you already have.** If a system already uses Skraper's Pegasus layout (`media/box2dfront/…`), ShelfArt adds to it and never overwrites your existing art.
 - **Finds odd dumps too:** copier-headered SNES ROMs, byte-swapped N64 ROMs (`.v64`/`.n64`), and the title stored inside SNES, N64, GBA, Game Boy and Mega Drive headers as a last resort.
+- **Game info too:** descriptions, genre, developer, publisher, release date, players and rating go into `gamelist.xml` (EmulationStation and ES-DE) and new Pegasus metadata files — without ever replacing what you wrote yourself.
 - **Every common art type:** box art, 3D boxes, back covers, cartridges/discs, screenshots, title screens, wheels/logos, fan art, mix images, video snaps and PDF manuals.
 - **Made for your launcher:**
 
@@ -75,15 +76,16 @@ Grab the installer for your system from **[Releases](../../releases/latest)**:
 |---|---|---|
 | Box art, screenshots, title screens, logos | [libretro-thumbnails](https://github.com/libretro-thumbnails) — the free collection RetroArch uses | No |
 | Game identification | [libretro-database](https://github.com/libretro/libretro-database) (No-Intro & Redump data) | No |
+| 3D boxes, back covers, cartridges, fan art, game info (descriptions, genre, developer, release date, players, rating) | [LaunchBox Games Database](https://gamesdb.launchbox-app.com) — the free daily download LaunchBox publishes for any app to use | No |
 | Mix images, fallback 3D boxes | Made by ShelfArt on your computer | No |
-| 3D boxes, videos, manuals, back covers, cartridges, fan art | [ScreenScraper](https://www.screenscraper.fr) in guest mode (ShelfArt's own developer registration) | No — optional login only for extra speed |
+| Videos, manuals (and anything the others miss) | [ScreenScraper](https://www.screenscraper.fr) in guest mode (ShelfArt's own developer registration) | No — optional login only for extra speed |
 
 If one source is unreachable ShelfArt tries the other mirror, and everything already downloaded is kept in a local cache.
 
 ## Privacy & safety
 
 - **No account, no telemetry, no analytics.**
-- **Allow-listed connections only:** GitHub, libretro and screenscraper.fr over HTTPS. Redirects anywhere else are refused.
+- **Allow-listed connections only:** GitHub, libretro, the LaunchBox games database and screenscraper.fr over HTTPS. Redirects anywhere else are refused.
 - **Clean files:** every downloaded image is fully decoded and re-saved as a fresh PNG; videos and manuals must be real MP4/PDF files; all downloads are size-capped.
 - **Your files are safe:** ShelfArt never deletes or modifies your games, never writes outside the folders you choose, and backs up `gamelist.xml` before changing it.
 - An optional ScreenScraper login is kept in memory for the session only — never saved to disk.
@@ -135,7 +137,7 @@ Go to **Actions → Release → Run workflow**, type the new version (e.g. `0.2.
 
 ## Credits
 
-- Artwork: [libretro-thumbnails](https://github.com/libretro-thumbnails) contributors and [ScreenScraper](https://www.screenscraper.fr). All artwork belongs to its respective owners.
+- Artwork and game info: [libretro-thumbnails](https://github.com/libretro-thumbnails) contributors, the [LaunchBox Games Database](https://gamesdb.launchbox-app.com) community and [ScreenScraper](https://www.screenscraper.fr). All artwork belongs to its respective owners.
 - Game data: [No-Intro](https://no-intro.org), [Redump](http://redump.org), via [libretro-database](https://github.com/libretro/libretro-database).
 - Built with [Tauri](https://tauri.app) and Rust.
 

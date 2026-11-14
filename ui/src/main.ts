@@ -50,13 +50,15 @@ interface Prefs {
   extras: boolean;
   render3d: boolean;
   threads: number;
+  launchbox: boolean;
+  gameInfo: boolean;
   pegasusLayout: "auto" | "per-game" | "skraper";
 }
 
 const DEFAULT_PREFS: Prefs = {
   roots: [], deselected: [], launcher: "pegasus", theme: {}, folders: {}, kinds: {},
   size: "standard", upscale: "smart", aiBinary: "", regions: ["usa", "world", "europe", "australia", "uk", "japan"],
-  identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto",
+  identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto", launchbox: true, gameInfo: true,
 };
 
 function loadPrefs(): Prefs {
@@ -124,6 +126,8 @@ function kindsFor(l: Launcher): ArtKind[] {
 function kindAvailable(k: ArtKind): boolean {
   const info = catalog.kinds.find((x) => x.id === k)!;
   if (info.source === "extras") return catalog.screenscraperAvailable && prefs.extras;
+  // Back covers, cartridges and fan art come from the LaunchBox database.
+  if (info.source === "launchbox") return prefs.launchbox || (catalog.screenscraperAvailable && prefs.extras);
   return true;
 }
 const selectedSystems = () => library.systems.filter((s) => !prefs.deselected.includes(s.path));
@@ -374,7 +378,7 @@ function viewArtwork(): Node[] {
   ];
   if (!catalog.screenscraperAvailable) {
     out.push(h("div", { class: "banner" }, h("div", {},
-      "Videos, manuals, back covers, cartridges and fan art come from the optional ScreenScraper extras source, which this build doesn't include yet. Box art, screenshots, title screens, logos, mix images and 3D boxes all work.")));
+      "Videos and manuals come from the optional ScreenScraper extras source, which this build doesn't include yet. Everything else works with no account.")));
   }
   out.push(
     h("div", { class: "kinds" },
@@ -382,7 +386,11 @@ function viewArtwork(): Node[] {
         const supported = l.supported.includes(k.id);
         const avail = supported && kindAvailable(k.id);
         const on = chosen.includes(k.id);
-        const src = k.source === "free" ? ["free", "Free"] : k.source === "generated" ? ["generated", "Made by ShelfArt"] : k.source === "extras+generated" ? ["generated", "Extras or made by ShelfArt"] : ["extras", catalog.screenscraperAvailable ? "Extras" : "Coming soon"];
+        const src = k.source === "free" ? ["free", "Free"]
+          : k.source === "launchbox" ? ["free", "Free · LaunchBox"]
+          : k.source === "launchbox+generated" ? ["free", "Free · LaunchBox / ShelfArt"]
+          : k.source === "generated" ? ["generated", "Made by ShelfArt"]
+          : ["extras", catalog.screenscraperAvailable ? "Extras" : "Coming soon"];
         return h("div", {
           class: `kind ${on ? "on" : ""} ${avail ? "" : "disabled"}`,
           title: supported ? KIND_HINTS[k.id] : `${l.name.split(" (")[0]} doesn't use this`,
@@ -426,6 +434,8 @@ function viewArtwork(): Node[] {
     h("div", { class: "desc" }, "When a game has artwork from several regions, ShelfArt picks the first one on this list that exists."),
     h("h2", {}, "Options"),
     h("div", { class: "card toggles" },
+      toggle(prefs.launchbox, "Use the free LaunchBox games database", "Adds 3D boxes, back covers, cartridges, logos, fan art and game info. No account; downloads about 200 MB once a week.", () => (prefs.launchbox = !prefs.launchbox)),
+      toggle(prefs.gameInfo && prefs.launchbox, "Add game info", "Descriptions, genre, developer, release date, players and rating for your launcher. Your own edits are kept.", () => (prefs.gameInfo = !prefs.gameInfo), !prefs.launchbox),
       toggle(prefs.identify, "Identify games by their contents", "Reads checksums and disc serials and looks them up in the No-Intro and Redump databases. Renamed files still get the right art.", () => (prefs.identify = !prefs.identify)),
       toggle(prefs.extras && catalog.screenscraperAvailable, "Use the extras source (ScreenScraper guest mode)", catalog.screenscraperAvailable ? "Adds videos, manuals, 3D boxes and more. No account needed; slower than the free collection." : "Not included in this build yet.", () => (prefs.extras = !prefs.extras), !catalog.screenscraperAvailable),
       toggle(prefs.render3d, "Make 3D boxes myself when none exist", "Renders a 3D case from the 2D cover on your computer.", () => (prefs.render3d = !prefs.render3d)),
@@ -458,6 +468,8 @@ async function startScrape() {
     use_screenscraper: prefs.extras && catalog.screenscraperAvailable,
     render_3d_fallback: prefs.render3d,
     pegasus_layout: prefs.pegasusLayout,
+    use_launchbox: prefs.launchbox,
+    game_info: prefs.gameInfo && prefs.launchbox,
   };
   Object.assign(run, { running: true, total: selectedGames(), processed: 0, results: [], log: [], summary: null, filter: "all", currentSystem: "" });
   render();
@@ -586,7 +598,7 @@ function viewSettings(): Node[] {
     h("h2", {}, "Privacy"),
     h("div", { class: "card" }, h("ul", { class: "privacy", style: "margin:0;padding-left:18px" },
       h("li", {}, h("strong", {}, "No account, no telemetry. "), "There is no sign-up, no analytics and no crash reporting."),
-      h("li", {}, h("strong", {}, "Only known sites. "), "ShelfArt connects over HTTPS to GitHub and libretro (free artwork and game databases) and, if enabled, screenscraper.fr — nothing else, even if a server tries to redirect it."),
+      h("li", {}, h("strong", {}, "Only known sites. "), "ShelfArt connects over HTTPS to GitHub and libretro (free artwork and game databases), the LaunchBox games database and, if enabled, screenscraper.fr — nothing else, even if a server tries to redirect it."),
       h("li", {}, h("strong", {}, "Clean files only. "), "Every image is fully decoded and re-saved as a fresh PNG, so nothing hidden in a download reaches your drive. Videos and manuals are checked to be real MP4/PDF files."),
       h("li", {}, h("strong", {}, "Your files are safe. "), "ShelfArt never deletes games, never writes outside the folders you pick, and backs up gamelist.xml before changing it."))),
     h("h2", {}, "ScreenScraper login (optional)"),
@@ -611,7 +623,7 @@ function viewSettings(): Node[] {
       h("button", { class: "btn", onclick: async () => { await invoke("clear_cache"); cacheBytes = null; toast("Cache cleared"); render(); } }, "Clear cache")),
     h("h2", {}, "About"),
     h("div", { class: "card", style: "color:var(--muted);line-height:1.55" },
-      `ShelfArt ${catalog.version} — free and open source (MIT). Artwork from the libretro-thumbnails project`,
+      `ShelfArt ${catalog.version} — free and open source (MIT). Artwork from the libretro-thumbnails project and the LaunchBox Games Database`,
       catalog.screenscraperAvailable ? " and ScreenScraper" : "",
       ". Game identification uses the No-Intro and Redump databases published by libretro. All artwork belongs to its respective owners."),
   ];

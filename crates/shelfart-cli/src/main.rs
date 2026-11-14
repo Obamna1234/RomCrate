@@ -32,6 +32,8 @@ SCRAPE OPTIONS:
   --overwrite           Replace existing art
   --no-hash             Match by file name only
   --no-extras           Don't use ScreenScraper guest mode
+  --no-launchbox        Don't use the free LaunchBox games database
+  --no-game-info        Don't write descriptions/genre/release dates
   --no-metadata         Don't touch gamelist.xml / Pegasus metadata / playlists
   --pegasus-layout <l>  auto | per-game | skraper   (default auto: match what's already there)
   --threads <n>         Parallel games, 1-8 (default 4)
@@ -142,6 +144,8 @@ async fn scrape(args: &[String]) -> anyhow::Result<()> {
             "--overwrite" => cfg.overwrite = true,
             "--no-hash" => cfg.identify_by_contents = false,
             "--no-extras" => cfg.use_screenscraper = false,
+            "--no-launchbox" => cfg.use_launchbox = false,
+            "--no-game-info" => cfg.game_info = false,
             "--no-metadata" => cfg.write_metadata = false,
             "--pegasus-layout" => {
                 cfg.pegasus_layout = serde_json::from_str(&format!("\"{}\"", val()?))
@@ -176,6 +180,10 @@ async fn scrape(args: &[String]) -> anyhow::Result<()> {
         eprintln!("note: this build has no ScreenScraper access; using the free collection only");
     }
     let sources = Arc::new(Sources {
+        launchbox: Some(shelfart_core::launchbox::LaunchBox::new(
+            client.clone(),
+            &cache,
+        )),
         libretro: Libretro::new(client.clone(), cache.clone()),
         identifier: Identifier::new(client, cache),
         screenscraper: ss,

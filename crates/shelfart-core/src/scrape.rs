@@ -8,6 +8,7 @@
 
 use crate::identify::{self, Fingerprint, GameDb, Identifier};
 use crate::imaging::{self, Size, Upscale};
+use crate::launchbox::{GameInfo, LaunchBox, PlatformDb};
 use crate::launchers::{self, art_targets, GameArt, LauncherKind};
 use crate::matcher::{MatchMethod, MatchPrefs};
 use crate::net::{MAX_IMAGE_BYTES, MAX_MANUAL_BYTES, MAX_VIDEO_BYTES};
@@ -56,6 +57,10 @@ pub struct ScrapeConfig {
     pub render_3d_fallback: bool,
     /// Pegasus only: which media folder layout to write.
     pub pegasus_layout: launchers::PegasusLayout,
+    /// Use the free LaunchBox Games Database (extra art types + game info).
+    pub use_launchbox: bool,
+    /// Write descriptions, genre, release date… into launcher files.
+    pub game_info: bool,
 }
 
 impl Default for ScrapeConfig {
@@ -77,6 +82,8 @@ impl Default for ScrapeConfig {
             ss_user: None,
             render_3d_fallback: true,
             pegasus_layout: launchers::PegasusLayout::Auto,
+            use_launchbox: true,
+            game_info: true,
         }
     }
 }
@@ -163,6 +170,7 @@ pub struct Sources {
     pub libretro: Libretro,
     pub identifier: Identifier,
     pub screenscraper: Option<ScreenScraper>,
+    pub launchbox: Option<LaunchBox>,
 }
 
 /// Run a scrape over the selected systems of a scanned library.
@@ -240,6 +248,64 @@ pub async fn run(
         ..cfg
     });
 
+    // LaunchBox Games Database: download (at most weekly) and index the
+    // platforms we need, once, before going through the systems.
+    let mut lb_dbs: HashMap<String, Arc<PlatformDb>> = HashMap::new();
+    if let (true, Some(lb)) = (cfg.use_launchbox, sources.launchbox.as_ref()) {
+        let emit2 = emit.clone();
+        let last = std::sync::Mutex::new(0u64);
+        let progress = move |done: u64, total: Option<u64>| {
+            let mb = done / (1024 * 1024);
+            let mut l = last.lock().unwrap();
+            if mb >= *l + 10 {
+                *l = mb;
+                let of = total
+                    .map(|t| format!(" of {} MB", t / (1024 * 1024)))
+                    .unwrap_or_default();
+                log(
+                    &emit2,
+                    "info",
+                    format!("Downloading the free LaunchBox games database (weekly)… {mb} MB{of}"),
+                );
+            }
+        };
+        match lb.ensure_database(cfg.refresh_index, &progress).await {
+            Ok(_) => {
+                let names: Vec<String> = systems
+                    .iter()
+                    .filter_map(|s| systems::by_id(&s.system_id).map(|x| x.launchbox.to_string()))
+                    .collect();
+                let lb_dir = lb.dir_for_blocking();
+                let parsed = tokio::task::spawn_blocking(move || {
+                    let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+                    lb_dir.platforms(&refs)
+                })
+                .await;
+                match parsed {
+                    Ok(Ok(map)) => {
+                        for (k, mut v) in map {
+                            v.prepare();
+                            lb_dbs.insert(k, Arc::new(v));
+                        }
+                    }
+                    Ok(Err(e)) => log(
+                        &emit,
+                        "warn",
+                        format!(
+                            "LaunchBox database couldn't be read ({e}); continuing without it."
+                        ),
+                    ),
+                    Err(e) => log(&emit, "warn", format!("LaunchBox database: {e}")),
+                }
+            }
+            Err(e) => log(
+                &emit,
+                "warn",
+                format!("LaunchBox database unavailable ({e}); continuing without it."),
+            ),
+        }
+    }
+
     for ss in systems {
         if cancel.load(Ordering::Relaxed) {
             break;
@@ -309,6 +375,7 @@ pub async fn run(
 
         let launcher = launchers::effective_launcher(cfg.launcher, cfg.pegasus_layout, &ss);
         let ctx = Arc::new(Ctx {
+            lb: lb_dbs.get(sys.launchbox).cloned(),
             launcher,
             sys,
             ss: ss.clone(),
@@ -355,7 +422,14 @@ pub async fn run(
             }
         }
         if cfg.write_metadata {
-            match launchers::finalize_system(launcher, cfg.folder.as_deref(), sys, &ss, &arts) {
+            match launchers::finalize_system(
+                launcher,
+                cfg.folder.as_deref(),
+                sys,
+                &ss,
+                &arts,
+                cfg.overwrite,
+            ) {
                 Ok(notes) => notes.into_iter().for_each(|n| log(&emit, "info", n)),
                 Err(e) => log(&emit, "warn", format!("{}: {e}", ss.system_name)),
             }
@@ -372,6 +446,8 @@ pub async fn run(
 }
 
 struct Ctx {
+    /// LaunchBox Games Database entries for this platform, if loaded.
+    lb: Option<Arc<PlatformDb>>,
     /// Launcher layout for this system (Pegasus may resolve to the Skraper layout).
     launcher: LauncherKind,
     sys: &'static System,
@@ -456,6 +532,30 @@ impl Ctx {
             }
         };
 
+        // 2b. LaunchBox Games Database: extra art types and game info.
+        let lb_id: Option<u64> = self.lb.as_ref().and_then(|db| {
+            let mut names: Vec<&str> = Vec::new();
+            if let Some(c) = canonical.as_deref() {
+                names.push(c);
+            }
+            if let Some(b) = best.as_deref() {
+                names.push(b);
+            }
+            names.push(&game.stem);
+            if let Some(t) = fp.internal_title.as_deref() {
+                names.push(t);
+            }
+            db.find(&names, &cfg.prefs)
+        });
+        let info: Option<GameInfo> = if cfg.game_info {
+            lb_id.and_then(|id| self.lb.as_ref().and_then(|db| db.info(id)))
+        } else {
+            None
+        };
+        if best.is_none() && lb_id.is_some() {
+            method = Some("launchbox".into());
+        }
+
         // 3. Plan output files, skipping ones that already exist.
         let mut plan: Vec<(ArtKind, Vec<PathBuf>)> = Vec::new();
         let mut existing: BTreeMap<ArtKind, PathBuf> = BTreeMap::new();
@@ -485,7 +585,8 @@ impl Ctx {
         if plan.is_empty() {
             send(
                 GameStatus::Skipped,
-                best.or(canonical),
+                best.or(canonical)
+                    .or_else(|| info.as_ref().map(|i| i.title.clone())),
                 method,
                 vec![],
                 vec![],
@@ -494,9 +595,10 @@ impl Ctx {
             );
             return (
                 GameStatus::Skipped,
-                (!existing.is_empty()).then(|| GameArt {
+                (!existing.is_empty() || info.is_some()).then(|| GameArt {
                     game: game.clone(),
                     files: existing,
+                    info,
                 }),
                 0,
             );
@@ -529,6 +631,30 @@ impl Ctx {
             {
                 fetched.insert(k, Fetched::Image(img));
                 continue;
+            }
+            // Then the LaunchBox Games Database (free, no account).
+            if let (Some(db), Some(id), Some(lb)) =
+                (self.lb.as_ref(), lb_id, self.sources.launchbox.as_ref())
+            {
+                if let Some(url) = db.image_url(id, k, &cfg.prefs.regions) {
+                    match lb.fetch_image(&url).await {
+                        Ok(bytes) => match tokio::task::spawn_blocking(move || {
+                            imaging::decode_validated(&bytes)
+                        })
+                        .await
+                        {
+                            Ok(Ok(img)) => {
+                                fetched.insert(k, Fetched::Image(img));
+                                continue;
+                            }
+                            Ok(Err(e)) => {
+                                errors.push(format!("{}: rejected download ({e})", k.label()))
+                            }
+                            Err(e) => errors.push(e.to_string()),
+                        },
+                        Err(e) => errors.push(format!("{}: {e}", k.label())),
+                    }
+                }
             }
             // Then ScreenScraper.
             if let Some(ssc) = self.sources.screenscraper.as_ref().filter(|_| self.ss_on) {
@@ -588,6 +714,7 @@ impl Ctx {
         let matched_label = best
             .clone()
             .or(canonical.clone())
+            .or_else(|| info.as_ref().map(|i| i.title.clone()))
             .or_else(|| ss_game.get().cloned().flatten().and_then(|g| g.name));
 
         // 5. Produce and save each planned kind.
@@ -695,9 +822,10 @@ impl Ctx {
         );
         (
             status,
-            (!files.is_empty()).then(|| GameArt {
+            (!files.is_empty() || info.is_some()).then(|| GameArt {
                 game: game.clone(),
                 files,
+                info,
             }),
             n,
         )

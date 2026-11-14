@@ -248,9 +248,11 @@ fn es_fixture(
     let arts = vec![GameArt {
         game: ss.games[0].clone(),
         files,
+        info: None,
     }];
-    let r = launchers::finalize_system(LauncherKind::EmulationStation, None, sys, &ss, &arts)
-        .map_err(|e| e.to_string());
+    let r =
+        launchers::finalize_system(LauncherKind::EmulationStation, None, sys, &ss, &arts, false)
+            .map_err(|e| e.to_string());
     (t, r, dir)
 }
 
@@ -311,7 +313,7 @@ fn pegasus_metadata_cannot_be_injected() {
     fs::write(dir.join("Fine (USA).gba"), b"x").unwrap();
     let sys = systems::by_id("gba").unwrap();
     let ss = scan::scan_system_folder(sys, &dir);
-    launchers::finalize_system(LauncherKind::Pegasus, None, sys, &ss, &[]).unwrap();
+    launchers::finalize_system(LauncherKind::Pegasus, None, sys, &ss, &[], false).unwrap();
     let meta = fs::read_to_string(dir.join("metadata.pegasus.txt")).unwrap();
     for line in meta.lines() {
         assert!(

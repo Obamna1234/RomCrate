@@ -15,4 +15,5 @@
 - Identification of byte-swapped N64 ROMs, ROM-header titles as a fallback, better matching of "&" titles and short names.
 - GameCube/Wii discs matched by region and revision from the disc header; .cue/.gdi sets with missing track files are flagged.
 - Extra art types (logo, title, screenshot) never fall back to a fuzzy guess once a game is identified.
+- Free LaunchBox Games Database source (no account): 3D boxes, back covers, cartridges, fan art and game info (descriptions, genre, developer, publisher, release date, players, rating) written to gamelist.xml, ES-DE gamelists and new Pegasus metadata; hand edits are kept. Downloaded at most weekly, streamed to disk and parsed per platform.
 - Security review and penetration test before release (see docs/SECURITY-REVIEW.md); 51 automated tests.
