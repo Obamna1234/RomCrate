@@ -14,10 +14,13 @@ permissions:
 
 env:
   ROMS_NAME: "Odin's Portal 2 Emulator ROMs (copy) – test"
+  PYTHONUTF8: "1"
 
 jobs:
   cli:
     name: CLI (${{ matrix.os }})
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -49,6 +52,16 @@ jobs:
       - name: Check results
         if: always()
         run: python tools/simulate/check.py "$RUNNER_TEMP/sim" | tee "$RUNNER_TEMP/sim/out/5-check.log"
+      - name: Publish results for review (branch sim-results/cli-${{ matrix.os }})
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/simulate/collect.py "$RUNNER_TEMP/sim" "$RUNNER_TEMP/pub" --covers
+          cd "$RUNNER_TEMP/pub"
+          git init -q && git add -A
+          git -c user.name=simulation -c user.email=simulation@users.noreply.github.com commit -qm "Simulation results ${{ github.run_id }}"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/sim-results/cli-${{ matrix.os }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -80,6 +93,8 @@ jobs:
 
   gui:
     name: App window (${{ matrix.os }})
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -111,13 +126,24 @@ jobs:
           python tools/simulate/make_fixtures.py "$RUNNER_TEMP/sim/$ROMS_NAME"
           mkdir -p "$RUNNER_TEMP/sim/gui"
 
+      - name: WebView2 driver matching this machine (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $ver = (Get-ItemProperty $key -ErrorAction SilentlyContinue).pv
+          if (-not $ver) { $ver = (Get-Item "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe").VersionInfo.ProductVersion }
+          "WebView2 runtime: $ver"
+          $zip = "$env:RUNNER_TEMP\edgedriver.zip"
+          try { Invoke-WebRequest "https://msedgedriver.microsoft.com/$ver/edgedriver_win64.zip" -OutFile $zip }
+          catch { Invoke-WebRequest "https://msedgedriver.azureedge.net/$ver/edgedriver_win64.zip" -OutFile $zip }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\edgedriver" -Force
+
       - name: Drive the app (Windows)
         if: runner.os == 'Windows'
         run: |
           cargo install tauri-driver --locked
-          cargo install msedgedriver-tool --locked
-          cd "$RUNNER_TEMP" && msedgedriver-tool && cd -
-          tauri-driver --native-driver "$RUNNER_TEMP/msedgedriver.exe" &
+          tauri-driver --native-driver "$RUNNER_TEMP/edgedriver/msedgedriver.exe" &
           sleep 5
           python tools/simulate/drive_gui.py "$GITHUB_WORKSPACE/target/release/shelfart.exe" "$RUNNER_TEMP/sim/$ROMS_NAME" "$RUNNER_TEMP/sim/gui"
 
@@ -145,6 +171,16 @@ jobs:
       - name: Check results
         if: always() && runner.os != 'macOS'
         run: python tools/simulate/check.py "$RUNNER_TEMP/sim" --gui | tee "$RUNNER_TEMP/sim/gui/check.log"
+      - name: Publish results for review (branch sim-results/gui-${{ matrix.os }})
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/simulate/collect.py "$RUNNER_TEMP/sim" "$RUNNER_TEMP/pub" 
+          cd "$RUNNER_TEMP/pub"
+          git init -q && git add -A
+          git -c user.name=simulation -c user.email=simulation@users.noreply.github.com commit -qm "Simulation results ${{ github.run_id }}"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/sim-results/gui-${{ matrix.os }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

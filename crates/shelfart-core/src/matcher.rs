@@ -227,7 +227,13 @@ pub struct NameIndex {
     cands: Vec<Candidate>,
     exact: HashMap<String, usize>,
     by_title: HashMap<String, Vec<usize>>,
+    /// Title with spaces removed: "Duck Tales" and "DuckTales" land together.
+    by_squash: HashMap<String, Vec<usize>>,
     by_base: HashMap<String, Vec<usize>>,
+}
+
+fn squash(norm: &str) -> String {
+    norm.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
 impl NameIndex {
@@ -243,6 +249,10 @@ impl NameIndex {
             let i = idx.cands.len();
             idx.exact.insert(name.to_lowercase(), i);
             idx.by_title.entry(title_norm.clone()).or_default().push(i);
+            idx.by_squash
+                .entry(squash(&title_norm))
+                .or_default()
+                .push(i);
             idx.by_base.entry(base_norm).or_default().push(i);
             idx.cands.push(Candidate {
                 name,
@@ -285,7 +295,8 @@ impl NameIndex {
             return None;
         }
 
-        if let Some(list) = self.by_title.get(&norm) {
+        // Same title, ignoring spacing, so every catalogue spelling competes on region/tags.
+        if let Some(list) = self.by_squash.get(&squash(&norm)) {
             let i = self.pick_best(list, &rom_tags, prefs);
             return Some(Match {
                 name: self.cands[i].name.clone(),
@@ -603,5 +614,21 @@ mod tests {
             split_title("Game (USA, Europe) (Rev 1) [!]").1,
             vec!["usa", "europe", "rev 1", "!"]
         );
+    }
+
+    #[test]
+    fn spacing_variants_compete_on_region() {
+        let idx = NameIndex::new(
+            [
+                "Duck Tales (1989-09)(Capcom)(US)",
+                "DuckTales (USA)",
+                "DuckTales (Europe)",
+            ]
+            .map(String::from),
+        );
+        let m = idx
+            .best_match("Duck Tales", &MatchPrefs::default())
+            .unwrap();
+        assert_eq!(m.name, "DuckTales (USA)");
     }
 }

@@ -93,6 +93,8 @@ expect = [
     ("snes", "super metroid.smc", r"super metroid"),
     ("snes", "Street Fighter II Turbo (U) [!].smc", r"street fighter ii"),
     ("Nintendo 64", "Mario Kart 64 (U) [!].v64", r"mario kart 64"),
+    ("NES", "Duck Tales.nes", r"duck ?tales"),
+    ("gba", "Pokémon - Emerald Version (USA, Europe).gba", r"pok[eé]mon.*emerald"),
 ]
 for sysdir, f, pat in expect:
     title = (pegasus(sysdir) or {}).get(f, "<missing>")
