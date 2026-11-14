@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4
+
+Found by the new automated "real user" simulation (runs on Windows, macOS and Linux every week):
+- Badly named games identified from their contents now show their real title in Pegasus, ES-DE and EmulationStation (e.g. `game disc 1.iso` → Grand Theft Auto III), and on the result cards.
+- Empty (0-byte) files are no longer counted as games.
+- Titles match regardless of spacing ("Duck Tales" → DuckTales (USA) instead of an odd catalogue entry).
+- The window no longer opens partly off-screen on small displays.
+
 ## 0.1.3
 
 - New `shelfart-cli-…-x86_64-unknown-linux-musl` download: a fully static command-line build that runs on any 64-bit Linux, including older ones like Ubuntu 20.04/20.10 where the desktop app can't run.
