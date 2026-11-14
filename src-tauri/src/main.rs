@@ -354,7 +354,12 @@ fn fit_to_screen(app: &tauri::App) {
     let h = size.height.min(screen.height * 0.9);
     if w < size.width || h < size.height {
         let _ = win.set_size(tauri::LogicalSize::new(w, h));
-        let _ = win.center();
+        // Place it explicitly: center() can use the old size on some platforms (macOS).
+        let origin = mon.position().to_logical::<f64>(scale);
+        let _ = win.set_position(tauri::LogicalPosition::new(
+            origin.x + (screen.width - w) / 2.0,
+            origin.y + (screen.height - h) / 2.0,
+        ));
     }
 }
 
