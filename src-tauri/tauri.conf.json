@@ -39,9 +39,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "linux": { "deb": { "depends": [] } }
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
   },
   "plugins": {
-    "opener": { "requireLiteralLeadingDot": false }
+    "opener": {
+      "requireLiteralLeadingDot": false
+    }
   }
 }
