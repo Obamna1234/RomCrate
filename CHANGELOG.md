@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — Import & sort
+
+- **New: Import & sort.** Pick any messy folder or `.zip` and ShelfArt sorts the games into `ROMs/<console>/`.
+  - Recognises the console from inside the file: NES, SNES, N64, Game Boy/Color/Advance, DS, 3DS, Mega Drive/32X, Master System/Game Gear, Lynx, Atari 7800 headers; GameCube/Wii (incl. WBFS/RVZ/CISO), Saturn, Sega CD, Dreamcast discs; PS1/PS2 (`SYSTEM.CNF`), PSP and PC discs; Dreamcast GD-ROM CHDs. Then file type, the folder it was in, and exact names in the official Redump lists.
+  - A PC disc sitting in a "PS2 games" folder still goes to `pc/` (and the preview says why).
+  - Keeps `.cue`/`.bin`, `.gdi` and `.m3u` multi-disc sets together; incomplete sets, BIOS files, empty files and non-game files are left alone.
+  - Preview first. Copy (default) or move; every copy is read back and CRC-checked before it counts; originals are removed (move mode) only after that. Never overwrites; all-or-nothing per game; free-space check before and during.
+  - Reuses console folders you already have ("PS2", "Nintendo 64"…). Optional renaming to official names.
+  - App: new **Import & sort games** screen with a console picker for anything it can't work out, and a "Get artwork for these games" button. CLI: `shelfart-cli import`.
+- Library: when you have several folders, each console card says which folder it's in.
+- The automated real-user simulation now also imports a messy folder (copy, move, re-run, then scrape) on Windows, macOS and Linux, and clicks through the import screen in the app.
+
 ## 0.1.4
 
 Found by the new automated "real user" simulation (runs on Windows, macOS and Linux every week):

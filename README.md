@@ -35,6 +35,7 @@ ShelfArt is a free, open-source alternative to account-based scrapers. Point it 
 
 ## Features
 
+- **Import & sort any messy folder.** Point ShelfArt at a Downloads folder (or a `.zip`) and it puts every game into `ROMs/<console>/`, working out the console from *inside* the file — cartridge headers, GameCube/Wii and Sega disc signatures, PlayStation `SYSTEM.CNF`, PSP and PC discs — then file type, folder name and the official game lists. You see a preview first; it copies by default (or moves), checks every copy byte-for-byte with a CRC, keeps cue/bin and multi-disc `.m3u` sets together, never overwrites, and skips BIOS files, broken sets and non-game files.
 - **Recognises games by their contents.** Cartridge games are matched by checksum against No-Intro; disc games (PS1, PS2, PSP, GameCube, Wii) by the serial number read from inside the image (Redump). `my crash backup.iso` still becomes *Crash Bandicoot (USA)*.
 - **Zipped folders welcome.** Pick a `.zip` of your games folder and ShelfArt unzips it next to the zip (safely — no zip-slip, zip-bomb or overwrite) and carries on.
 - **Works with what you already have.** If a system already uses Skraper's Pegasus layout (`media/box2dfront/…`), ShelfArt adds to it and never overwrites your existing art.
@@ -100,7 +101,7 @@ ShelfArt is growing into a one-click setup tool for emulation handhelds (AYN Odi
 - [x] Artwork scraper with launcher & theme layouts
 - [x] Game identification by checksum and disc serial
 - [x] Verification of Sony's official PS3 system software file
-- [ ] Import & sort any folder layout into `ROMs/<console>`, with free-space check
+- [x] Import & sort any folder layout into `ROMs/<console>`, with free-space check
 - [ ] Compress disc games (PS1/PS2 → CHD, GameCube/Wii → RVZ) with verification before and after — originals never touched
 - [ ] PS1/PS2 BIOS from your own copy of the official PS3 update (see below)
 - [ ] Pegasus `metadata.pegasus.txt` with current launch lines and an on-device checklist

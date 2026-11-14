@@ -1098,24 +1098,6 @@ fn finish_plan(
     ignored: usize,
     notes: Vec<String>,
 ) -> anyhow::Result<ImportPlan> {
-    // Preview order: by console, then name; things needing attention last.
-    items.sort_by_key(|i| {
-        let rank = match i.state {
-            ItemState::Ready => 0,
-            ItemState::AlreadyThere => 1,
-            ItemState::NeedsSystem => 2,
-            ItemState::Conflict(_) => 3,
-            ItemState::Skipped(_) => 4,
-        };
-        (
-            rank,
-            i.system_name.clone().unwrap_or_default(),
-            i.name.to_lowercase(),
-        )
-    });
-    for (n, i) in items.iter_mut().enumerate() {
-        i.id = n;
-    }
     let folders = existing_folders(dest);
     let mut totals: BTreeMap<String, SystemTotal> = BTreeMap::new();
     let mut needed = 0u64;
@@ -1148,6 +1130,24 @@ fn finish_plan(
             t.games += 1;
             t.bytes += it.size;
         }
+    }
+    // Preview order: by console, then name; things needing attention last.
+    items.sort_by_key(|i| {
+        let rank = match i.state {
+            ItemState::Ready => 0,
+            ItemState::AlreadyThere => 1,
+            ItemState::NeedsSystem => 2,
+            ItemState::Conflict(_) => 3,
+            ItemState::Skipped(_) => 4,
+        };
+        (
+            rank,
+            i.system_name.clone().unwrap_or_default(),
+            i.name.to_lowercase(),
+        )
+    });
+    for (n, i) in items.iter_mut().enumerate() {
+        i.id = n;
     }
     let free = free_space(dest);
     let enough = free

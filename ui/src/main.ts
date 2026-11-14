@@ -196,6 +196,13 @@ function footer(back: typeof view | null, next: typeof view | null, nextLabel = 
 
 // ---------------------------------------------------------------- view: library
 
+/** Which of the user's chosen folders a system folder lives in (shown when there are several). */
+function rootLabel(path: string): string {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const root = prefs.roots.map(norm).filter((r) => norm(path).startsWith(r + "/")).sort((a, b) => b.length - a.length)[0];
+  return root ? root.split("/").pop() || root : "";
+}
+
 async function addRoots() {
   const picked = await open({ directory: true, multiple: true, title: "Choose your ROM folder(s)" });
   if (!picked) return;
@@ -280,7 +287,7 @@ function viewLibrary(): Node[] {
             onclick: () => { prefs.deselected = on ? [...prefs.deselected, s.path] : prefs.deselected.filter((p) => p !== s.path); savePrefs(); render(); },
           }, h("div", { class: "check" }),
             h("div", {}, h("div", { class: "name" }, s.system_name),
-              h("div", { class: "meta" }, `${s.games.length} game${s.games.length === 1 ? "" : "s"} · ${s.folder_name}/`)));
+              h("div", { class: "meta" }, `${s.games.length} game${s.games.length === 1 ? "" : "s"} · ${s.folder_name}/${prefs.roots.length > 1 ? ` in ${rootLabel(s.path)}` : ""}`)));
         })),
     );
   }
@@ -738,6 +745,13 @@ async function scrapeImported() {
   savePrefs();
   go("library");
   await rescan();
+  // Select just the consoles in the ROMs folder the games went into.
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const inDest = (p: string) => norm(p).startsWith(norm(dest) + "/");
+  prefs.deselected = library.systems.filter((s) => !inDest(s.path)).map((s) => s.path);
+  savePrefs();
+  render();
+  toast("Selected the consoles you just imported — press Continue to choose artwork.");
 }
 
 function itemBadge(it: ImportItem) {
