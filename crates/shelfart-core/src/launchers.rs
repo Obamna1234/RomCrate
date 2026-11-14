@@ -1,0 +1,739 @@
+//! Where each launcher expects artwork, theme presets, and metadata files.
+
+use crate::imaging::Size;
+use crate::matcher::{display_title, libretro_sanitize};
+use crate::paths::join_safe;
+use crate::scan::{Game, ScannedSystem};
+use crate::source::ArtKind;
+use crate::systems::System;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LauncherKind {
+    Pegasus,
+    EsDe,
+    EmulationStation,
+    RetroArch,
+    LaunchBox,
+    Folder,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ThemeProfile {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub description: &'static str,
+    /// Art types this look uses (pre-ticked in the UI).
+    pub kinds: Vec<ArtKind>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LauncherInfo {
+    pub id: LauncherKind,
+    pub name: &'static str,
+    pub tagline: &'static str,
+    /// Art types this launcher can display.
+    pub supported: Vec<ArtKind>,
+    /// Whether the user must pick a separate folder (media / RetroArch / LaunchBox / output).
+    pub needs_folder: bool,
+    pub folder_label: &'static str,
+    pub folder_hint: &'static str,
+    pub themes: Vec<ThemeProfile>,
+    /// Short note on where things go, shown in the UI.
+    pub where_note: &'static str,
+}
+
+use ArtKind::*;
+
+pub fn launchers() -> Vec<LauncherInfo> {
+    vec![
+        LauncherInfo {
+            id: LauncherKind::Pegasus,
+            name: "Pegasus Frontend",
+            tagline: "Art goes into a media folder next to your games — Pegasus finds it automatically.",
+            supported: vec![Boxart, Box3d, Boxback, Cartridge, Snap, Title, Logo, Fanart, Video],
+            needs_folder: false,
+            folder_label: "",
+            folder_hint: "",
+            themes: vec![
+                ThemeProfile { id: "pegasus-showcase", name: "Showcase themes", description: "Big screenshot or video, logo and box — gameOS, Neoretro and similar.", kinds: vec![Boxart, Snap, Logo, Video] },
+                ThemeProfile { id: "pegasus-3d", name: "3D box shelves", description: "3D boxes used as the cover, plus logos.", kinds: vec![Box3d, Snap, Logo] },
+                ThemeProfile { id: "pegasus-grid", name: "Cover grid themes", description: "Shelves or grids of 2D box covers.", kinds: vec![Boxart, Logo] },
+                ThemeProfile { id: "pegasus-all", name: "Everything", description: "Every type Pegasus can show.", kinds: vec![Boxart, Boxback, Cartridge, Snap, Title, Logo, Fanart, Video] },
+            ],
+            where_note: "<system>/media/<game>/boxFront, boxBack, cartridge, screenshot, titlescreen, logo, background, video. A 3D box is saved as boxFront.",
+        },
+        LauncherInfo {
+            id: LauncherKind::EsDe,
+            name: "ES-DE (EmulationStation Desktop Edition)",
+            tagline: "Writes straight into ES-DE's downloaded_media folder.",
+            supported: ArtKind::ALL.to_vec(),
+            needs_folder: true,
+            folder_label: "ES-DE downloaded_media folder",
+            folder_hint: "Usually ~/ES-DE/downloaded_media (Windows: ES-DE\\downloaded_media)",
+            themes: vec![
+                ThemeProfile { id: "esde-full", name: "Linear / Modern (default themes)", description: "Everything ES-DE's built-in scraper would fetch.", kinds: vec![Boxart, Box3d, Boxback, Cartridge, Snap, Title, Logo, Fanart, Mix, Video, Manual] },
+                ThemeProfile { id: "esde-light", name: "Lightweight", description: "Covers, screenshots, marquees and mix images — small and fast.", kinds: vec![Boxart, Snap, Logo, Mix] },
+            ],
+            where_note: "downloaded_media/<system>/covers, 3dboxes, backcovers, physicalmedia, screenshots, titlescreens, marquees, fanart, miximages, videos, manuals",
+        },
+        LauncherInfo {
+            id: LauncherKind::EmulationStation,
+            name: "EmulationStation (Batocera, RetroPie, Recalbox, Knulli, ArkOS…)",
+            tagline: "Saves into an images folder and updates gamelist.xml (your original is backed up).",
+            supported: ArtKind::ALL.to_vec(),
+            needs_folder: false,
+            folder_label: "",
+            folder_hint: "",
+            themes: vec![
+                ThemeProfile { id: "es-mix", name: "Mix image (classic look)", description: "Screenshot + box + logo combined; most themes' default.", kinds: vec![Mix, Boxart, Logo, Video] },
+                ThemeProfile { id: "es-3d", name: "3D box", description: "3D box as the main picture.", kinds: vec![Box3d, Snap, Logo, Video] },
+                ThemeProfile { id: "es-screens", name: "Screenshot", description: "Plain screenshot as the main image.", kinds: vec![Snap, Boxart, Logo, Video] },
+                ThemeProfile { id: "es-full", name: "Everything (Batocera)", description: "All media Batocera can show, including manuals.", kinds: vec![Mix, Boxart, Box3d, Boxback, Cartridge, Title, Logo, Fanart, Video, Manual] },
+            ],
+            where_note: "<system>/images, videos, manuals + gamelist.xml",
+        },
+        LauncherInfo {
+            id: LauncherKind::RetroArch,
+            name: "RetroArch",
+            tagline: "Fills RetroArch's thumbnails folder and creates playlists if you don't have them.",
+            supported: vec![Boxart, Box3d, Snap, Title, Logo],
+            needs_folder: true,
+            folder_label: "RetroArch folder",
+            folder_hint: "The folder that contains RetroArch's 'thumbnails' and 'playlists' folders",
+            themes: vec![
+                ThemeProfile { id: "ra-all", name: "All thumbnails", description: "Box art, screenshot, title screen and logo.", kinds: vec![Boxart, Snap, Title, Logo] },
+                ThemeProfile { id: "ra-3d", name: "3D boxes", description: "3D boxes in place of flat box art.", kinds: vec![Box3d, Snap, Title, Logo] },
+            ],
+            where_note: "RetroArch/thumbnails/<system>/Named_Boxarts, Named_Snaps, Named_Titles, Named_Logos",
+        },
+        LauncherInfo {
+            id: LauncherKind::LaunchBox,
+            name: "LaunchBox / Big Box",
+            tagline: "Saves images, videos and manuals into LaunchBox's folders, named by game title.",
+            supported: vec![Boxart, Box3d, Boxback, Cartridge, Snap, Title, Logo, Fanart, Video, Manual],
+            needs_folder: true,
+            folder_label: "LaunchBox folder",
+            folder_hint: "The folder that contains LaunchBox.exe",
+            themes: vec![ThemeProfile { id: "lb-all", name: "Standard", description: "Everything Big Box themes commonly use.", kinds: vec![Boxart, Box3d, Boxback, Cartridge, Snap, Title, Logo, Fanart, Video, Manual] }],
+            where_note: "LaunchBox/Images/<platform>/<type>, LaunchBox/Videos/<platform>, LaunchBox/Manuals/<platform>",
+        },
+        LauncherInfo {
+            id: LauncherKind::Folder,
+            name: "Plain folders (any other launcher)",
+            tagline: "Simple folders per system and art type — works with Daijishō, Playnite, Steam ROM Manager and more.",
+            supported: ArtKind::ALL.to_vec(),
+            needs_folder: true,
+            folder_label: "Output folder",
+            folder_hint: "Any folder you like",
+            themes: vec![ThemeProfile { id: "folder-all", name: "Everything", description: "Every art type.", kinds: ArtKind::ALL.to_vec() }],
+            where_note: "<output>/<system>/<type>/<game>.png (videos .mp4, manuals .pdf)",
+        },
+    ]
+}
+
+/// Base sizes (the "Standard" preset); aspect ratio is always kept.
+pub fn base_size(kind: ArtKind) -> Size {
+    match kind {
+        Boxart | Boxback => Size { w: 900, h: 1200 },
+        Box3d => Size { w: 1000, h: 1200 },
+        Cartridge => Size { w: 900, h: 900 },
+        Snap | Title | Mix => Size { w: 1280, h: 960 },
+        Logo => Size { w: 1000, h: 500 },
+        Fanart => Size { w: 1920, h: 1080 },
+        Video | Manual => Size { w: 0, h: 0 },
+    }
+}
+
+/// Size presets offered in the UI.
+pub fn size_presets() -> Vec<(&'static str, &'static str, f32)> {
+    vec![
+        (
+            "compact",
+            "Compact — handhelds & small screens (≈640p)",
+            0.6,
+        ),
+        ("standard", "Standard — 1080p TVs and monitors", 1.0),
+        ("hd", "High — 1440p", 1.5),
+        ("uhd", "Ultra — 4K", 2.0),
+    ]
+}
+
+/// LaunchBox replaces these characters with `_` in image file names.
+fn launchbox_sanitize(title: &str) -> String {
+    title
+        .chars()
+        .map(|c| if ":/\\?*\"<>|'".contains(c) { '_' } else { c })
+        .collect()
+}
+
+/// Subfolder of a game relative to its system folder, e.g. "Europe" for "Europe/Game.zip".
+fn rel_dir(game: &Game) -> String {
+    match game.rel_path.rfind('/') {
+        Some(i) => game.rel_path[..i].to_string(),
+        None => String::new(),
+    }
+}
+
+/// Paths a piece of art should be written to (first = primary).
+/// `selected` is every kind the user picked; some launchers have one slot for
+/// two kinds (e.g. Pegasus `boxFront` for 2D or 3D boxes) and the 3D box wins.
+#[allow(clippy::too_many_arguments)]
+pub fn art_targets(
+    launcher: LauncherKind,
+    folder: Option<&Path>,
+    sys: &System,
+    ss: &ScannedSystem,
+    game: &Game,
+    kind: ArtKind,
+    matched_name: Option<&str>,
+    selected: &[ArtKind],
+) -> Vec<PathBuf> {
+    let stem = game.stem.as_str();
+    let ext = kind.ext();
+    let both_boxes = selected.contains(&Boxart) && selected.contains(&Box3d);
+    match launcher {
+        LauncherKind::Pegasus => {
+            let asset = match kind {
+                Boxart if both_boxes => return vec![],
+                Boxart | Box3d => "boxFront",
+                Boxback => "boxBack",
+                Cartridge => "cartridge",
+                Snap => "screenshot",
+                Title => "titlescreen",
+                Logo => "logo",
+                Fanart => "background",
+                Video => "video",
+                Mix | Manual => return vec![],
+            };
+            vec![join_safe(
+                &ss.path,
+                &["media", stem, &format!("{asset}.{ext}")],
+            )]
+        }
+        LauncherKind::EsDe => {
+            let Some(root) = folder else { return vec![] };
+            let dir = match kind {
+                Boxart => "covers",
+                Box3d => "3dboxes",
+                Boxback => "backcovers",
+                Cartridge => "physicalmedia",
+                Snap => "screenshots",
+                Title => "titlescreens",
+                Logo => "marquees",
+                Fanart => "fanart",
+                Mix => "miximages",
+                Video => "videos",
+                Manual => "manuals",
+            };
+            vec![join_safe(
+                root,
+                &[
+                    &ss.folder_name,
+                    dir,
+                    &rel_dir(game),
+                    &format!("{stem}.{ext}"),
+                ],
+            )]
+        }
+        LauncherKind::EmulationStation => {
+            let (dir, suffix) = match kind {
+                Boxart => ("images", "thumb"),
+                Box3d => ("images", "box3d"),
+                Boxback => ("images", "boxback"),
+                Cartridge => ("images", "cartridge"),
+                Snap => ("images", "snap"),
+                Title => ("images", "titleshot"),
+                Logo => ("images", "marquee"),
+                Fanart => ("images", "fanart"),
+                Mix => ("images", "mix"),
+                Video => ("videos", "video"),
+                Manual => ("manuals", "manual"),
+            };
+            vec![join_safe(
+                &ss.path,
+                &[dir, &format!("{stem}-{suffix}.{ext}")],
+            )]
+        }
+        LauncherKind::RetroArch => {
+            let Some(root) = folder else { return vec![] };
+            let dir = match kind {
+                Boxart if both_boxes => return vec![],
+                Box3d => "Named_Boxarts",
+                k => match k.libretro_dir() {
+                    Some(d) => d,
+                    None => return vec![],
+                },
+            };
+            let mut v = vec![join_safe(
+                root,
+                &[
+                    "thumbnails",
+                    sys.libretro,
+                    dir,
+                    &format!("{}.png", libretro_sanitize(stem)),
+                ],
+            )];
+            // Playlists made by RetroArch's own scanner use the database name as label.
+            if let Some(m) = matched_name {
+                if m != stem {
+                    v.push(join_safe(
+                        root,
+                        &["thumbnails", sys.libretro, dir, &format!("{m}.png")],
+                    ));
+                }
+            }
+            v
+        }
+        LauncherKind::LaunchBox => {
+            let Some(root) = folder else { return vec![] };
+            let title = launchbox_sanitize(&display_title(stem));
+            let file = format!("{title}-01.{ext}");
+            let sub = match kind {
+                Boxart => "Box - Front",
+                Box3d => "Box - 3D",
+                Boxback => "Box - Back",
+                Cartridge => "Cart - Front",
+                Snap => "Screenshot - Gameplay",
+                Title => "Screenshot - Game Title",
+                Logo => "Clear Logo",
+                Fanart => "Fanart - Background",
+                Video => return vec![join_safe(root, &["Videos", sys.launchbox, &file])],
+                Manual => return vec![join_safe(root, &["Manuals", sys.launchbox, &file])],
+                Mix => return vec![],
+            };
+            vec![join_safe(root, &["Images", sys.launchbox, sub, &file])]
+        }
+        LauncherKind::Folder => {
+            let Some(root) = folder else { return vec![] };
+            vec![join_safe(
+                root,
+                &[
+                    &ss.folder_name,
+                    kind.id(),
+                    &rel_dir(game),
+                    &format!("{stem}.{ext}"),
+                ],
+            )]
+        }
+    }
+}
+
+/// Art produced for one game, used to write metadata files.
+#[derive(Debug, Clone)]
+pub struct GameArt {
+    pub game: Game,
+    pub files: BTreeMap<ArtKind, PathBuf>,
+}
+
+/// Write/update launcher metadata for a system after scraping. Returns notes for the log.
+pub fn finalize_system(
+    launcher: LauncherKind,
+    folder: Option<&Path>,
+    sys: &System,
+    ss: &ScannedSystem,
+    results: &[GameArt],
+) -> anyhow::Result<Vec<String>> {
+    match launcher {
+        LauncherKind::EmulationStation => write_gamelist(ss, results),
+        LauncherKind::Pegasus => write_pegasus_metadata(sys, ss),
+        LauncherKind::RetroArch => match folder {
+            Some(f) => write_retroarch_playlist(f, sys, ss),
+            None => Ok(vec![]),
+        },
+        _ => Ok(vec![]),
+    }
+}
+
+// ---------------------------------------------------------------- Pegasus
+
+fn write_pegasus_metadata(sys: &System, ss: &ScannedSystem) -> anyhow::Result<Vec<String>> {
+    let has_meta = ["metadata.pegasus.txt", "metadata.txt"]
+        .iter()
+        .any(|f| ss.path.join(f).exists());
+    if has_meta {
+        return Ok(vec![format!(
+            "{}: kept your existing Pegasus metadata file; art is in the media folder.",
+            ss.system_name
+        )]);
+    }
+    let mut exts: Vec<&str> = sys.extensions.to_vec();
+    exts.sort();
+    exts.dedup();
+    let mut s = String::new();
+    s.push_str("# Created by ShelfArt. Edit freely — ShelfArt never overwrites this file.\n");
+    s.push_str(&format!("collection: {}\n", sys.name));
+    s.push_str(&format!("shortname: {}\n", ss.folder_name));
+    s.push_str(&format!("extensions: {}\n", exts.join(", ")));
+    s.push_str("# Add how Pegasus should start these games, for example:\n");
+    s.push_str("# launch: retroarch -L \"/path/to/core\" \"{file.path}\"\n\n");
+    for g in &ss.games {
+        s.push_str(&format!(
+            "game: {}\nfile: {}\n\n",
+            one_line(&display_title(&g.stem)),
+            one_line(&g.rel_path)
+        ));
+    }
+    std::fs::write(ss.path.join("metadata.pegasus.txt"), s)?;
+    Ok(vec![format!(
+        "{}: created metadata.pegasus.txt — add a 'launch:' line so Pegasus can start the games.",
+        ss.system_name
+    )])
+}
+
+fn one_line(s: &str) -> String {
+    s.replace(['\n', '\r'], " ")
+}
+
+// ---------------------------------------------------------------- RetroArch
+
+fn write_retroarch_playlist(
+    root: &Path,
+    sys: &System,
+    ss: &ScannedSystem,
+) -> anyhow::Result<Vec<String>> {
+    let path = join_safe(root, &["playlists", &format!("{}.lpl", sys.libretro)]);
+    if path.exists() {
+        return Ok(vec![]);
+    }
+    let items: Vec<serde_json::Value> = ss
+        .games
+        .iter()
+        .map(|g| {
+            serde_json::json!({
+                "path": g.path.to_string_lossy(),
+                "label": g.stem,
+                "core_path": "DETECT",
+                "core_name": "DETECT",
+                "crc32": "DETECT",
+                "db_name": format!("{}.lpl", sys.libretro),
+            })
+        })
+        .collect();
+    let pl = serde_json::json!({
+        "version": "1.5",
+        "default_core_path": "",
+        "default_core_name": "",
+        "label_display_mode": 0,
+        "right_thumbnail_mode": 0,
+        "left_thumbnail_mode": 0,
+        "sort_mode": 0,
+        "items": items,
+    });
+    if let Some(d) = path.parent() {
+        std::fs::create_dir_all(d)?;
+    }
+    std::fs::write(&path, serde_json::to_string_pretty(&pl)?)?;
+    Ok(vec![format!(
+        "{}: created RetroArch playlist {}.lpl",
+        ss.system_name, sys.libretro
+    )])
+}
+
+// ---------------------------------------------------------------- EmulationStation gamelist.xml
+
+#[derive(Debug, Clone)]
+struct XmlEntry {
+    tag: String,
+    attrs: Vec<(String, String)>,
+    fields: Vec<(String, String)>,
+}
+
+impl XmlEntry {
+    fn get(&self, k: &str) -> Option<&str> {
+        self.fields
+            .iter()
+            .find(|(n, _)| n == k)
+            .map(|(_, v)| v.as_str())
+    }
+    fn set(&mut self, k: &str, v: String) {
+        match self.fields.iter_mut().find(|(n, _)| n == k) {
+            Some(f) => f.1 = v,
+            None => self.fields.push((k.to_string(), v)),
+        }
+    }
+}
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+fn norm_rel(p: &str) -> String {
+    p.trim().trim_start_matches("./").replace('\\', "/")
+}
+
+fn parse_gamelist(xml: &str) -> anyhow::Result<Vec<XmlEntry>> {
+    let doc = roxmltree::Document::parse(xml)?;
+    let mut out = Vec::new();
+    for node in doc.root_element().children().filter(|n| n.is_element()) {
+        let mut e = XmlEntry {
+            tag: node.tag_name().name().to_string(),
+            attrs: node
+                .attributes()
+                .map(|a| (a.name().to_string(), a.value().to_string()))
+                .collect(),
+            fields: Vec::new(),
+        };
+        for c in node.children().filter(|c| c.is_element()) {
+            e.fields.push((
+                c.tag_name().name().to_string(),
+                c.text().unwrap_or_default().to_string(),
+            ));
+        }
+        out.push(e);
+    }
+    Ok(out)
+}
+
+fn render_gamelist(entries: &[XmlEntry]) -> String {
+    let mut s = String::from("<?xml version=\"1.0\"?>\n<gameList>\n");
+    for e in entries {
+        s.push_str(&format!("\t<{}", e.tag));
+        for (k, v) in &e.attrs {
+            s.push_str(&format!(" {}=\"{}\"", k, xml_escape(v)));
+        }
+        s.push_str(">\n");
+        for (k, v) in &e.fields {
+            s.push_str(&format!("\t\t<{k}>{}</{k}>\n", xml_escape(v)));
+        }
+        s.push_str(&format!("\t</{}>\n", e.tag));
+    }
+    s.push_str("</gameList>\n");
+    s
+}
+
+fn write_gamelist(ss: &ScannedSystem, results: &[GameArt]) -> anyhow::Result<Vec<String>> {
+    if results.iter().all(|r| r.files.is_empty()) {
+        return Ok(vec![]);
+    }
+    let path = ss.path.join("gamelist.xml");
+    let mut notes = Vec::new();
+    let mut entries = if path.exists() {
+        let text = std::fs::read_to_string(&path)?;
+        let backup = ss.path.join("gamelist.xml.bak");
+        if !backup.exists() {
+            std::fs::copy(&path, &backup)?;
+            notes.push(format!(
+                "{}: original gamelist.xml backed up to gamelist.xml.bak",
+                ss.system_name
+            ));
+        }
+        parse_gamelist(&text).map_err(|e| {
+            anyhow::anyhow!("couldn't read existing gamelist.xml ({e}); left it untouched")
+        })?
+    } else {
+        Vec::new()
+    };
+
+    for r in results {
+        if r.files.is_empty() {
+            continue;
+        }
+        let rel = norm_rel(&r.game.rel_path);
+        let idx = entries
+            .iter()
+            .position(|e| e.get("path").map(norm_rel).as_deref() == Some(rel.as_str()));
+        let idx = match idx {
+            Some(i) => i,
+            None => {
+                entries.push(XmlEntry {
+                    tag: "game".into(),
+                    attrs: vec![],
+                    fields: vec![
+                        ("path".into(), format!("./{rel}")),
+                        ("name".into(), display_title(&r.game.stem)),
+                    ],
+                });
+                entries.len() - 1
+            }
+        };
+        let e = &mut entries[idx];
+        let relp = |p: &PathBuf| -> String {
+            p.strip_prefix(&ss.path)
+                .map(|x| format!("./{}", x.to_string_lossy().replace('\\', "/")))
+                .unwrap_or_else(|_| p.to_string_lossy().to_string())
+        };
+        // Main image: mix > screenshot > 3D box > box > title.
+        if let Some(p) = [Mix, Snap, Box3d, Boxart, Title]
+            .iter()
+            .find_map(|k| r.files.get(k))
+        {
+            e.set("image", relp(p));
+        }
+        if let Some(p) = r.files.get(&Box3d).or_else(|| r.files.get(&Boxart)) {
+            e.set("thumbnail", relp(p));
+        }
+        for (k, field) in [
+            (Logo, "marquee"),
+            (Title, "titleshot"),
+            (Boxback, "boxback"),
+            (Cartridge, "cartridge"),
+            (Fanart, "fanart"),
+            (Video, "video"),
+            (Manual, "manual"),
+            (Boxart, "boxart"),
+            (Logo, "wheel"),
+        ] {
+            if let Some(p) = r.files.get(&k) {
+                e.set(field, relp(p));
+            }
+        }
+    }
+    let tmp = ss.path.join("gamelist.xml.part");
+    std::fs::write(&tmp, render_gamelist(&entries))?;
+    std::fs::rename(&tmp, &path)?;
+    notes.push(format!("{}: gamelist.xml updated", ss.system_name));
+    Ok(notes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scan::scan_system_folder;
+    use crate::systems::by_id;
+    use std::fs;
+
+    #[test]
+    fn gamelist_merge_preserves_existing() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("snes");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("Chrono Trigger (USA).sfc"), b"x").unwrap();
+        fs::write(dir.join("Other & Co (USA).sfc"), b"x").unwrap();
+        fs::write(
+            dir.join("gamelist.xml"),
+            "<?xml version=\"1.0\"?><gameList><game id=\"5\"><path>./Chrono Trigger (USA).sfc</path><name>Chrono Trigger</name><rating>0.9</rating><playcount>12</playcount></game></gameList>",
+        )
+        .unwrap();
+        let sys = by_id("snes").unwrap();
+        let ss = scan_system_folder(sys, &dir);
+        let results: Vec<GameArt> = ss
+            .games
+            .iter()
+            .map(|g| {
+                let mut files = BTreeMap::new();
+                for k in [Boxart, Mix] {
+                    files.insert(
+                        k,
+                        art_targets(
+                            LauncherKind::EmulationStation,
+                            None,
+                            sys,
+                            &ss,
+                            g,
+                            k,
+                            None,
+                            &[Boxart, Mix],
+                        )[0]
+                        .clone(),
+                    );
+                }
+                GameArt {
+                    game: g.clone(),
+                    files,
+                }
+            })
+            .collect();
+        finalize_system(LauncherKind::EmulationStation, None, sys, &ss, &results).unwrap();
+        let xml = fs::read_to_string(dir.join("gamelist.xml")).unwrap();
+        assert!(dir.join("gamelist.xml.bak").exists());
+        assert!(xml.contains("<playcount>12</playcount>"));
+        assert!(xml.contains("id=\"5\""));
+        assert!(xml.contains("<image>./images/Chrono Trigger (USA)-mix.png</image>"));
+        assert!(xml.contains("<thumbnail>./images/Chrono Trigger (USA)-thumb.png</thumbnail>"));
+        assert!(xml.contains("<name>Other &amp; Co</name>"));
+        roxmltree::Document::parse(&xml).unwrap();
+    }
+
+    #[test]
+    fn target_paths() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("psx");
+        fs::create_dir_all(dir.join("Europe")).unwrap();
+        fs::write(dir.join("Europe/Tom & Jerry - Fists (Europe).chd"), b"x").unwrap();
+        let sys = by_id("psx").unwrap();
+        let ss = scan_system_folder(sys, &dir);
+        let g = &ss.games[0];
+        let media = t.path().join("media");
+        let p = &art_targets(
+            LauncherKind::EsDe,
+            Some(&media),
+            sys,
+            &ss,
+            g,
+            Boxart,
+            None,
+            &[Boxart],
+        )[0];
+        assert!(p.starts_with(media.join("psx/covers/Europe")));
+        let p = &art_targets(
+            LauncherKind::RetroArch,
+            Some(&media),
+            sys,
+            &ss,
+            g,
+            Snap,
+            Some("Tom _ Jerry (Europe)"),
+            &[Snap],
+        );
+        assert_eq!(p.len(), 2);
+        assert!(p[0].ends_with(
+            "thumbnails/Sony - PlayStation/Named_Snaps/Tom _ Jerry - Fists (Europe).png"
+        ));
+        let p = &art_targets(
+            LauncherKind::Pegasus,
+            None,
+            sys,
+            &ss,
+            g,
+            Logo,
+            None,
+            &[Logo],
+        )[0];
+        assert!(p.ends_with("logo.png"));
+        assert!(
+            art_targets(LauncherKind::Pegasus, None, sys, &ss, g, Mix, None, &[Mix]).is_empty()
+        );
+        // 3D box takes the Pegasus boxFront slot when both are chosen.
+        assert!(art_targets(
+            LauncherKind::Pegasus,
+            None,
+            sys,
+            &ss,
+            g,
+            Boxart,
+            None,
+            &[Boxart, Box3d]
+        )
+        .is_empty());
+        assert!(art_targets(
+            LauncherKind::Pegasus,
+            None,
+            sys,
+            &ss,
+            g,
+            Box3d,
+            None,
+            &[Boxart, Box3d]
+        )[0]
+        .ends_with("boxFront.png"));
+        let v = &art_targets(
+            LauncherKind::EsDe,
+            Some(&media),
+            sys,
+            &ss,
+            g,
+            Video,
+            None,
+            &[Video],
+        )[0];
+        assert!(v.ends_with("videos/Europe/Tom & Jerry - Fists (Europe).mp4"));
+    }
+}

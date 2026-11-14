@@ -1,0 +1,15 @@
+/target
+/dist
+/node_modules
+/src-tauri/gen
+*.part
+.DS_Store
+Thumbs.db
+# Never commit game files, BIOS or firmware
+*.bin
+*.PUP
+*.pup
+*.iso
+*.chd
+*.rvz
+*.wbfs

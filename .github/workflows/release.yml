@@ -1,0 +1,168 @@
+name: Release
+
+# Two ways to release:
+#  1. Actions → Release → Run workflow → enter a version (e.g. 0.2.0). The
+#     version is bumped in every file, committed, tagged and built.
+#  2. Push a tag like v0.2.0 yourself.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "New version (e.g. 0.2.0)"
+        required: true
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.vars.outputs.tag }}
+      release_id: ${{ steps.release.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out version
+        id: vars
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ github.event.inputs.version }}"
+            V="${V#v}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          if ! [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::'$V' is not a valid version like 1.2.3"; exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version, commit and tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          V: ${{ steps.vars.outputs.version }}
+        run: |
+          sed -i -E "0,/^version = \".*\"/s//version = \"$V\"/" Cargo.toml
+          jq --arg v "$V" '.version = $v' package.json > p.tmp && mv p.tmp package.json
+          jq --arg v "$V" '.version = $v' src-tauri/tauri.conf.json > t.tmp && mv t.tmp src-tauri/tauri.conf.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml package.json src-tauri/tauri.conf.json
+          git commit -m "Release v$V" || echo "version already set"
+          git tag "v$V"
+          git push origin HEAD "v$V"
+
+      - name: Create draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          NOTES=$(awk '/^## /{n++} n==1' CHANGELOG.md | tail -n +2)
+          gh release create "$TAG" --draft --title "ShelfArt $TAG" --notes "${NOTES:-See CHANGELOG.md}" --verify-tag
+          ID=$(gh api "repos/${{ github.repository }}/releases" --jq ".[] | select(.tag_name==\"$TAG\") | .id" | head -n1)
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+  app:
+    name: App (${{ matrix.name }})
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows, os: windows-latest, args: "" }
+          - { name: macOS, os: macos-latest, args: "--target universal-apple-darwin" }
+          - { name: Linux, os: ubuntu-22.04, args: "" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf rpm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ShelfArt's own ScreenScraper developer registration (optional).
+          SS_DEVID: ${{ secrets.SS_DEVID }}
+          SS_DEVPASSWORD: ${{ secrets.SS_DEVPASSWORD }}
+        with:
+          releaseId: ${{ needs.prepare.outputs.release_id }}
+          args: ${{ matrix.args }}
+
+  cli:
+    name: CLI (${{ matrix.target }})
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, ext: ".exe" }
+          - { os: macos-latest, target: aarch64-apple-darwin, ext: "" }
+          - { os: macos-latest, target: x86_64-apple-darwin, ext: "" }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, ext: "" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        env:
+          SS_DEVID: ${{ secrets.SS_DEVID }}
+          SS_DEVPASSWORD: ${{ secrets.SS_DEVPASSWORD }}
+        run: cargo build --release -p shelfart-cli --target ${{ matrix.target }}
+      - name: Upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          OUT="shelfart-cli-${TAG}-${{ matrix.target }}${{ matrix.ext }}"
+          cp "target/${{ matrix.target }}/release/shelfart-cli${{ matrix.ext }}" "$OUT"
+          gh release upload "$TAG" "$OUT" --clobber
+
+  publish:
+    name: Publish release
+    needs: [prepare, app, cli]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add checksums and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir assets && cd assets
+          gh release download "$TAG"
+          sha256sum * > SHA256SUMS.txt
+          gh release upload "$TAG" SHA256SUMS.txt --clobber
+          gh release edit "$TAG" --draft=false --latest
