@@ -10,4 +10,7 @@
 - Smart pixel-art-aware upscaling, size presets up to 4K, optional Real-ESRGAN.
 - Verification of the official PS3 system software file (4.93).
 - `shelfart-cli` command-line tool.
+- Zipped games folders are unpacked next to the zip (with zip-slip, zip-bomb, free-space and no-overwrite protection).
+- Pegasus: Skraper-style media layout (`media/box2dfront/…`) detected and kept automatically; existing art never overwritten.
+- Identification of byte-swapped N64 ROMs, ROM-header titles as a fallback, better matching of "&" titles and short names.
 - Security review and penetration test before release (see docs/SECURITY-REVIEW.md); 51 automated tests.

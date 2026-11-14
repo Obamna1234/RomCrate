@@ -5,6 +5,7 @@
 //! through the locked-down [`net`] client → [`imaging`] validates, resizes and
 //! upscales → [`launchers`] decides where files go and updates metadata.
 
+pub mod archive;
 pub mod identify;
 pub mod imaging;
 pub mod launchers;

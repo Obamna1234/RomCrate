@@ -8,6 +8,8 @@ repository.workspace = true
 
 [dependencies]
 crc32fast = "1"
+zip = { version = "2", default-features = false, features = ["deflate", "deflate64"] }
+fs4 = { version = "0.13", features = ["sync"] }
 tempfile = "3"
 md5 = { package = "md-5", version = "0.10" }
 serde.workspace = true

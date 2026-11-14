@@ -126,6 +126,8 @@ pub fn split_title(stem: &str) -> (String, Vec<String>) {
 /// moved, roman numerals turned into digits.
 pub fn normalize_title(title: &str) -> String {
     let mut s = deunicode::deunicode(title).to_lowercase();
+    // libretro artwork names have "&" replaced by "_" ("Ren _ Stimpy").
+    s = s.replace(" _ ", " and ");
     s = s.replace('&', " and ").replace('+', " plus ");
     // "Legend of Zelda, The - A Link..." -> "Legend of Zelda - A Link..."
     for art in [", the", ", a", ", an"] {
@@ -147,6 +149,7 @@ pub fn normalize_title(title: &str) -> String {
         .split_whitespace()
         .map(|w| {
             match w {
+                "brothers" => "bros",
                 "ii" => "2",
                 "iii" => "3",
                 "iv" => "4",
@@ -325,14 +328,40 @@ impl NameIndex {
                 best = Some((sim, t));
             }
         }
-        best.map(|(sim, t)| {
+        if let Some((sim, t)) = best {
             let i = self.pick_best(&self.by_title[t], &rom_tags, prefs);
-            Match {
+            return Some(Match {
                 name: self.cands[i].name.clone(),
                 method: MatchMethod::Fuzzy,
                 confidence: (sim as f32) * 0.9,
+            });
+        }
+
+        // Short names: every word of the ROM's title appears in exactly one
+        // artwork title that has at most one extra word ("Smash Bros" →
+        // "Super Smash Bros."). Only accepted when unambiguous.
+        let words: Vec<&str> = norm.split_whitespace().collect();
+        if words.len() >= 2 {
+            let hits: Vec<&String> = self
+                .by_title
+                .keys()
+                .filter(|t| {
+                    let tw: Vec<&str> = t.split_whitespace().collect();
+                    tw.len() <= words.len() + 1
+                        && words.iter().all(|w| tw.contains(w))
+                        && digits(&norm) == digits(t)
+                })
+                .collect();
+            if hits.len() == 1 {
+                let i = self.pick_best(&self.by_title[hits[0]], &rom_tags, prefs);
+                return Some(Match {
+                    name: self.cands[i].name.clone(),
+                    method: MatchMethod::Fuzzy,
+                    confidence: 0.75,
+                });
             }
-        })
+        }
+        None
     }
 
     fn pick_best(&self, list: &[usize], rom_tags: &[String], prefs: &MatchPrefs) -> usize {
@@ -488,6 +517,51 @@ mod tests {
                 .unwrap()
                 .name,
             "Pokemon - Red Version (USA, Europe)"
+        );
+    }
+
+    #[test]
+    fn short_names_match_when_unambiguous() {
+        let p = MatchPrefs::default();
+        let i = NameIndex::new(
+            [
+                "Super Smash Bros. (USA)",
+                "Mario Kart 64 (USA)",
+                "Super Mario Kart (USA)",
+                "Mario Tennis (USA)",
+            ]
+            .into_iter()
+            .map(String::from),
+        );
+        assert_eq!(
+            i.best_match("Smash Brothers", &p).unwrap().name,
+            "Super Smash Bros. (USA)"
+        );
+        // "Mario Kart" alone must not pick the N64 game (digits differ) — the SNES one is unambiguous.
+        assert_eq!(
+            i.best_match("Mario Kart", &p).unwrap().name,
+            "Super Mario Kart (USA)"
+        );
+        // Single words are never guessed.
+        assert!(i.best_match("Mario", &p).is_none());
+    }
+
+    #[test]
+    fn ampersands_match_libretro_underscores() {
+        let p = MatchPrefs::default();
+        let i = NameIndex::new([
+            "Itchy _ Scratchy Game, The (USA)".to_string(),
+            "Ren _ Stimpy Show, The - Veediots! (USA)".to_string(),
+        ]);
+        assert_eq!(
+            i.best_match("Itchy & Scratchy", &p).unwrap().name,
+            "Itchy _ Scratchy Game, The (USA)"
+        );
+        assert_eq!(
+            i.best_match("Ren and Stimpy Show, The - Veediots!", &p)
+                .unwrap()
+                .name,
+            "Ren _ Stimpy Show, The - Veediots! (USA)"
         );
     }
 

@@ -298,6 +298,39 @@ fn pegasus_layout() {
 }
 
 #[test]
+fn pegasus_follows_existing_skraper_layout() {
+    let fx = fixture();
+    // The user already scraped box art with Skraper.
+    let existing = fx.root.join("snes/media/box2dfront");
+    fs::create_dir_all(&existing).unwrap();
+    fs::write(existing.join("game1.png"), png(10, 10, [1, 2, 3, 255])).unwrap();
+    let run = scrape(
+        &fx,
+        cfg(
+            LauncherKind::Pegasus,
+            None,
+            &[
+                ArtKind::Boxart,
+                ArtKind::Box3d,
+                ArtKind::Snap,
+                ArtKind::Title,
+                ArtKind::Logo,
+            ],
+        ),
+    );
+    check_matches(&run);
+    let m = fx.root.join("snes/media");
+    // Existing Skraper art is left alone; the rest is added in Skraper's folders.
+    assert_eq!(image::open(existing.join("game1.png")).unwrap().width(), 10);
+    for d in ["box3d", "screenshot", "screenshottitle", "wheel"] {
+        assert_png(&m.join(d).join("game1.png"));
+    }
+    assert!(!m.join("game1").exists(), "no per-game folders mixed in");
+    // A system without Skraper folders keeps Pegasus' per-game layout.
+    assert_png(&fx.root.join("psx/media/my backup/screenshot.png"));
+}
+
+#[test]
 fn pegasus_3d_box_takes_box_front() {
     let fx = fixture();
     scrape(

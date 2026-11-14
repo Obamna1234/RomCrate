@@ -20,7 +20,7 @@ USAGE:
   shelfart-cli launchers
 
 SCRAPE OPTIONS:
-  --roms <dir>          ROM folder (repeatable). Either a folder of system folders or one system folder.
+  --roms <dir|zip>      ROM folder or .zip of one (repeatable). A zip is unpacked next to itself first.
   --launcher <name>     pegasus | es-de | emulation-station | retro-arch | launch-box | folder
   --folder <dir>        Media / RetroArch / LaunchBox / output folder (when the launcher needs one)
   --kinds <list>        Comma list: boxart,box3d,boxback,cartridge,snap,title,logo,fanart,mix,video,manual
@@ -33,6 +33,7 @@ SCRAPE OPTIONS:
   --no-hash             Match by file name only
   --no-extras           Don't use ScreenScraper guest mode
   --no-metadata         Don't touch gamelist.xml / Pegasus metadata / playlists
+  --pegasus-layout <l>  auto | per-game | skraper   (default auto: match what's already there)
   --threads <n>         Parallel games, 1-8 (default 4)
 ";
 
@@ -42,6 +43,7 @@ fn main() -> anyhow::Result<()> {
     match args.first().map(String::as_str) {
         Some("scan") => {
             let roots: Vec<PathBuf> = args[1..].iter().map(PathBuf::from).collect();
+            let roots = unzip_roots(&roots);
             let lib = scan::scan_roots(&roots);
             for s in &lib.systems {
                 println!(
@@ -74,6 +76,23 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
     }
+}
+
+/// Unpack any .zip roots (next to the zip) and return folders to scan.
+fn unzip_roots(roots: &[PathBuf]) -> Vec<PathBuf> {
+    let last = std::sync::Mutex::new(0u64);
+    let (out, errors) = shelfart_core::archive::prepare_roots(roots, &|p| {
+        let pct = p.done_bytes * 100 / p.total_bytes.max(1);
+        let mut l = last.lock().unwrap();
+        if pct >= *l + 10 || pct == 100 {
+            *l = pct;
+            eprintln!("unzipping {}: {pct}%", p.zip.display());
+        }
+    });
+    for e in errors {
+        eprintln!("couldn't unzip {e}");
+    }
+    out
 }
 
 async fn scrape(args: &[String]) -> anyhow::Result<()> {
@@ -124,6 +143,10 @@ async fn scrape(args: &[String]) -> anyhow::Result<()> {
             "--no-hash" => cfg.identify_by_contents = false,
             "--no-extras" => cfg.use_screenscraper = false,
             "--no-metadata" => cfg.write_metadata = false,
+            "--pegasus-layout" => {
+                cfg.pegasus_layout = serde_json::from_str(&format!("\"{}\"", val()?))
+                    .context("use auto, per-game or skraper")?
+            }
             "--threads" => cfg.concurrency = val()?.parse()?,
             other => bail!("unknown option {other}\n\n{HELP}"),
         }
@@ -137,6 +160,7 @@ async fn scrape(args: &[String]) -> anyhow::Result<()> {
     {
         bail!("this launcher needs --folder");
     }
+    let roots = unzip_roots(&roots);
     let lib = scan::scan_roots(&roots);
     if lib.systems.is_empty() {
         bail!("no systems found — make sure your ROMs are in folders named after the system (snes, psx, gba…)");

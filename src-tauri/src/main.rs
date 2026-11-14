@@ -76,8 +76,29 @@ fn get_catalog() -> Catalog {
 }
 
 #[tauri::command]
-async fn scan_library(roots: Vec<String>, state: State<'_, AppState>) -> Result<Library, String> {
+async fn scan_library(
+    app: AppHandle,
+    roots: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Library, String> {
     let roots: Vec<PathBuf> = roots.into_iter().map(PathBuf::from).collect();
+    // Zipped folders are unpacked next to the zip first.
+    let app2 = app.clone();
+    let (roots, errors) = tokio::task::spawn_blocking(move || {
+        let last = std::sync::Mutex::new(std::time::Instant::now());
+        shelfart_core::archive::prepare_roots(&roots, &|p| {
+            let mut l = last.lock().unwrap();
+            if l.elapsed().as_millis() > 150 || p.done_bytes == p.total_bytes {
+                *l = std::time::Instant::now();
+                let _ = app2.emit("unzip-progress", &p);
+            }
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    for e in errors {
+        let _ = app.emit("scan-note", format!("Couldn't unzip {e}"));
+    }
     state.openable.lock().unwrap().extend(roots.iter().cloned());
     let lib = tokio::task::spawn_blocking(move || scan::scan_roots(&roots))
         .await

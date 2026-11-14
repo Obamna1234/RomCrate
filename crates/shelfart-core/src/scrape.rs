@@ -54,6 +54,8 @@ pub struct ScrapeConfig {
     pub ss_user: Option<(String, String)>,
     /// Render 3D boxes locally when no 3D box is available online.
     pub render_3d_fallback: bool,
+    /// Pegasus only: which media folder layout to write.
+    pub pegasus_layout: launchers::PegasusLayout,
 }
 
 impl Default for ScrapeConfig {
@@ -74,6 +76,7 @@ impl Default for ScrapeConfig {
             use_screenscraper: true,
             ss_user: None,
             render_3d_fallback: true,
+            pegasus_layout: launchers::PegasusLayout::Auto,
         }
     }
 }
@@ -304,7 +307,9 @@ pub async fn run(
             );
         }
 
+        let launcher = launchers::effective_launcher(cfg.launcher, cfg.pegasus_layout, &ss);
         let ctx = Arc::new(Ctx {
+            launcher,
             sys,
             ss: ss.clone(),
             art,
@@ -350,7 +355,7 @@ pub async fn run(
             }
         }
         if cfg.write_metadata {
-            match launchers::finalize_system(cfg.launcher, cfg.folder.as_deref(), sys, &ss, &arts) {
+            match launchers::finalize_system(launcher, cfg.folder.as_deref(), sys, &ss, &arts) {
                 Ok(notes) => notes.into_iter().for_each(|n| log(&emit, "info", n)),
                 Err(e) => log(&emit, "warn", format!("{}: {e}", ss.system_name)),
             }
@@ -367,6 +372,8 @@ pub async fn run(
 }
 
 struct Ctx {
+    /// Launcher layout for this system (Pegasus may resolve to the Skraper layout).
+    launcher: LauncherKind,
     sys: &'static System,
     ss: ScannedSystem,
     art: Arc<SystemArt>,
@@ -434,7 +441,18 @@ impl Ctx {
                         (MatchMethod::Title, _) => "title".into(),
                         (MatchMethod::Fuzzy, _) => "fuzzy".into(),
                     });
-                (m.map(|m| m.name), method)
+                match m {
+                    Some(m) => (Some(m.name), method),
+                    // Last resort: the title stored inside the ROM itself.
+                    None => match fp
+                        .internal_title
+                        .as_deref()
+                        .and_then(|t| self.art.all.best_match(t, &cfg.prefs))
+                    {
+                        Some(m) => (Some(m.name), Some("header".to_string())),
+                        None => (None, None),
+                    },
+                }
             }
         };
 
@@ -446,7 +464,7 @@ impl Ctx {
                 continue;
             }
             let targets = art_targets(
-                cfg.launcher,
+                self.launcher,
                 cfg.folder.as_deref(),
                 self.sys,
                 ss,

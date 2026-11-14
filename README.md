@@ -36,12 +36,15 @@ ShelfArt is a free, open-source alternative to account-based scrapers. Point it 
 ## Features
 
 - **Recognises games by their contents.** Cartridge games are matched by checksum against No-Intro; disc games (PS1, PS2, PSP, GameCube, Wii) by the serial number read from inside the image (Redump). `my crash backup.iso` still becomes *Crash Bandicoot (USA)*.
+- **Zipped folders welcome.** Pick a `.zip` of your games folder and ShelfArt unzips it next to the zip (safely — no zip-slip, zip-bomb or overwrite) and carries on.
+- **Works with what you already have.** If a system already uses Skraper's Pegasus layout (`media/box2dfront/…`), ShelfArt adds to it and never overwrites your existing art.
+- **Finds odd dumps too:** copier-headered SNES ROMs, byte-swapped N64 ROMs (`.v64`/`.n64`), and the title stored inside SNES, N64, GBA, Game Boy and Mega Drive headers as a last resort.
 - **Every common art type:** box art, 3D boxes, back covers, cartridges/discs, screenshots, title screens, wheels/logos, fan art, mix images, video snaps and PDF manuals.
 - **Made for your launcher:**
 
   | Launcher | Where art goes |
   |---|---|
-  | Pegasus | `<system>/media/<game>/boxFront.png`, `screenshot.png`, `logo.png`, `video.mp4`… |
+  | Pegasus | Skraper style `<system>/media/box2dfront/<game>.png`, `wheel/`, `screenshot/`… or per-game `<system>/media/<game>/boxFront.png` — matches what you already use |
   | ES-DE | `downloaded_media/<system>/covers`, `3dboxes`, `screenshots`, `marquees`, `miximages`, `videos`, `manuals`… |
   | EmulationStation (Batocera, RetroPie, Recalbox, Knulli, ArkOS) | `<system>/images` + `gamelist.xml` (original backed up) |
   | RetroArch | `thumbnails/<system>/Named_Boxarts`, `Named_Snaps`, `Named_Titles`, `Named_Logos` (+ playlists) |

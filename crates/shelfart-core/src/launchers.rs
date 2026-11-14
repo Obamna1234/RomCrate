@@ -14,11 +14,65 @@ use std::path::{Path, PathBuf};
 #[serde(rename_all = "kebab-case")]
 pub enum LauncherKind {
     Pegasus,
+    /// Pegasus reading Skraper-style folders (`media/box2dfront/<game>.png`).
+    /// Chosen automatically or via [`PegasusLayout`]; not listed separately in the UI.
+    PegasusSkraper,
     EsDe,
     EmulationStation,
     RetroArch,
     LaunchBox,
     Folder,
+}
+
+/// How Pegasus media is laid out on disk. Pegasus reads both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum PegasusLayout {
+    /// Use the Skraper layout if the system folder already has one, otherwise per-game folders.
+    #[default]
+    Auto,
+    /// `media/<game>/boxFront.png` (Pegasus' own layout).
+    PerGame,
+    /// `media/box2dfront/<game>.png` (what Skraper writes; needs "Skraper Assets" enabled in Pegasus, on by default).
+    Skraper,
+}
+
+/// Skraper folder names Pegasus understands, by art type.
+const SKRAPER_DIRS: &[&str] = &[
+    "box2dfront",
+    "box2dback",
+    "box3d",
+    "support",
+    "screenshot",
+    "screenshottitle",
+    "wheel",
+    "fanart",
+    "videos",
+];
+
+/// Resolve the layout to use for one system folder.
+pub fn effective_launcher(
+    launcher: LauncherKind,
+    layout: PegasusLayout,
+    ss: &ScannedSystem,
+) -> LauncherKind {
+    if launcher != LauncherKind::Pegasus {
+        return launcher;
+    }
+    let skraper = match layout {
+        PegasusLayout::PerGame => false,
+        PegasusLayout::Skraper => true,
+        PegasusLayout::Auto => ["media", "skraper", ".media"].iter().any(|m| {
+            SKRAPER_DIRS
+                .iter()
+                .any(|d| ss.path.join(m).join(d).is_dir())
+        }),
+    };
+    if skraper {
+        LauncherKind::PegasusSkraper
+    } else {
+        LauncherKind::Pegasus
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -64,7 +118,7 @@ pub fn launchers() -> Vec<LauncherInfo> {
                 ThemeProfile { id: "pegasus-grid", name: "Cover grid themes", description: "Shelves or grids of 2D box covers.", kinds: vec![Boxart, Logo] },
                 ThemeProfile { id: "pegasus-all", name: "Everything", description: "Every type Pegasus can show.", kinds: vec![Boxart, Boxback, Cartridge, Snap, Title, Logo, Fanart, Video] },
             ],
-            where_note: "<system>/media/<game>/boxFront, boxBack, cartridge, screenshot, titlescreen, logo, background, video. A 3D box is saved as boxFront.",
+            where_note: "Matches your existing layout: Skraper-style <system>/media/box2dfront/<game>.png if you already use it, otherwise <system>/media/<game>/boxFront.png. Both work in Pegasus.",
         },
         LauncherInfo {
             id: LauncherKind::EsDe,
@@ -214,6 +268,26 @@ pub fn art_targets(
                 &["media", stem, &format!("{asset}.{ext}")],
             )]
         }
+        LauncherKind::PegasusSkraper => {
+            // Pegasus' Skraper support: box2dfront wins over box3d for the cover,
+            // so each type gets its own folder and nothing collides.
+            let dir = match kind {
+                Boxart => "box2dfront",
+                Box3d => "box3d",
+                Boxback => "box2dback",
+                Cartridge => "support",
+                Snap => "screenshot",
+                Title => "screenshottitle",
+                Logo => "wheel",
+                Fanart => "fanart",
+                Video => "videos",
+                Mix | Manual => return vec![],
+            };
+            vec![join_safe(
+                &ss.path,
+                &["media", dir, &rel_dir(game), &format!("{stem}.{ext}")],
+            )]
+        }
         LauncherKind::EsDe => {
             let Some(root) = folder else { return vec![] };
             let dir = match kind {
@@ -339,7 +413,7 @@ pub fn finalize_system(
 ) -> anyhow::Result<Vec<String>> {
     match launcher {
         LauncherKind::EmulationStation => write_gamelist(ss, results),
-        LauncherKind::Pegasus => write_pegasus_metadata(sys, ss),
+        LauncherKind::Pegasus | LauncherKind::PegasusSkraper => write_pegasus_metadata(sys, ss),
         LauncherKind::RetroArch => match folder {
             Some(f) => write_retroarch_playlist(f, sys, ss),
             None => Ok(vec![]),

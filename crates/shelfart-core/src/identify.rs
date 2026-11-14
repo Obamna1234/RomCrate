@@ -213,6 +213,8 @@ pub struct Fingerprint {
     pub crc_headerless: Option<u32>,
     pub serial: Option<String>,
     pub size: Option<u64>,
+    /// Game title stored inside the ROM header (SNES, N64, GBA, GB, Mega Drive).
+    pub internal_title: Option<String>,
 }
 
 /// Read a fingerprint from a game file (blocking; run on a worker thread).
@@ -240,8 +242,9 @@ pub fn fingerprint(sys: &System, game: &Game) -> Fingerprint {
         "zip" => fp.crc = zip_first_crc(path),
         "7z" => {}
         _ if size <= MAX_HASH_BYTES => {
-            // Stream the file (no whole-file buffering) and hash it both with
-            // and without a copier/iNES header in one pass.
+            // Stream the file (no whole-file buffering). One pass computes the
+            // CRC of the file as-is and of its "canonical" form: without a
+            // copier/iNES header, or (N64) converted to big-endian .z64 order.
             if let Ok(mut f) = File::open(path) {
                 let mut head = [0u8; 16];
                 let n = f.read(&mut head).unwrap_or(0);
@@ -251,23 +254,34 @@ pub fn fingerprint(sys: &System, game: &Game) -> Fingerprint {
                     "fds" if head.starts_with(b"FDS\x1a") => 16,
                     "a78" if head.len() >= 10 && &head[1..10] == b"ATARI7800" => 128,
                     "lnx" if head.starts_with(b"LYNX") => 64,
-                    "sfc" | "smc" if size % 1024 == 512 => 512,
+                    "sfc" | "smc" | "fig" | "swc" if size % 1024 == 512 => 512,
                     _ => 0,
+                };
+                let order = if sys.id == "n64" || sys.id == "n64dd" {
+                    N64Order::detect(head)
+                } else {
+                    N64Order::Z64
                 };
                 if f.seek(SeekFrom::Start(0)).is_ok() {
                     let mut full = crc32fast::Hasher::new();
-                    let mut body = crc32fast::Hasher::new();
+                    let mut canon = crc32fast::Hasher::new();
                     let mut pos: u64 = 0;
                     let mut buf = vec![0u8; 1 << 20];
+                    let mut first: Vec<u8> = Vec::new();
                     let mut ok = true;
                     loop {
-                        match f.read(&mut buf) {
+                        match read_full(&mut f, &mut buf) {
                             Ok(0) => break,
                             Ok(n) => {
-                                let chunk = &buf[..n];
+                                let chunk = &mut buf[..n];
                                 full.update(chunk);
+                                order.to_z64(chunk);
                                 let skip = header.saturating_sub(pos).min(n as u64) as usize;
-                                body.update(&chunk[skip..]);
+                                canon.update(&chunk[skip..]);
+                                if first.len() < 0x10000 + 512 {
+                                    let want = (0x10000 + 512 - first.len()).min(n);
+                                    first.extend_from_slice(&chunk[..want]);
+                                }
                                 pos += n as u64;
                             }
                             Err(_) => {
@@ -278,9 +292,11 @@ pub fn fingerprint(sys: &System, game: &Game) -> Fingerprint {
                     }
                     if ok {
                         fp.crc = Some(full.finalize());
-                        if header > 0 && size > header {
-                            fp.crc_headerless = Some(body.finalize());
+                        if (header > 0 && size > header) || order != N64Order::Z64 {
+                            fp.crc_headerless = Some(canon.finalize());
                         }
+                        let body = first.get(header as usize..).unwrap_or(&[]);
+                        fp.internal_title = internal_title(sys.id, body);
                     }
                 }
             }
@@ -288,6 +304,102 @@ pub fn fingerprint(sys: &System, game: &Game) -> Fingerprint {
         _ => {}
     }
     fp
+}
+
+/// N64 ROMs come in three byte orders; No-Intro checksums use big-endian (.z64).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum N64Order {
+    Z64,
+    V64,
+    N64,
+}
+
+impl N64Order {
+    fn detect(head: &[u8]) -> Self {
+        match head.get(..4) {
+            Some([0x37, 0x80, 0x40, 0x12]) => N64Order::V64,
+            Some([0x40, 0x12, 0x37, 0x80]) => N64Order::N64,
+            _ => N64Order::Z64,
+        }
+    }
+
+    fn to_z64(self, chunk: &mut [u8]) {
+        match self {
+            N64Order::Z64 => {}
+            N64Order::V64 => chunk.chunks_exact_mut(2).for_each(|c| c.swap(0, 1)),
+            N64Order::N64 => chunk.chunks_exact_mut(4).for_each(|c| c.reverse()),
+        }
+    }
+}
+
+/// Fill `buf` as far as possible (so N64 byte swapping never splits a word).
+fn read_full(f: &mut File, buf: &mut [u8]) -> std::io::Result<usize> {
+    let mut n = 0;
+    while n < buf.len() {
+        match f.read(&mut buf[n..]) {
+            Ok(0) => break,
+            Ok(k) => n += k,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(n)
+}
+
+/// Read the game title stored in a cartridge header (data already header-stripped
+/// and, for N64, in .z64 order).
+pub fn internal_title(sys_id: &str, rom: &[u8]) -> Option<String> {
+    let field = |off: usize, len: usize| rom.get(off..off + len);
+    let raw: &[u8] = match sys_id {
+        "snes" | "satellaview" => {
+            // LoROM or HiROM header: pick the one whose checksum + complement add up.
+            let valid = |base: usize| {
+                rom.get(base + 0x1C..base + 0x20)
+                    .map(|c| {
+                        (u16::from_le_bytes([c[0], c[1]]) ^ u16::from_le_bytes([c[2], c[3]]))
+                            == 0xFFFF
+                    })
+                    .unwrap_or(false)
+            };
+            let printable = |base: usize| {
+                field(base, 21)
+                    .map(|t| t.iter().filter(|b| b.is_ascii_alphanumeric()).count())
+                    .unwrap_or(0)
+            };
+            let base = if valid(0xFFC0) && !valid(0x7FC0) {
+                0xFFC0
+            } else if valid(0x7FC0) || printable(0x7FC0) >= printable(0xFFC0) {
+                0x7FC0
+            } else {
+                0xFFC0
+            };
+            field(base, 21)?
+        }
+        "n64" | "n64dd" => field(0x20, 20)?,
+        "gba" => field(0xA0, 12)?,
+        "gb" | "gbc" => field(0x134, 15)?,
+        "megadrive" | "sega32x" => {
+            let overseas = field(0x150, 48)?;
+            if overseas.iter().any(|b| b.is_ascii_alphabetic()) {
+                overseas
+            } else {
+                field(0x120, 48)?
+            }
+        }
+        _ => return None,
+    };
+    let text: String = raw
+        .iter()
+        .map(|&b| {
+            if (0x20..0x7F).contains(&b) {
+                b as char
+            } else {
+                ' '
+            }
+        })
+        .collect();
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    (text.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 3).then_some(text)
 }
 
 /// Look a fingerprint up in the database.
@@ -512,6 +624,50 @@ game (
         let fp = fingerprint(sys, &ss.games[0]);
         assert_eq!(fp.crc, Some(crc32fast::hash(&rom)));
         assert_eq!(fp.crc_headerless, Some(crc32fast::hash(&body)));
+    }
+
+    #[test]
+    fn n64_byte_orders_hash_the_same() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("n64");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut z64: Vec<u8> = vec![0x80, 0x37, 0x12, 0x40];
+        z64.extend((4..2_100_000u32).map(|i| (i * 7 % 253) as u8));
+        z64.truncate(2_100_000);
+        z64[0x20..0x34].copy_from_slice(b"MARIOKART64         ");
+        let v64: Vec<u8> = z64.chunks(2).flat_map(|c| [c[1], c[0]]).collect();
+        let n64: Vec<u8> = z64
+            .chunks(4)
+            .flat_map(|c| [c[3], c[2], c[1], c[0]])
+            .collect();
+        let want = crc32fast::hash(&z64);
+        let sys = crate::systems::by_id("n64").unwrap();
+        for (name, data) in [("a.z64", &z64), ("b.v64", &v64), ("c.n64", &n64)] {
+            std::fs::write(dir.join(name), data).unwrap();
+        }
+        let ss = crate::scan::scan_system_folder(sys, &dir);
+        for g in &ss.games {
+            let fp = fingerprint(sys, g);
+            assert_eq!(fp.crc_headerless.or(fp.crc), Some(want), "{}", g.file_name);
+            assert_eq!(
+                fp.internal_title.as_deref(),
+                Some("MARIOKART64"),
+                "{}",
+                g.file_name
+            );
+        }
+    }
+
+    #[test]
+    fn snes_internal_title() {
+        let mut rom = vec![0u8; 0x8000];
+        rom[0x7FC0..0x7FD5].copy_from_slice(b"ITCHY&SCRATCHY       ");
+        rom[0x7FDC..0x7FE0].copy_from_slice(&[0x34, 0x12, 0xCB, 0xED]);
+        assert_eq!(
+            internal_title("snes", &rom).as_deref(),
+            Some("ITCHY&SCRATCHY")
+        );
+        assert_eq!(internal_title("snes", &[0u8; 10]), None);
     }
 
     #[test]

@@ -14,7 +14,7 @@ hardening can't break working features.
 3. **Attacked it** with 9 hostile-input test groups (below).
 4. **Reviewed** the network client, file handling, parsers, desktop-app
    permissions and the GitHub build pipeline.
-5. **Fixed findings one at a time**, re-running all 51 tests after each, then a
+5. **Fixed findings one at a time**, re-running the full test suite after each, then a
    live scrape, a release build and a scripted walk through the app.
 
 ## Penetration tests (all pass)
@@ -58,6 +58,18 @@ hardening can't break working features.
 
 - **Rust (`cargo audit`, 521 crates): 0 vulnerabilities.** 5 informational warnings, all inside Tauri's Linux GTK/D-Bus stack (`glib` 0.18, `zbus`/`zvariant`, `proc-macro-error`): marked unmaintained, or an unsound `glib` iterator ShelfArt never calls. They'll clear when Tauri updates its Linux dependencies; Dependabot is set up to pick that up.
 - **npm (`npm audit`): 0 vulnerabilities.**
+
+## Added after the review: zipped folders
+
+Unzipping untrusted archives is a classic attack surface, so it shipped with its own tests:
+
+| Attack | Result |
+|---|---|
+| Zip slip (`../escaped.txt`, `/abs.txt`) | Entries outside the target folder are skipped |
+| Zip bomb (64 MB of zeros, >1000:1) | Refused while streaming; partial file removed |
+| Zip that would overwrite an existing file | Refused; the user's file is untouched |
+| Fake `.zip` that isn't a zip | Reported, nothing written |
+| Not enough disk space | Checked before anything is written |
 
 ## Not covered yet
 

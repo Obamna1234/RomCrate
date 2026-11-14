@@ -50,12 +50,13 @@ interface Prefs {
   extras: boolean;
   render3d: boolean;
   threads: number;
+  pegasusLayout: "auto" | "per-game" | "skraper";
 }
 
 const DEFAULT_PREFS: Prefs = {
   roots: [], deselected: [], launcher: "pegasus", theme: {}, folders: {}, kinds: {},
   size: "standard", upscale: "smart", aiBinary: "", regions: ["usa", "world", "europe", "australia", "uk", "japan"],
-  identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4,
+  identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto",
 };
 
 function loadPrefs(): Prefs {
@@ -73,6 +74,8 @@ let catalog!: Catalog;
 let prefs = loadPrefs();
 let library: Library = { systems: [] };
 let scanning = false;
+let unzip: { name: string; pct: number } | null = null;
+const scanNotes: string[] = [];
 let view: "library" | "launcher" | "artwork" | "scrape" | "settings" = "library";
 // Session-only ScreenScraper login — never stored.
 let ssUser = "";
@@ -192,7 +195,17 @@ async function addRoots() {
   await rescan();
 }
 
+async function addZip() {
+  const picked = await open({ multiple: true, title: "Choose a zipped games folder", filters: [{ name: "Zip archive", extensions: ["zip"] }] });
+  if (!picked) return;
+  const list = Array.isArray(picked) ? picked : [picked];
+  for (const p of list) if (!prefs.roots.includes(p)) prefs.roots.push(p);
+  savePrefs();
+  await rescan();
+}
+
 async function rescan() {
+  scanNotes.length = 0;
   scanning = true;
   render();
   try {
@@ -201,6 +214,7 @@ async function rescan() {
     toast(`Scan failed: ${e}`);
   }
   scanning = false;
+  unzip = null;
   render();
 }
 
@@ -213,19 +227,27 @@ function viewLibrary(): Node[] {
     h("p", { class: "lead" }, "Point ShelfArt at the folder that holds your games. It recognises system folders like snes, psx, gba or megadrive automatically, and identifies each game by its contents — even badly named files."),
     h("div", { class: "row" },
       h("button", { class: "btn primary", onclick: addRoots }, "+ Add ROM folder"),
+      h("button", { class: "btn", onclick: addZip, title: "A .zip of your games folder — ShelfArt unzips it next to the zip first" }, "+ Add zipped folder"),
       prefs.roots.length ? h("button", { class: "btn", onclick: rescan, disabled: scanning }, scanning ? "Scanning…" : "Rescan") : null),
   ];
   if (prefs.roots.length) {
     out.push(h("div", { class: "chips", style: "margin-top:14px" },
-      prefs.roots.map((r) => h("span", { class: "chip", title: r }, h("span", { class: "path" }, r),
+      prefs.roots.map((r) => h("span", { class: "chip", title: r }, h("span", { class: "path" }, `\u200E${r}\u200E`),
         h("button", { class: "x", title: "Remove", onclick: async () => { prefs.roots = prefs.roots.filter((x) => x !== r); savePrefs(); await rescan(); } }, "×")))));
   }
 
+  if (unzip) {
+    out.push(h("div", { class: "card", style: "margin-top:16px" },
+      h("div", { style: "font-weight:600;margin-bottom:8px" }, `Unzipping ${unzip.name}…`),
+      h("div", { class: "progress" }, h("div", { style: `width:${unzip.pct}%` })),
+      h("div", { class: "desc" }, "The zip is unpacked into a folder next to it. The zip itself isn't changed.")));
+  }
+  for (const n of scanNotes) out.push(h("div", { class: "banner warn", style: "margin-top:12px" }, n));
   if (!prefs.roots.length) {
     out.push(h("div", { class: "empty", style: "margin-top:24px" },
       h("div", { class: "big-icon" }, "🗂️"),
       h("div", { style: "font-weight:600;color:var(--text);margin-bottom:6px" }, "No folders yet"),
-      h("div", {}, "Add the folder that contains your system folders (for example ROMs/, Emulation/roms/ or a USB drive).")));
+      h("div", {}, "Add the folder that contains your system folders (for example ROMs/, Emulation/roms/ or a USB drive) — or a .zip of it.")));
   } else if (!library.systems.length && !scanning) {
     out.push(h("div", { class: "banner warn", style: "margin-top:18px" },
       h("div", {}, "No systems recognised in these folders. Name each system's folder after the console (snes, psx, gba…), or assign a folder manually below.")));
@@ -315,6 +337,16 @@ function viewLauncher(): Node[] {
           h("button", { class: "btn", onclick: async () => { const p = await open({ directory: true, title: l.folder_label }); if (p && !Array.isArray(p)) { prefs.folders[l.id] = p; savePrefs(); render(); } } }, "Browse…")),
         h("div", { class: "hint", style: "color:var(--faint);font-size:12.5px;margin-top:8px" }, l.folder_hint)),
     );
+  }
+  if (l.id === "pegasus") {
+    out.push(
+      h("h2", {}, "Media folder layout"),
+      seg([["auto", "Match what's there"], ["skraper", "Skraper style"], ["per-game", "Folder per game"]], prefs.pegasusLayout, (v) => { prefs.pegasusLayout = v; savePrefs(); render(); }),
+      h("div", { class: "desc" }, {
+        auto: "If a system already has Skraper folders (media/box2dfront…), ShelfArt adds to them; otherwise it uses a folder per game.",
+        skraper: "media/box2dfront/<game>.png, media/wheel/… — the layout Skraper makes. Needs “Skraper Assets” enabled in Pegasus (on by default).",
+        "per-game": "media/<game>/boxFront.png — Pegasus' own layout.",
+      }[prefs.pegasusLayout]));
   }
   out.push(h("div", { class: "note" }, `→ ${l.where_note}`));
   out.push(footer("library", "artwork", "Continue", !folderReady()));
@@ -425,6 +457,7 @@ async function startScrape() {
     identify_by_contents: prefs.identify,
     use_screenscraper: prefs.extras && catalog.screenscraperAvailable,
     render_3d_fallback: prefs.render3d,
+    pegasus_layout: prefs.pegasusLayout,
   };
   Object.assign(run, { running: true, total: selectedGames(), processed: 0, results: [], log: [], summary: null, filter: "all", currentSystem: "" });
   render();
@@ -592,6 +625,12 @@ async function boot() {
   document.getElementById("nav-settings")!.addEventListener("click", () => go("settings"));
   if (!catalog.launchers.some((l) => l.id === prefs.launcher)) prefs.launcher = "pegasus";
   await listen("scrape-event", (ev) => handleEvent(ev.payload));
+  await listen<{ zip: string; doneBytes: number; totalBytes: number }>("unzip-progress", (ev) => {
+    const p = ev.payload;
+    unzip = { name: p.zip.split(/[\\/]/).pop() ?? "zip", pct: Math.round((p.doneBytes / Math.max(1, p.totalBytes)) * 100) };
+    if (view === "library") render();
+  });
+  await listen<string>("scan-note", (ev) => { scanNotes.push(ev.payload); if (view === "library") render(); });
   render();
   if (prefs.roots.length) await rescan();
 }
