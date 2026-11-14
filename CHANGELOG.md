@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.1.1 — first full release
+## 0.1.2 — first full release
 
-- Windows, macOS and Linux installers are attached to the release (0.1.0 only had the command-line tools because of a release-script bug).
+- Windows, macOS and Linux installers are attached to the release (0.1.0 only had the command-line tools, and the 0.1.1 build was stopped, because of a release-script bug).
 - Everything listed under 0.1.0 below.
 
 ## 0.1.0 — first release
