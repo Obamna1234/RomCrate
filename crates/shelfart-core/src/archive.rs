@@ -235,8 +235,10 @@ pub fn human(b: u64) -> String {
     let gb = b as f64 / 1_073_741_824.0;
     if gb >= 1.0 {
         format!("{gb:.1} GB")
-    } else {
+    } else if b >= 1_048_576 {
         format!("{:.0} MB", b as f64 / 1_048_576.0)
+    } else {
+        format!("{} KB", b.div_ceil(1024))
     }
 }
 

@@ -4,6 +4,7 @@
 use base64::Engine;
 use serde::Serialize;
 use shelfart_core::identify::Identifier;
+use shelfart_core::import::{self, ImportOptions, ImportPlan, Mode};
 use shelfart_core::launchers::{self, LauncherInfo, LauncherKind};
 use shelfart_core::net::SafeClient;
 use shelfart_core::scan::{self, Library};
@@ -11,6 +12,7 @@ use shelfart_core::screenscraper::{self, ScreenScraper};
 use shelfart_core::source::default_cache_dir;
 use shelfart_core::systems::{self, System};
 use shelfart_core::{ArtKind, Event, Libretro, ScrapeConfig, Sources};
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,6 +28,9 @@ struct AppState {
     previewable: Arc<Mutex<HashSet<PathBuf>>>,
     /// Folders the user chose this session; only these can be opened in the file manager.
     openable: Mutex<HashSet<PathBuf>>,
+    /// The last import preview. Importing only ever acts on this plan, so the
+    /// interface can't ask for arbitrary files to be copied or moved.
+    import_plan: Mutex<Option<ImportPlan>>,
 }
 
 #[derive(Serialize)]
@@ -206,6 +211,101 @@ async fn start_scrape(
     Ok(())
 }
 
+/// Look at a messy folder (or .zip) and work out where every game should go.
+/// Reads only; nothing is copied or moved.
+#[tauri::command]
+async fn plan_import(
+    app: AppHandle,
+    sources: Vec<String>,
+    dest: String,
+    mode: Mode,
+    rename: bool,
+    state: State<'_, AppState>,
+) -> Result<ImportPlan, String> {
+    let dest = PathBuf::from(dest);
+    if dest.as_os_str().is_empty() {
+        return Err("Choose your ROMs folder first".into());
+    }
+    let sources: Vec<PathBuf> = sources.into_iter().map(PathBuf::from).collect();
+    let app2 = app.clone();
+    let (sources, errors) = tokio::task::spawn_blocking(move || {
+        let last = std::sync::Mutex::new(std::time::Instant::now());
+        shelfart_core::archive::prepare_roots(&sources, &|p| {
+            let mut l = last.lock().unwrap();
+            if l.elapsed().as_millis() > 150 || p.done_bytes == p.total_bytes {
+                *l = std::time::Instant::now();
+                let _ = app2.emit("unzip-progress", &p);
+            }
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if !errors.is_empty() {
+        return Err(format!("Couldn't unzip {}", errors.join("; ")));
+    }
+    let client = SafeClient::new().map_err(|e| e.to_string())?;
+    let identifier = Identifier::new(client, default_cache_dir());
+    let opts = ImportOptions { mode, rename };
+    let plan = import::plan(&sources, &dest, &opts, Some(&identifier))
+        .await
+        .map_err(|e| e.to_string())?;
+    {
+        let mut open = state.openable.lock().unwrap();
+        open.extend(sources.iter().cloned());
+        if dest.is_dir() {
+            open.insert(dest.clone());
+        }
+    }
+    *state.import_plan.lock().unwrap() = Some(plan.clone());
+    Ok(plan)
+}
+
+/// Carry out the last preview. `assign` = consoles the user picked for unknown
+/// items, `exclude` = items they unticked. Progress arrives as "import-event".
+#[tauri::command]
+async fn start_import(
+    app: AppHandle,
+    assign: HashMap<usize, String>,
+    exclude: Vec<usize>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let plan = state
+        .import_plan
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or("Preview the import first")?;
+    if state.running.swap(true, Ordering::SeqCst) {
+        return Err("Something is already running".into());
+    }
+    let cancel = Arc::new(AtomicBool::new(false));
+    *state.cancel.lock().unwrap() = Some(cancel.clone());
+    state.openable.lock().unwrap().insert(plan.dest.clone());
+    let running = state.running.clone();
+    let exclude: HashSet<usize> = exclude.into_iter().collect();
+    tauri::async_runtime::spawn_blocking(move || {
+        let last = Mutex::new(std::time::Instant::now());
+        let summary = import::execute(&plan, &assign, &exclude, &cancel, &|e| {
+            if let import::ImportEvent::Progress {
+                done_bytes,
+                total_bytes,
+                ..
+            } = &e
+            {
+                let mut l = last.lock().unwrap();
+                if l.elapsed().as_millis() < 120 && done_bytes != total_bytes {
+                    return;
+                }
+                *l = std::time::Instant::now();
+            }
+            let _ = app.emit("import-event", &e);
+        });
+        drop(summary);
+        running.store(false, Ordering::SeqCst);
+    });
+    Ok(())
+}
+
 #[tauri::command]
 fn cancel_scrape(state: State<'_, AppState>) {
     if let Some(c) = state.cancel.lock().unwrap().as_ref() {
@@ -378,6 +478,8 @@ fn main() {
             add_system_folder,
             start_scrape,
             cancel_scrape,
+            plan_import,
+            start_import,
             thumbnail,
             guess_folder,
             cache_size,

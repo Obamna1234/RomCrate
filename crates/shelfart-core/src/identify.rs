@@ -60,6 +60,8 @@ pub struct GameDb {
     by_serial: HashMap<String, Vec<String>>,
     /// GameCube/Wii 4-character game codes ("GW7P") from serials like "DL-DOL-GW7P-EUR".
     by_code: HashMap<String, Vec<String>>,
+    /// Lower-case game names, for "is this file name in the database?" checks.
+    names: std::collections::HashSet<String>,
 }
 
 impl GameDb {
@@ -82,6 +84,9 @@ impl GameDb {
             } else if let Some(rest) = l.strip_prefix("name \"") {
                 if name.is_none() {
                     name = rest.strip_suffix('"').map(String::from);
+                    if let Some(n) = &name {
+                        db.names.insert(n.to_lowercase());
+                    }
                 }
             } else if let Some(rest) = l.strip_prefix("serial \"") {
                 if let (Some(n), Some(s)) = (&name, rest.strip_suffix('"')) {
@@ -110,6 +115,11 @@ impl GameDb {
             }
         }
         db
+    }
+
+    /// Is there a game with exactly this name (case-insensitive)?
+    pub fn has_name(&self, name: &str) -> bool {
+        self.names.contains(&name.to_lowercase())
     }
 
     pub fn by_crc(&self, crc: u32) -> Option<&str> {
@@ -555,6 +565,26 @@ pub fn parse_system_cnf(text: &str) -> Option<String> {
     Some(format!("{}-{}", pre.to_uppercase(), num))
 }
 
+/// What's in the root folder of an ISO-9660 disc image (cooked or raw sectors).
+#[derive(Debug, Clone, Default)]
+pub struct IsoProbe {
+    /// Upper-case root entry names without ";1" (files and folders).
+    pub root: Vec<String>,
+    /// Contents of SYSTEM.CNF, when present (PlayStation 1/2).
+    pub system_cnf: Option<String>,
+}
+
+/// Look inside a disc image. `None` when it isn't an ISO-9660 image.
+pub fn iso_probe(path: &Path) -> Option<IsoProbe> {
+    let mut f = File::open(path).ok()?;
+    let iso = IsoReader::detect(&mut f)?;
+    let root = iso.root_names(&mut f);
+    let system_cnf = iso
+        .read_file(&mut f, "SYSTEM.CNF")
+        .map(|b| String::from_utf8_lossy(&b).into_owned());
+    Some(IsoProbe { root, system_cnf })
+}
+
 /// Minimal ISO-9660 reader supporting cooked (2048) and raw (2352) sectors.
 struct IsoReader {
     sector: u64,
@@ -593,6 +623,32 @@ impl IsoReader {
         }
         out.truncate(len as usize);
         Some(out)
+    }
+
+    fn root_names(&self, f: &mut File) -> Vec<String> {
+        let Some(dir) = self.read_sectors(f, self.root_lba, self.root_len) else {
+            return vec![];
+        };
+        let mut out = Vec::new();
+        let mut i = 0usize;
+        while i + 33 < dir.len() && out.len() < 4096 {
+            let rec_len = dir[i] as usize;
+            if rec_len == 0 {
+                i = (i / 2048 + 1) * 2048;
+                continue;
+            }
+            let name_len = dir[i + 32] as usize;
+            if i + 33 + name_len > dir.len() {
+                break;
+            }
+            let raw = &dir[i + 33..i + 33 + name_len];
+            if raw != [0] && raw != [1] {
+                let n = String::from_utf8_lossy(raw).to_uppercase();
+                out.push(n.split(';').next().unwrap_or_default().to_string());
+            }
+            i += rec_len;
+        }
+        out
     }
 
     fn read_file(&self, f: &mut File, name: &str) -> Option<Vec<u8>> {

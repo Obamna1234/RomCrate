@@ -52,6 +52,25 @@ jobs:
       - name: Check results
         if: always()
         run: python tools/simulate/check.py "$RUNNER_TEMP/sim" | tee "$RUNNER_TEMP/sim/out/5-check.log"
+
+      - name: Import & sort like a user
+        if: always()
+        run: |
+          set -o pipefail
+          B="$PWD/target/release/shelfart-cli"
+          I="$RUNNER_TEMP/sim/import"
+          python tools/simulate/make_messy.py "$I"
+          cp -R "$I/Downloads" "$I/Downloads2"
+          cd "$I"
+          "$B" import --from Downloads --to "ROMs sorted"                               2>&1 | tee 1-import-preview.log
+          "$B" import --from Downloads --to "ROMs sorted" --skip mystery.dat2 --yes      2>&1 | tee 2-import.log
+          "$B" import --from Downloads --to "ROMs sorted" --skip mystery.dat2 --yes      2>&1 | tee 3-import-rerun.log
+          "$B" import --from Downloads2 --to "ROMs moved" --move --skip mystery.dat2 --yes 2>&1 | tee 4-import-move.log
+          "$B" scrape --roms "ROMs sorted" --launcher pegasus --systems ps2,psx --no-launchbox 2>&1 | tee 5-scrape-sorted.log
+
+      - name: Check import results
+        if: always()
+        run: python tools/simulate/check_import.py "$RUNNER_TEMP/sim/import" | tee "$RUNNER_TEMP/sim/import/6-check.log"
       - name: Publish results for review (branch sim-results/cli-${{ matrix.os }})
         if: always()
         env:
@@ -124,6 +143,7 @@ jobs:
         run: |
           python -m pip install --quiet pycdlib selenium
           python tools/simulate/make_fixtures.py "$RUNNER_TEMP/sim/$ROMS_NAME"
+          python tools/simulate/make_messy.py "$RUNNER_TEMP/sim/import"
           mkdir -p "$RUNNER_TEMP/sim/gui"
 
       - name: Launch the app and screenshot it (Windows)
@@ -154,7 +174,7 @@ jobs:
           sleep 2
           tauri-driver &
           sleep 5
-          python tools/simulate/drive_gui.py "$GITHUB_WORKSPACE/target/release/shelfart" "$RUNNER_TEMP/sim/$ROMS_NAME" "$RUNNER_TEMP/sim/gui"
+          python tools/simulate/drive_gui.py "$GITHUB_WORKSPACE/target/release/shelfart" "$RUNNER_TEMP/sim/$ROMS_NAME" "$RUNNER_TEMP/sim/gui" "$RUNNER_TEMP/sim/import"
 
       - name: Launch the app (macOS — no WebDriver for macOS webviews, so launch + screenshot only)
         if: runner.os == 'macOS'
@@ -168,7 +188,9 @@ jobs:
 
       - name: Check results
         if: always() && runner.os == 'Linux'
-        run: python tools/simulate/check.py "$RUNNER_TEMP/sim" --gui | tee "$RUNNER_TEMP/sim/gui/check.log"
+        run: |
+          python tools/simulate/check.py "$RUNNER_TEMP/sim" --gui | tee "$RUNNER_TEMP/sim/gui/check.log"
+          python tools/simulate/check_import.py "$RUNNER_TEMP/sim/import" --gui | tee "$RUNNER_TEMP/sim/gui/check-import.log"
       - name: Publish results for review (branch sim-results/gui-${{ matrix.os }})
         if: always()
         env:

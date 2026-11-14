@@ -8,6 +8,7 @@
 pub mod archive;
 pub mod identify;
 pub mod imaging;
+pub mod import;
 pub mod launchbox;
 pub mod launchers;
 pub mod matcher;

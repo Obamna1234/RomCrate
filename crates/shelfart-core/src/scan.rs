@@ -276,6 +276,23 @@ fn collect_games(sys: &System, base: &Path, dir: &Path, depth: usize, out: &mut 
     }
 }
 
+impl Game {
+    /// A game record for a single file outside any library (used by import).
+    pub fn for_file(p: &Path) -> Game {
+        make_game(p.parent().unwrap_or(Path::new(".")), p)
+    }
+}
+
+/// Folders that hold media/saves/BIOS rather than games.
+pub fn is_skip_dir(lower_name: &str) -> bool {
+    SKIP_DIRS.contains(&lower_name)
+}
+
+/// Files that are never games (gamelists, Thumbs.db…).
+pub fn is_skip_file(lower_name: &str) -> bool {
+    SKIP_FILES.contains(&lower_name)
+}
+
 fn make_game(base: &Path, p: &Path) -> Game {
     let file_name = p
         .file_name()

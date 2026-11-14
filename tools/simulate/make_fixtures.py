@@ -33,6 +33,10 @@ def disc_header(code, rev=0, offset=0, size=128 * 1024):
     b = bytearray(junk(size))
     b[offset:offset + 6] = code.encode()
     b[offset + 7] = rev
+    wii = code[0] in "RS"  # Wii game codes start with R or S in these fixtures
+    magic = (0x5D1C9EA3).to_bytes(4, "big") if wii else (0xC2339F3D).to_bytes(4, "big")
+    pos = offset + (0x18 if wii else 0x1C)
+    b[pos:pos + 4] = magic
     return bytes(b)
 
 

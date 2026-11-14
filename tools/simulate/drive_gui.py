@@ -4,7 +4,8 @@ Points the app at a ROM folder (pre-set in its saved preferences, since the
 native folder picker can't be clicked by WebDriver), walks every wizard step,
 starts a scrape, waits for it to finish and saves screenshots + page text.
 
-Usage: python drive_gui.py <app executable> <rom folder> <out dir>
+Usage: python drive_gui.py <app executable> <rom folder> <out dir> [<import dir>]
+  With <import dir> (from make_messy.py) it also runs Import & sort through the app.
 """
 
 import json
@@ -17,6 +18,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.options import ArgOptions
 
 app, roms, out = sys.argv[1:4]
+imp_dir = sys.argv[4] if len(sys.argv) > 4 else None
 os.makedirs(out, exist_ok=True)
 
 opts = ArgOptions()
@@ -116,6 +118,52 @@ try:
 
     if "failed to start" in body().lower():
         problems.append("app shows 'failed to start'")
+
+    if imp_dir:
+        # ---- Import & sort, the way a user clicks through it.
+        prefs = json.loads(d.execute_script("return localStorage.getItem('shelfart.prefs')") or "{}")
+        prefs["importSources"] = [os.path.join(imp_dir, "Downloads")]
+        prefs["importDest"] = os.path.join(imp_dir, "ROMs sorted")
+        prefs["importMode"] = "copy"
+        d.execute_script("localStorage.setItem('shelfart.prefs', arguments[0]);", json.dumps(prefs))
+        d.refresh()
+        wait_for(lambda: "Your games" in body(), 60, "app to reload")
+        d.find_element(By.ID, "nav-import").click()
+        time.sleep(1)
+        shot("import-start")
+        pv = [b for b in d.find_elements(By.TAG_NAME, "button") if b.text.strip() == "Preview"]
+        if not pv:
+            problems.append("import: no Preview button")
+        else:
+            pv[0].click()
+            if wait_for(lambda: "Need you to choose a console" in body(), 300, "import preview"):
+                time.sleep(1)
+                shot("import-preview")
+                main = d.find_element(By.ID, "main")
+                d.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", main)
+                time.sleep(1)
+                shot("import-preview-bottom")
+                go_btn = [b for b in d.find_elements(By.TAG_NAME, "button") if b.text.strip().startswith("Copy ") and "game" in b.text]
+                if not go_btn or not go_btn[0].is_enabled():
+                    problems.append("import: Copy button missing or disabled")
+                else:
+                    go_btn[0].click()
+                    if wait_for(lambda: "copied and checked" in body(), 300, "import to finish"):
+                        time.sleep(1)
+                        d.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight", d.find_element(By.ID, "main"))
+                        time.sleep(1)
+                        shot("import-done")
+                        t = body()
+                        if " failed" in t and "0 failed" not in t:
+                            problems.append("import: some games failed")
+                        nxt = [b for b in d.find_elements(By.TAG_NAME, "button") if b.text.startswith("Get artwork for these games")]
+                        if nxt:
+                            nxt[0].click()
+                            wait_for(lambda: "Wii" in body() and "Saturn" in body(), 120, "library to show the imported consoles")
+                            time.sleep(1)
+                            shot("library-after-import")
+                        else:
+                            problems.append("import: no 'Get artwork' button at the end")
 finally:
     with open(os.path.join(out, "gui-problems.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(problems) or "none")

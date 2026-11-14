@@ -53,12 +53,17 @@ interface Prefs {
   launchbox: boolean;
   gameInfo: boolean;
   pegasusLayout: "auto" | "per-game" | "skraper";
+  importDest: string;
+  importSources: string[];
+  importMode: "copy" | "move";
+  importRename: boolean;
 }
 
 const DEFAULT_PREFS: Prefs = {
   roots: [], deselected: [], launcher: "pegasus", theme: {}, folders: {}, kinds: {},
   size: "standard", upscale: "smart", aiBinary: "", regions: ["usa", "world", "europe", "australia", "uk", "japan"],
   identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto", launchbox: true, gameInfo: true,
+  importDest: "", importSources: [], importMode: "copy", importRename: false,
 };
 
 function loadPrefs(): Prefs {
@@ -78,7 +83,7 @@ let library: Library = { systems: [] };
 let scanning = false;
 let unzip: { name: string; pct: number } | null = null;
 const scanNotes: string[] = [];
-let view: "library" | "launcher" | "artwork" | "scrape" | "settings" = "library";
+let view: "library" | "launcher" | "artwork" | "scrape" | "settings" | "import" = "library";
 // Session-only ScreenScraper login — never stored.
 let ssUser = "";
 let ssPass = "";
@@ -157,7 +162,7 @@ function renderNav() {
   const nav = document.getElementById("steps")!;
   nav.replaceChildren(
     ...STEPS.map((st, i) => {
-      const cur = view === "settings" ? STEPS.length : STEPS.findIndex((x) => x.id === view);
+      const cur = view === "settings" || view === "import" ? STEPS.length : STEPS.findIndex((x) => x.id === view);
       const done = (st.id === "library" && library.systems.length > 0 && view !== "library")
         || (st.id === "launcher" && folderReady() && i < cur)
         || (st.id === "artwork" && kindsFor(launcher()).length > 0 && i < cur)
@@ -178,7 +183,8 @@ function go(v: typeof view) {
 function render() {
   renderNav();
   const main = document.getElementById("main")!;
-  const views = { library: viewLibrary, launcher: viewLauncher, artwork: viewArtwork, scrape: viewScrape, settings: viewSettings };
+  const views = { library: viewLibrary, launcher: viewLauncher, artwork: viewArtwork, scrape: viewScrape, settings: viewSettings, import: viewImport };
+  document.getElementById("nav-import")?.classList.toggle("active", view === "import");
   main.replaceChildren(...views[view]());
 }
 
@@ -233,6 +239,9 @@ function viewLibrary(): Node[] {
       h("button", { class: "btn primary", onclick: addRoots }, "+ Add ROM folder"),
       h("button", { class: "btn", onclick: addZip, title: "A .zip of your games folder — ShelfArt unzips it next to the zip first" }, "+ Add zipped folder"),
       prefs.roots.length ? h("button", { class: "btn", onclick: rescan, disabled: scanning }, scanning ? "Scanning…" : "Rescan") : null),
+    h("div", { class: "desc", style: "margin-top:10px;color:var(--faint)" },
+      "Games scattered across random folders? ",
+      h("button", { class: "link", style: "text-decoration:underline", onclick: () => go("import") }, "Import & sort them into console folders first"), "."),
   ];
   if (prefs.roots.length) {
     out.push(h("div", { class: "chips", style: "margin-top:14px" },
@@ -631,12 +640,229 @@ function viewSettings(): Node[] {
   ];
 }
 
+
+// ---------------------------------------------------------------- view: import & sort
+
+type Confidence = "sure" | "likely" | "unknown";
+interface ImportItem {
+  id: number; name: string; files: string[]; size: number; system?: string; systemName?: string;
+  confidence: Confidence; reason: string; destName: string; destFolder?: string;
+  state: { kind: "ready" | "already-there" | "conflict" | "needs-system" | "skipped"; detail?: string };
+  warnings: string[];
+}
+interface ImportPlan {
+  dest: string; mode: "copy" | "move"; items: ImportItem[];
+  systems: { id: string; name: string; folder: string; games: number; bytes: number }[];
+  neededBytes: number; freeBytes?: number; enoughSpace: boolean; ignoredFiles: number; notes: string[];
+}
+interface ImportSummary { imported: number; alreadyThere: number; failed: number; skipped: number; bytes: number; cancelled: boolean; folders: string[]; errors: string[] }
+
+const imp = {
+  planning: false, plan: null as ImportPlan | null,
+  assign: {} as Record<number, string>, exclude: new Set<number>(),
+  running: false, done: 0, total: 0, current: "", log: [] as { ok: boolean; message: string }[],
+  summary: null as ImportSummary | null,
+};
+
+function bytes(n: number): string {
+  if (n >= 1073741824) return `${(n / 1073741824).toFixed(1)} GB`;
+  if (n >= 1048576) return `${Math.round(n / 1048576)} MB`;
+  return `${Math.max(1, Math.ceil(n / 1024))} KB`;
+}
+
+async function pickImportSource(zip: boolean) {
+  const picked = zip
+    ? await open({ multiple: true, title: "Choose a zipped games folder", filters: [{ name: "Zip archive", extensions: ["zip"] }] })
+    : await open({ directory: true, multiple: true, title: "Choose the messy folder(s) to sort" });
+  if (!picked) return;
+  for (const p of Array.isArray(picked) ? picked : [picked]) if (!prefs.importSources.includes(p)) prefs.importSources.push(p);
+  savePrefs();
+  imp.plan = null; imp.summary = null;
+  render();
+}
+
+async function pickImportDest() {
+  const picked = await open({ directory: true, multiple: false, title: "Choose your ROMs folder (games go into console folders inside it)" });
+  if (!picked || Array.isArray(picked)) return;
+  prefs.importDest = picked; savePrefs();
+  imp.plan = null; imp.summary = null;
+  render();
+}
+
+async function previewImport() {
+  imp.planning = true; imp.plan = null; imp.summary = null; imp.assign = {}; imp.exclude = new Set(); imp.log = [];
+  render();
+  try {
+    imp.plan = await invoke<ImportPlan>("plan_import", { sources: prefs.importSources, dest: prefs.importDest, mode: prefs.importMode, rename: prefs.importRename });
+  } catch (e) {
+    toast(String(e));
+  }
+  imp.planning = false;
+  render();
+}
+
+function willImport(it: ImportItem): boolean {
+  if (imp.exclude.has(it.id)) return false;
+  if (it.state.kind === "ready") return true;
+  return it.state.kind === "needs-system" && !!imp.assign[it.id];
+}
+
+async function startImport() {
+  if (!imp.plan) return;
+  const exclude = imp.plan.items.filter((i) => imp.exclude.has(i.id)).map((i) => i.id);
+  imp.running = true; imp.done = 0; imp.total = 0; imp.log = []; imp.summary = null;
+  render();
+  try {
+    await invoke("start_import", { assign: imp.assign, exclude });
+  } catch (e) {
+    imp.running = false;
+    toast(String(e));
+    render();
+  }
+}
+
+function handleImportEvent(e: any) {
+  switch (e.type) {
+    case "started": imp.total = e.bytes; break;
+    case "progress": imp.done = e.doneBytes; imp.total = e.totalBytes; imp.current = e.current; break;
+    case "itemDone": imp.log.push({ ok: e.ok, message: e.ok ? `${e.name} — ${e.message}` : e.message }); break;
+    case "finished": imp.running = false; imp.summary = e.summary; break;
+  }
+  if (view === "import") queueRender();
+}
+
+async function scrapeImported() {
+  const dest = imp.plan?.dest ?? prefs.importDest;
+  if (dest && !prefs.roots.includes(dest)) prefs.roots.push(dest);
+  savePrefs();
+  go("library");
+  await rescan();
+}
+
+function itemBadge(it: ImportItem) {
+  if (it.state.kind === "already-there") return h("span", { class: "badge done" }, "Already there");
+  if (it.state.kind === "conflict") return h("span", { class: "badge attention" }, "Name clash");
+  if (it.state.kind === "skipped") return h("span", { class: "badge attention" }, "Skipped");
+  if (it.state.kind === "needs-system") return h("span", { class: "badge attention" }, "Choose console");
+  return it.confidence === "sure" ? h("span", { class: "badge sure" }, "Checked inside") : h("span", { class: "badge likely" }, "Best guess");
+}
+
+function viewImport(): Node[] {
+  const out: (Node | null)[] = [
+    h("h1", {}, "Import & sort games"),
+    h("p", { class: "lead" }, "Point ShelfArt at a messy folder (or a .zip). It works out which console every game is for — by looking inside the files, not just their names — and puts each one into a console folder in your ROMs folder. You'll see everything before anything is copied."),
+  ];
+
+  // 1. From / to / how
+  out.push(
+    h("div", { class: "card" },
+      h("div", { class: "field", style: "margin-top:0" }, h("label", {}, "Sort games from"),
+        h("div", { class: "row" },
+          h("button", { class: "btn", onclick: () => pickImportSource(false), disabled: imp.running }, "+ Add folder"),
+          h("button", { class: "btn", onclick: () => pickImportSource(true), disabled: imp.running }, "+ Add .zip")),
+        prefs.importSources.length ? h("div", { class: "chips", style: "margin-top:8px" }, prefs.importSources.map((r) => h("span", { class: "chip", title: r }, h("span", { class: "path" }, `‎${r}‎`),
+          h("button", { class: "x", title: "Remove", disabled: imp.running, onclick: () => { prefs.importSources = prefs.importSources.filter((x) => x !== r); savePrefs(); imp.plan = null; render(); } }, "×")))) : null),
+      h("div", { class: "field" }, h("label", {}, "Into your ROMs folder"),
+        h("div", { class: "row" },
+          h("button", { class: "btn", onclick: pickImportDest, disabled: imp.running }, prefs.importDest ? "Change…" : "Choose folder…"),
+          prefs.importDest ? h("span", { class: "chip" }, h("span", { class: "path" }, `‎${prefs.importDest}‎`)) : null),
+        h("div", { class: "hint" }, "Console folders that already exist there (like “PS2” or “Nintendo 64”) are reused; others are created (snes, psx, ps2…).")),
+      h("div", { class: "field" }, h("label", {}, "How"),
+        seg([["copy", "Copy (keep originals)"], ["move", "Move"]], prefs.importMode, (v) => { prefs.importMode = v; savePrefs(); imp.plan = null; render(); }),
+        h("div", { class: "hint" }, prefs.importMode === "copy"
+          ? "Your original files stay exactly where they are."
+          : "Each file is copied and checked first; the original is removed only once the copy is confirmed identical. On the same drive it's an instant move.")),
+      h("div", { style: "margin-top:12px" },
+        toggle(prefs.importRename, "Rename to official names", "Games identified from their contents get their official No-Intro / Redump name (single-file games only).", () => { prefs.importRename = !prefs.importRename; imp.plan = null; })),
+      h("div", { class: "row", style: "margin-top:16px" },
+        h("button", { class: "btn primary", disabled: !prefs.importSources.length || !prefs.importDest || imp.planning || imp.running, onclick: previewImport },
+          imp.planning ? "Looking at your files…" : imp.plan ? "Preview again" : "Preview")),
+    ),
+  );
+
+  const p = imp.plan;
+  if (!p) return out.filter((x): x is Node => !!x);
+
+  // 2. Preview
+  const todo = p.items.filter(willImport);
+  const todoBytes = todo.reduce((n, i) => n + i.size, 0);
+  const attention = p.items.filter((i) => i.state.kind === "needs-system" && !imp.assign[i.id] && !imp.exclude.has(i.id)).length;
+  const already = p.items.filter((i) => i.state.kind === "already-there").length;
+  const sameDriveMove = p.mode === "move" && p.neededBytes === 0;
+  const needed = sameDriveMove ? 0 : todoBytes;
+  const enough = p.freeBytes == null || needed === 0 || p.freeBytes >= needed + 268435456;
+
+  out.push(
+    h("h2", {}, "Preview"),
+    h("div", { class: "summary-grid" },
+      h("div", { class: "stat ok" }, h("div", { class: "v" }, String(todo.length)), h("div", { class: "l" }, `To ${p.mode === "move" ? "move" : "copy"} (${bytes(todoBytes)})`)),
+      h("div", { class: "stat" }, h("div", { class: "v" }, String(already)), h("div", { class: "l" }, "Already in your ROMs folder")),
+      h("div", { class: `stat ${attention ? "warn" : ""}` }, h("div", { class: "v" }, String(attention)), h("div", { class: "l" }, "Need you to choose a console")),
+      h("div", { class: `stat ${enough ? "" : "warn"}` }, h("div", { class: "v" }, p.freeBytes == null ? "?" : bytes(p.freeBytes)), h("div", { class: "l" }, `Free on that drive · needs ${bytes(needed)}`))),
+    !enough ? h("div", { class: "banner warn" }, `Not enough space: this needs ${bytes(needed)} plus a little room to spare, but only ${p.freeBytes == null ? "?" : bytes(p.freeBytes)} is free. Untick some games or free up space.`) : null,
+    p.systems.length ? h("div", { class: "sys-chips" }, p.systems.map((s) => h("span", { class: "chip" }, `${s.name} · ${s.games} → ${s.folder}/`))) : null,
+    ...p.notes.map((n) => h("div", { class: "desc", style: "color:var(--faint)" }, n)),
+    p.ignoredFiles ? h("div", { class: "desc", style: "color:var(--faint)" }, `${p.ignoredFiles} non-game files (text, pictures, installers…) are left alone.`) : null,
+  );
+
+  const consoleOptions = [["", "Choose console…"], ["pc", "PC (Windows) discs"], ...catalog.systems.map((s) => [s.id, s.name])];
+  out.push(h("div", { class: "imp-list" }, p.items.map((it) => {
+    const on = willImport(it);
+    const canTick = it.state.kind === "ready" || it.state.kind === "needs-system";
+    const target = it.state.kind === "needs-system"
+      ? (imp.assign[it.id] ? `→ ${imp.assign[it.id]}/${it.destName}` : "")
+      : it.destFolder ? `→ ${it.destFolder}/${it.destName}` : "";
+    return h("div", { class: `imp ${on || it.state.kind === "already-there" ? "" : "off"}` },
+      h("div", {
+        class: `check ${on ? "on" : ""}`, style: canTick && !imp.running ? "cursor:pointer" : "opacity:.35",
+        onclick: () => { if (!canTick || imp.running) return; if (imp.exclude.has(it.id)) imp.exclude.delete(it.id); else imp.exclude.add(it.id); render(); },
+      }),
+      h("div", {},
+        h("div", { class: "n" }, it.name, it.files.length > 1 ? h("span", { style: "color:var(--faint);font-weight:400" }, `  + ${it.files.length - 1} file${it.files.length > 2 ? "s" : ""}`) : null),
+        h("div", { class: "why" }, `${it.systemName ? it.systemName + " — " : ""}${it.reason} · ${bytes(it.size)}`),
+        target ? h("div", { class: "to" }, target) : null,
+        it.state.detail ? h("div", { class: "warnline" }, it.state.detail) : null,
+        ...it.warnings.map((w) => h("div", { class: "warnline" }, w)),
+        it.state.kind === "needs-system" ? h("select", {
+          class: "input", style: "margin-top:8px;max-width:280px", disabled: imp.running,
+          onchange: (e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) imp.assign[it.id] = v; else delete imp.assign[it.id]; render(); },
+        }, consoleOptions.map(([v, l]) => h("option", { value: v, selected: (imp.assign[it.id] ?? "") === v }, l))) : null),
+      itemBadge(it));
+  })));
+
+  // 3. Progress / result
+  if (imp.running || imp.summary) {
+    const pct = imp.total ? Math.round((imp.done / imp.total) * 100) : imp.summary ? 100 : 0;
+    out.push(h("h2", {}, imp.running ? "Importing…" : "Done"),
+      h("div", { class: "progress" }, h("div", { style: `width:${pct}%` })),
+      h("div", { class: "progress-label" }, h("span", {}, imp.running ? imp.current : imp.summary?.cancelled ? "Stopped" : "Finished"), h("span", {}, `${bytes(imp.done)} of ${bytes(imp.total)}`)));
+    if (imp.running) out.push(h("button", { class: "btn danger", onclick: () => invoke("cancel_scrape") }, "Stop"));
+    const s = imp.summary;
+    if (s) {
+      out.push(h("div", { class: s.failed ? "banner warn" : "banner" },
+        `${s.imported} game${s.imported === 1 ? "" : "s"} ${p.mode === "move" ? "moved" : "copied"} and checked (${bytes(s.bytes)}). ${s.alreadyThere} already there, ${s.skipped} left out${s.failed ? `, ${s.failed} failed` : ""}.`),
+        ...s.errors.map((e) => h("div", { class: "banner warn" }, e)),
+        h("div", { class: "row" },
+          h("button", { class: "btn primary big", onclick: scrapeImported }, "Get artwork for these games →"),
+          h("button", { class: "btn", onclick: () => invoke("open_folder", { path: p.dest }).catch((e) => toast(String(e))) }, "Open ROMs folder")));
+    }
+    if (imp.log.length) out.push(h("h2", {}, "Activity"), h("div", { class: "log" }, imp.log.slice(-300).map((l) => h("div", { class: l.ok ? "" : "error" }, `${l.ok ? "✓" : "✗"} ${l.message}`))));
+  } else {
+    out.push(h("div", { class: "footer-bar" }, h("span", {}),
+      h("button", { class: "btn primary", disabled: !todo.length || !enough, onclick: startImport },
+        `${p.mode === "move" ? "Move" : "Copy"} ${todo.length} game${todo.length === 1 ? "" : "s"} →`)));
+  }
+  return out.filter((x): x is Node => !!x);
+}
+
 // ---------------------------------------------------------------- boot
 
 async function boot() {
   catalog = await invoke<Catalog>("get_catalog");
   document.getElementById("version")!.textContent = `v${catalog.version}`;
   document.getElementById("nav-settings")!.addEventListener("click", () => go("settings"));
+  document.getElementById("nav-import")!.addEventListener("click", () => go("import"));
+  await listen("import-event", (ev) => handleImportEvent(ev.payload));
   if (!catalog.launchers.some((l) => l.id === prefs.launcher)) prefs.launcher = "pegasus";
   await listen("scrape-event", (ev) => handleEvent(ev.payload));
   await listen<{ zip: string; doneBytes: number; totalBytes: number }>("unzip-progress", (ev) => {

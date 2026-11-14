@@ -23,7 +23,7 @@ def ok(cond, msg):
 
 
 roms = next(os.path.join(sim, d) for d in os.listdir(sim)
-            if d not in ("out", "gui", "ES-DE") and os.path.isdir(os.path.join(sim, d)))
+            if d not in ("out", "gui", "ES-DE", "import") and os.path.isdir(os.path.join(sim, d)))
 
 
 def pegasus(system):

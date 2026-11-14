@@ -18,6 +18,16 @@ USAGE:
   shelfart-cli scan <ROM folder>...
   shelfart-cli scrape --roms <folder> --launcher <name> [options]
   shelfart-cli launchers
+  shelfart-cli import --from <folder|zip> --to <ROMs folder> [options]
+
+IMPORT & SORT (shows a preview first; nothing changes without --yes):
+  --from <dir|zip>      Messy folder (or .zip) to sort (repeatable)
+  --to <dir>            Your ROMs folder; games go into <dir>/<console>/
+  --move                Move instead of copy (originals removed only after a verified copy)
+  --rename              Rename single-file games to their official name when identified
+  --assign <file>=<id>  Choose the console for a file it couldn't work out (e.g. \"Game.cue=psx\")
+  --skip <file>         Leave this file out (repeatable)
+  --yes                 Actually do it (after reviewing the preview)
 
 SCRAPE OPTIONS:
   --roms <dir|zip>      ROM folder or .zip of one (repeatable). A zip is unpacked next to itself first.
@@ -73,6 +83,7 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Some("scrape") => rt.block_on(scrape(&args[1..])),
+        Some("import") => rt.block_on(import(&args[1..])),
         _ => {
             print!("{HELP}");
             Ok(())
@@ -95,6 +106,160 @@ fn unzip_roots(roots: &[PathBuf]) -> Vec<PathBuf> {
         eprintln!("couldn't unzip {e}");
     }
     out
+}
+
+async fn import(args: &[String]) -> anyhow::Result<()> {
+    use shelfart_core::archive::human;
+    use shelfart_core::import::{self, ImportOptions, ItemState, Mode};
+    use std::collections::{HashMap, HashSet};
+
+    let mut sources = Vec::new();
+    let mut dest: Option<PathBuf> = None;
+    let mut opts = ImportOptions::default();
+    let mut yes = false;
+    let mut assign_names: Vec<(String, String)> = Vec::new();
+    let mut skip_names: Vec<String> = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut val = || {
+            it.next()
+                .cloned()
+                .with_context(|| format!("{a} needs a value"))
+        };
+        match a.as_str() {
+            "--from" => sources.push(PathBuf::from(val()?)),
+            "--to" => dest = Some(PathBuf::from(val()?)),
+            "--move" => opts.mode = Mode::Move,
+            "--rename" => opts.rename = true,
+            "--yes" | "-y" => yes = true,
+            "--assign" => {
+                let v = val()?;
+                let (f, s) = v
+                    .rsplit_once('=')
+                    .context("use --assign \"file name=console id\"")?;
+                assign_names.push((f.to_string(), s.trim().to_string()));
+            }
+            "--skip" => skip_names.push(val()?),
+            other => bail!("unknown option {other}\n\n{HELP}"),
+        }
+    }
+    let dest = dest.context("--to <your ROMs folder> is required")?;
+    if sources.is_empty() {
+        bail!("--from <folder> is required\n\n{HELP}");
+    }
+    let sources = unzip_roots(&sources);
+    let client = SafeClient::new()?;
+    let identifier = Identifier::new(client, default_cache_dir());
+    let plan = import::plan(&sources, &dest, &opts, Some(&identifier)).await?;
+
+    println!("Import into {}", dest.display());
+    for s in &plan.systems {
+        println!(
+            "  {:<34} {:>4} games  {:>9}   → {}/",
+            s.name,
+            s.games,
+            human(s.bytes),
+            s.folder
+        );
+    }
+    println!();
+    let mut assign = HashMap::new();
+    let mut exclude = HashSet::new();
+    for item in &plan.items {
+        if let Some((_, sys)) = assign_names.iter().find(|(f, _)| *f == item.name) {
+            assign.insert(item.id, sys.clone());
+        }
+        if skip_names.contains(&item.name) {
+            exclude.insert(item.id);
+        }
+        let to = item
+            .dest_folder
+            .as_deref()
+            .map(|f| format!("{f}/{}", item.dest_name))
+            .unwrap_or_default();
+        let state = match &item.state {
+            ItemState::Ready => format!("→ {to}"),
+            ItemState::AlreadyThere => "already in your ROMs folder".into(),
+            ItemState::Conflict(m) => format!("NOT imported: {m}"),
+            ItemState::NeedsSystem => {
+                "? console unknown — use --assign \"name=console\" or --skip".into()
+            }
+            ItemState::Skipped(m) => format!("skipped: {m}"),
+        };
+        println!("  {}  [{}]", item.name, item.reason);
+        println!("      {state}");
+        for w in &item.warnings {
+            println!("      ! {w}");
+        }
+    }
+    for n in &plan.notes {
+        println!("  note: {n}");
+    }
+    if plan.ignored_files > 0 {
+        println!(
+            "  note: {} non-game files (text, pictures, installers…) left alone.",
+            plan.ignored_files
+        );
+    }
+    println!(
+        "\nNeeds {} on the destination drive; {} free.{}",
+        human(plan.needed_bytes),
+        plan.free_bytes
+            .map(human)
+            .unwrap_or_else(|| "unknown".into()),
+        if plan.enough_space {
+            ""
+        } else {
+            "  NOT ENOUGH SPACE."
+        }
+    );
+    if !yes {
+        println!("Nothing was changed. Run again with --yes to import.");
+        return Ok(());
+    }
+    if !plan.enough_space {
+        bail!("not enough free space — nothing was changed");
+    }
+    let last = std::sync::Mutex::new(0u64);
+    let summary = import::execute(
+        &plan,
+        &assign,
+        &exclude,
+        &AtomicBool::new(false),
+        &|e| match e {
+            import::ImportEvent::Progress {
+                done_bytes,
+                total_bytes,
+                ..
+            } => {
+                let pct = done_bytes * 100 / total_bytes.max(1);
+                let mut l = last.lock().unwrap();
+                if pct >= *l + 10 {
+                    *l = pct;
+                    eprintln!("  {pct}%");
+                }
+            }
+            import::ImportEvent::ItemDone { ok, message, .. } => {
+                println!("  {} {message}", if ok { "✓" } else { "✗" })
+            }
+            _ => {}
+        },
+    );
+    println!(
+        "\nDone: {} imported, {} already there, {} skipped, {} failed ({}).",
+        summary.imported,
+        summary.already_there,
+        summary.skipped,
+        summary.failed,
+        human(summary.bytes)
+    );
+    for e in &summary.errors {
+        println!("  ✗ {e}");
+    }
+    if summary.failed > 0 {
+        std::process::exit(2);
+    }
+    Ok(())
 }
 
 async fn scrape(args: &[String]) -> anyhow::Result<()> {

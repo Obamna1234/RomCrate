@@ -187,3 +187,25 @@ p.lead { color: var(--muted); margin: 0 0 22px; max-width: 760px; line-height: 1
 select.input { appearance: none; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; border: 2px solid var(--bg); }
+
+/* ---------- tools / import ---------- */
+.tools { margin-top: 18px; padding: 14px 4px 0; border-top: 1px solid var(--line); }
+.tools-label { color: var(--faint); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 0 8px 6px; }
+.tool { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-radius: 10px; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+.tool:hover, .tool.active { background: var(--panel-2); color: var(--text); }
+.tool.active { box-shadow: inset 3px 0 0 var(--accent); }
+.imp-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.imp { display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.imp.off { opacity: .5; }
+.imp .n { font-weight: 600; word-break: break-word; }
+.imp .to { color: var(--muted); font-size: 12.5px; margin-top: 3px; font-family: ui-monospace, Menlo, monospace; word-break: break-all; }
+.imp .why { color: var(--faint); font-size: 12.5px; margin-top: 3px; }
+.imp .warnline { color: var(--warn); font-size: 12.5px; margin-top: 4px; }
+.imp .badge { white-space: nowrap; }
+.badge.sure { background: rgba(60, 207, 142, 0.14); color: var(--ok); }
+.badge.likely { background: rgba(86, 180, 255, 0.14); color: var(--info); }
+.badge.attention { background: rgba(242, 184, 75, 0.16); color: var(--warn); }
+.badge.done { background: rgba(160, 160, 180, 0.14); color: var(--muted); }
+.space { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 14px 0; }
+select.input { padding: 6px 10px; }
+.sys-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 16px; }
