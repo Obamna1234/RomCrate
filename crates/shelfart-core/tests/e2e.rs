@@ -499,9 +499,10 @@ fn emulationstation_gamelist() {
     assert!(fx.root.join("snes/gamelist.xml.bak").exists());
     assert_png(&fx.root.join("snes/images/game1-mix.png"));
     // PSX had no gamelist; one is created.
-    assert!(fs::read_to_string(fx.root.join("psx/gamelist.xml"))
-        .unwrap()
-        .contains("my backup-mix.png"));
+    let psx = fs::read_to_string(fx.root.join("psx/gamelist.xml")).unwrap();
+    assert!(psx.contains("my backup-mix.png"));
+    // "my backup.iso" was identified by its serial, so it gets the real title, not "my backup".
+    assert!(psx.contains("<name>Crash Bandicoot</name>"), "{psx}");
 }
 
 #[test]

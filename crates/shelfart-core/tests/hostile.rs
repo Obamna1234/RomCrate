@@ -249,6 +249,7 @@ fn es_fixture(
         game: ss.games[0].clone(),
         files,
         info: None,
+        matched: None,
     }];
     let r =
         launchers::finalize_system(LauncherKind::EmulationStation, None, sys, &ss, &arts, false)

@@ -583,6 +583,7 @@ impl Ctx {
             }
         }
         if plan.is_empty() {
+            let matched = best.clone().or(canonical.clone());
             send(
                 GameStatus::Skipped,
                 best.or(canonical)
@@ -599,6 +600,7 @@ impl Ctx {
                     game: game.clone(),
                     files: existing,
                     info,
+                    matched,
                 }),
                 0,
             );
@@ -711,6 +713,7 @@ impl Ctx {
                 let _ = &info.name;
             }
         }
+        let matched_id = best.clone().or(canonical.clone());
         let matched_label = best
             .clone()
             .or(canonical.clone())
@@ -826,6 +829,7 @@ impl Ctx {
                 game: game.clone(),
                 files,
                 info,
+                matched: matched_id,
             }),
             n,
         )

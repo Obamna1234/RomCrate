@@ -1,0 +1,174 @@
+name: Real-user simulation
+
+# Acts like a user on real Windows, macOS and Linux machines: builds the current
+# code, makes a messy test collection, scrapes it live from the internet with the
+# command line AND the app window, and keeps every log, cover and screenshot for review.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1" # weekly, catches upstream art/database changes
+
+permissions:
+  contents: read
+
+env:
+  ROMS_NAME: "Odin's Portal 2 Emulator ROMs (copy) – test"
+
+jobs:
+  cli:
+    name: CLI (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Build CLI
+        run: cargo build --release -p shelfart-cli
+      - name: Make test collection
+        run: |
+          python -m pip install --quiet pycdlib
+          python tools/simulate/make_fixtures.py "$RUNNER_TEMP/sim/$ROMS_NAME"
+      - name: Scrape like a user
+        run: |
+          set -o pipefail
+          B=target/release/shelfart-cli
+          R="$RUNNER_TEMP/sim/$ROMS_NAME"
+          O="$RUNNER_TEMP/sim/out"; mkdir -p "$O"
+          $B scan "$R"                                       2>&1 | tee "$O/1-scan.log"
+          $B scrape --roms "$R" --launcher pegasus           2>&1 | tee "$O/2-pegasus.log"
+          $B scrape --roms "$R" --launcher pegasus           2>&1 | tee "$O/3-pegasus-rerun.log"
+          $B scrape --roms "$R" --launcher es-de --folder "$RUNNER_TEMP/sim/ES-DE/downloaded_media" 2>&1 | tee "$O/4-esde.log"
+      - name: Check results
+        if: always()
+        run: python tools/simulate/check.py "$RUNNER_TEMP/sim" | tee "$RUNNER_TEMP/sim/out/5-check.log"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: cli-${{ matrix.os }}
+          path: ${{ runner.temp }}/sim
+          retention-days: 14
+
+  old-linux:
+    name: CLI on Ubuntu 20.10 (static build)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: cargo build --release -p shelfart-cli --target x86_64-unknown-linux-musl
+      - name: Run inside Ubuntu 20.10
+        run: |
+          python3 -m pip install --quiet pycdlib
+          python3 tools/simulate/make_fixtures.py "$RUNNER_TEMP/sim/roms"
+          cp target/x86_64-unknown-linux-musl/release/shelfart-cli "$RUNNER_TEMP/sim/"
+          docker run --rm -v "$RUNNER_TEMP/sim:/sim" ubuntu:20.10 bash -c '
+            set -e; cat /etc/os-release | head -2
+            /sim/shelfart-cli scan /sim/roms
+            /sim/shelfart-cli scrape --roms /sim/roms --launcher pegasus --systems snes,nes --no-launchbox
+          ' 2>&1 | tee "$RUNNER_TEMP/sim/ubuntu-20.10.log"
+
+  gui:
+    name: App window (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf webkit2gtk-driver xvfb
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Build app
+        run: |
+          npm ci
+          npx tauri build --no-bundle
+      - name: Make test collection
+        run: |
+          python -m pip install --quiet pycdlib selenium
+          python tools/simulate/make_fixtures.py "$RUNNER_TEMP/sim/$ROMS_NAME"
+          mkdir -p "$RUNNER_TEMP/sim/gui"
+
+      - name: Drive the app (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cargo install tauri-driver --locked
+          cargo install msedgedriver-tool --locked
+          cd "$RUNNER_TEMP" && msedgedriver-tool && cd -
+          tauri-driver --native-driver "$RUNNER_TEMP/msedgedriver.exe" &
+          sleep 5
+          python tools/simulate/drive_gui.py "$GITHUB_WORKSPACE/target/release/shelfart.exe" "$RUNNER_TEMP/sim/$ROMS_NAME" "$RUNNER_TEMP/sim/gui"
+
+      - name: Drive the app (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cargo install tauri-driver --locked
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1400x1000x24 &
+          sleep 2
+          tauri-driver &
+          sleep 5
+          python tools/simulate/drive_gui.py "$GITHUB_WORKSPACE/target/release/shelfart" "$RUNNER_TEMP/sim/$ROMS_NAME" "$RUNNER_TEMP/sim/gui"
+
+      - name: Launch the app (macOS — no WebDriver for macOS webviews, so launch + screenshot only)
+        if: runner.os == 'macOS'
+        run: |
+          ./target/release/shelfart > "$RUNNER_TEMP/sim/gui/app-output.log" 2>&1 &
+          PID=$!
+          sleep 20
+          screencapture -x "$RUNNER_TEMP/sim/gui/01-first-launch.png" || echo "screencapture not permitted"
+          if kill -0 $PID; then echo "app still running after 20s: OK" | tee "$RUNNER_TEMP/sim/gui/gui-problems.txt"; kill $PID;
+          else echo "app exited/crashed on launch" | tee "$RUNNER_TEMP/sim/gui/gui-problems.txt"; exit 1; fi
+
+      - name: Check results
+        if: always() && runner.os != 'macOS'
+        run: python tools/simulate/check.py "$RUNNER_TEMP/sim" --gui | tee "$RUNNER_TEMP/sim/gui/check.log"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: gui-${{ matrix.os }}
+          path: ${{ runner.temp }}/sim
+          retention-days: 14
+
+  installer:
+    name: Released installer starts (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Install latest release silently and launch it
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R $env:GITHUB_REPOSITORY -p "*_x64-setup.exe" -D $env:RUNNER_TEMP
+          $setup = Get-ChildItem $env:RUNNER_TEMP -Filter *_x64-setup.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList "/S" -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\ShelfArt","$env:ProgramFiles\ShelfArt" -Filter shelfart.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "installer did not put shelfart.exe where expected" }
+          "installed at $($exe.FullName)"
+          $p = Start-Process $exe.FullName -PassThru
+          Start-Sleep 20
+          if ($p.HasExited) { throw "app exited within 20s (code $($p.ExitCode))" }
+          "app is running after 20s: OK"
+          Stop-Process $p

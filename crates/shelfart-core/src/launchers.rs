@@ -403,6 +403,22 @@ pub struct GameArt {
     pub files: BTreeMap<ArtKind, PathBuf>,
     /// Description, genre, release date… when a database knew the game.
     pub info: Option<crate::launchbox::GameInfo>,
+    /// Database name the game was identified as (No-Intro/Redump/libretro), if any.
+    pub matched: Option<String>,
+}
+
+impl GameArt {
+    /// Best human title: database info, then the identified name, then the file name.
+    /// (A badly named "game disc 1.iso" identified by its serial shows its real title.)
+    pub fn title(&self) -> String {
+        if let Some(i) = &self.info {
+            return i.title.clone();
+        }
+        match &self.matched {
+            Some(m) if !m.trim().is_empty() => display_title(m),
+            _ => display_title(&self.game.stem),
+        }
+    }
 }
 
 /// Write/update launcher metadata for a system after scraping. Returns notes for the log.
@@ -496,12 +512,10 @@ fn write_pegasus_metadata(
     s.push_str("# Add how Pegasus should start these games, for example:\n");
     s.push_str("# launch: retroarch -L \"/path/to/core\" \"{file.path}\"\n\n");
     for g in &ss.games {
-        let info = results
-            .iter()
-            .find(|r| r.game.path == g.path)
-            .and_then(|r| r.info.as_ref());
-        let title = info
-            .map(|i| i.title.clone())
+        let art = results.iter().find(|r| r.game.path == g.path);
+        let info = art.and_then(|r| r.info.as_ref());
+        let title = art
+            .map(GameArt::title)
             .unwrap_or_else(|| display_title(&g.stem));
         s.push_str(&format!(
             "game: {}\nfile: {}\n",
@@ -715,7 +729,7 @@ fn write_gamelist(
                     attrs: vec![],
                     fields: vec![
                         ("path".into(), format!("./{rel}")),
-                        ("name".into(), display_title(&r.game.stem)),
+                        ("name".into(), r.title()),
                     ],
                 });
                 entries.len() - 1
@@ -828,6 +842,7 @@ mod tests {
                     game: g.clone(),
                     files,
                     info: None,
+                    matched: None,
                 }
             })
             .collect();

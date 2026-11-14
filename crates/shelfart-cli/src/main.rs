@@ -49,7 +49,7 @@ fn main() -> anyhow::Result<()> {
             let lib = scan::scan_roots(&roots);
             for s in &lib.systems {
                 println!(
-                    "{:<28} {:>6} games   {}",
+                    "{:<32} {:>5} games   {}",
                     s.system_name,
                     s.games.len(),
                     s.path.display()

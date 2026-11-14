@@ -248,6 +248,10 @@ fn collect_games(sys: &System, base: &Path, dir: &Path, depth: usize, out: &mut 
         if SKIP_FILES.contains(&lname.as_str()) || !sys.extensions.contains(&ext.as_str()) {
             continue;
         }
+        // Empty files (failed copies/downloads) are not games.
+        if e.metadata().map(|m| m.len() == 0).unwrap_or(false) {
+            continue;
+        }
         let stem_l = p
             .file_stem()
             .and_then(|s| s.to_str())
@@ -357,6 +361,7 @@ mod tests {
         fs::write(roms.join("psx/Crash Bandicoot (USA).cue"), b"x").unwrap();
         fs::write(roms.join("psx/Crash Bandicoot (USA).bin"), b"x").unwrap();
         fs::write(roms.join("psx/Final Fantasy VII (USA).m3u"), b"x").unwrap();
+        fs::write(roms.join("psx/Broken Copy (USA).chd"), b"").unwrap();
         fs::write(roms.join("psx/Final Fantasy VII (USA) (Disc 1).chd"), b"x").unwrap();
 
         let lib = scan_roots(&[t.path().to_path_buf()]);
