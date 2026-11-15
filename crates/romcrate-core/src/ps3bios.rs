@@ -1,6 +1,6 @@
 //! PS1/PS2 BIOS from the user's own copy of Sony's official PS3 system software.
 //!
-//! ShelfArt never ships or downloads BIOS files or firmware. The user downloads
+//! RomCrate never ships or downloads BIOS files or firmware. The user downloads
 //! PS3UPDAT.PUP from Sony; we verify it is the genuine, unmodified file, RPCS3
 //! (fetched from rpcs3.net) installs and decrypts it, and this module cuts the
 //! BIOS images out of the decrypted emulator files.
@@ -178,10 +178,10 @@ mod tests {
         assert!(!c.is_genuine());
     }
 
-    /// Run with SHELFART_TEST_PUP=/path/to/PS3UPDAT.PUP to check a real file.
+    /// Run with ROMCRATE_TEST_PUP=/path/to/PS3UPDAT.PUP to check a real file.
     #[test]
     fn real_pup_if_available() {
-        if let Ok(p) = std::env::var("SHELFART_TEST_PUP") {
+        if let Ok(p) = std::env::var("ROMCRATE_TEST_PUP") {
             let c = check_pup(Path::new(&p)).unwrap();
             assert!(c.valid_header);
             assert_eq!(c.version.as_deref(), Some("4.93"));

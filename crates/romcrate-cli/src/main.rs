@@ -1,24 +1,32 @@
-//! `shelfart` command-line interface — handy for scripts, servers and handhelds.
+//! `romcrate` command-line interface — handy for scripts, servers and handhelds.
 
 use anyhow::{bail, Context};
-use shelfart_core::imaging::Upscale;
-use shelfart_core::launchers::{self, LauncherKind};
-use shelfart_core::net::SafeClient;
-use shelfart_core::scan;
-use shelfart_core::screenscraper::{self, ScreenScraper};
-use shelfart_core::source::default_cache_dir;
-use shelfart_core::{identify::Identifier, ArtKind, Event, Libretro, ScrapeConfig, Sources};
+use romcrate_core::imaging::Upscale;
+use romcrate_core::launchers::{self, LauncherKind};
+use romcrate_core::net::SafeClient;
+use romcrate_core::scan;
+use romcrate_core::screenscraper::{self, ScreenScraper};
+use romcrate_core::source::default_cache_dir;
+use romcrate_core::{identify::Identifier, ArtKind, Event, Libretro, ScrapeConfig, Sources};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-const HELP: &str = "ShelfArt — account-free artwork scraper for emulated games
+const HELP: &str = "RomCrate — get your games ready for your handheld (sorted, checked, with artwork)
 
 USAGE:
-  shelfart-cli scan <ROM folder>...
-  shelfart-cli scrape --roms <folder> --launcher <name> [options]
-  shelfart-cli launchers
-  shelfart-cli import --from <folder|zip> --to <ROMs folder> [options]
+  romcrate-cli check <folder or file>...
+  romcrate-cli scan <ROM folder>...
+  romcrate-cli scrape --roms <folder> --launcher <name> [options]
+  romcrate-cli launchers
+  romcrate-cli emulators            (Pegasus launch lines RomCrate knows)
+  romcrate-cli import --from <folder|zip> --to <ROMs folder> [options]
+
+CHECK MY FILES:
+  Finds unfinished downloads, damaged zips, PlayStation Store packages, damaged N64 ROMs,
+  disc formats that need converting, .bin files without their .cue, PS3 games, and PC games
+  whose disc copy protection won't run under Wine/GameNative. Exits with code 1 if any
+  file has a serious problem.
 
 IMPORT & SORT (shows a preview first; nothing changes without --yes):
   --from <dir|zip>      Messy folder (or .zip) to sort (repeatable)
@@ -46,6 +54,10 @@ SCRAPE OPTIONS:
   --no-game-info        Don't write descriptions/genre/release dates
   --no-metadata         Don't touch gamelist.xml / Pegasus metadata / playlists
   --pegasus-layout <l>  auto | per-game | skraper   (default auto: match what's already there)
+  --pegasus-on <where>  android   Write Pegasus launch lines for an Android handheld
+  --emulator <s>=<id>   Choose the emulator for a system, e.g. ps2=armsx2-playstore (see 'emulators')
+  --fix-launch          Also add/fix launch lines in Pegasus files you already have
+                        (a .bak backup is made first; only the launch block changes)
   --threads <n>         Parallel games, 1-8 (default 4)
 ";
 
@@ -72,6 +84,60 @@ fn main() -> anyhow::Result<()> {
             );
             Ok(())
         }
+        Some("check") => {
+            let roots: Vec<PathBuf> = args[1..].iter().map(PathBuf::from).collect();
+            if roots.is_empty() {
+                bail!("check needs at least one folder or file\n\n{HELP}");
+            }
+            for r in &roots {
+                if !r.exists() {
+                    bail!("{} doesn't exist", r.display());
+                }
+            }
+            let report = romcrate_core::preflight::check(&roots, &|_| {});
+            use romcrate_core::preflight::Severity;
+            for f in &report.findings {
+                let tag = match f.severity {
+                    Severity::Error => "PROBLEM",
+                    Severity::Warn => "WARNING",
+                    Severity::Info => "info   ",
+                };
+                println!(
+                    "{tag}  {}\n         {}\n         {}",
+                    f.path.display(),
+                    f.title,
+                    f.advice
+                );
+            }
+            println!(
+                "\nChecked {} files: {} problem{}, {} warning{}.",
+                report.files_checked,
+                report.errors,
+                if report.errors == 1 { "" } else { "s" },
+                report.warnings,
+                if report.warnings == 1 { "" } else { "s" }
+            );
+            if report.errors > 0 {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+        Some("emulators") => {
+            for p in &romcrate_core::launch::db().profiles {
+                println!(
+                    "{:<18} {:<44} {:<8} {}",
+                    p.id,
+                    p.emulator,
+                    p.systems.join(","),
+                    if p.verified {
+                        "tested on a device"
+                    } else {
+                        "not tested yet (written commented out)"
+                    }
+                );
+            }
+            Ok(())
+        }
         Some("launchers") => {
             for l in launchers::launchers() {
                 println!(
@@ -94,7 +160,7 @@ fn main() -> anyhow::Result<()> {
 /// Unpack any .zip roots (next to the zip) and return folders to scan.
 fn unzip_roots(roots: &[PathBuf]) -> Vec<PathBuf> {
     let last = std::sync::Mutex::new(0u64);
-    let (out, errors) = shelfart_core::archive::prepare_roots(roots, &|p| {
+    let (out, errors) = romcrate_core::archive::prepare_roots(roots, &|p| {
         let pct = p.done_bytes * 100 / p.total_bytes.max(1);
         let mut l = last.lock().unwrap();
         if pct >= *l + 10 || pct == 100 {
@@ -109,8 +175,8 @@ fn unzip_roots(roots: &[PathBuf]) -> Vec<PathBuf> {
 }
 
 async fn import(args: &[String]) -> anyhow::Result<()> {
-    use shelfart_core::archive::human;
-    use shelfart_core::import::{self, ImportOptions, ItemState, Mode};
+    use romcrate_core::archive::human;
+    use romcrate_core::import::{self, ImportOptions, ItemState, Mode};
     use std::collections::{HashMap, HashSet};
 
     let mut sources = Vec::new();
@@ -277,7 +343,7 @@ async fn scrape(args: &[String]) -> anyhow::Result<()> {
             "--roms" => roots.push(PathBuf::from(val()?)),
             "--launcher" => {
                 cfg.launcher = serde_json::from_str(&format!("\"{}\"", val()?))
-                    .context("unknown launcher (see `shelfart-cli launchers`)")?
+                    .context("unknown launcher (see `romcrate-cli launchers`)")?
             }
             "--folder" => cfg.folder = Some(PathBuf::from(val()?)),
             "--kinds" => {
@@ -317,6 +383,29 @@ async fn scrape(args: &[String]) -> anyhow::Result<()> {
                     .context("use auto, per-game or skraper")?
             }
             "--threads" => cfg.concurrency = val()?.parse()?,
+            "--pegasus-on" => {
+                let v = val()?;
+                if v != "android" {
+                    bail!("--pegasus-on supports: android");
+                }
+                cfg.launch.platform = Some(v);
+            }
+            "--emulator" => {
+                let v = val()?;
+                let (sys, id) = v
+                    .split_once('=')
+                    .context("use --emulator <system>=<profile id>, e.g. ps2=armsx2-playstore")?;
+                let p = romcrate_core::launch::profile(id).with_context(|| {
+                    format!("unknown emulator profile '{id}' — see 'romcrate-cli emulators'")
+                })?;
+                if !p.systems.iter().any(|s| s == sys) {
+                    bail!("{} doesn't run {sys} games", p.emulator);
+                }
+                cfg.launch
+                    .per_system
+                    .insert(sys.to_string(), id.to_string());
+            }
+            "--fix-launch" => cfg.launch.fix_existing = true,
             other => bail!("unknown option {other}\n\n{HELP}"),
         }
     }
@@ -345,7 +434,7 @@ async fn scrape(args: &[String]) -> anyhow::Result<()> {
         eprintln!("note: this build has no ScreenScraper access; using the free collection only");
     }
     let sources = Arc::new(Sources {
-        launchbox: Some(shelfart_core::launchbox::LaunchBox::new(
+        launchbox: Some(romcrate_core::launchbox::LaunchBox::new(
             client.clone(),
             &cache,
         )),
@@ -353,7 +442,7 @@ async fn scrape(args: &[String]) -> anyhow::Result<()> {
         identifier: Identifier::new(client, cache),
         screenscraper: ss,
     });
-    let emit: shelfart_core::scrape::Emit = Arc::new(|e: Event| {
+    let emit: romcrate_core::scrape::Emit = Arc::new(|e: Event| {
         match e {
         Event::SystemStarted { system_name, games, .. } => println!("\n== {system_name} ({games} games)"),
         Event::SystemIndex { artwork, database, .. } => println!("   {artwork} artwork entries, {database} database entries"),
@@ -380,7 +469,7 @@ async fn scrape(args: &[String]) -> anyhow::Result<()> {
         _ => {}
     }
     });
-    shelfart_core::run_scrape(
+    romcrate_core::run_scrape(
         lib,
         systems,
         cfg,

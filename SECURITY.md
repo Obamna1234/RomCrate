@@ -6,7 +6,7 @@ Please **do not open a public issue** for security problems. Use GitHub's
 private reporting instead: **Security → Report a vulnerability** on this
 repository. You'll get a reply within 7 days.
 
-## What ShelfArt does to keep you safe
+## What RomCrate does to keep you safe
 
 - **No accounts and no telemetry.** Nothing identifies you to any server.
 - **Network allow-list.** The HTTP client only connects over HTTPS to
@@ -22,12 +22,12 @@ repository. You'll get a reply within 7 days.
 - **Least-privilege desktop app.** The Tauri window has a strict Content
   Security Policy and can only open a folder picker. Saving reports and opening
   folders go through app commands that only accept native dialog choices or
-  folders the user picked; previews are limited to files ShelfArt produced.
+  folders the user picked; previews are limited to files RomCrate produced.
 - **No secrets in logs.** Network errors never include URLs, and anything that
   looks like a credential is redacted.
-- **External programs.** The only program ShelfArt can run is a
+- **External programs.** The only program RomCrate can run is a
   `realesrgan-ncnn-vulkan` the user installed and selected.
-- **Secrets.** ShelfArt's ScreenScraper developer credentials are injected at
+- **Secrets.** RomCrate's ScreenScraper developer credentials are injected at
   build time from GitHub Actions secrets and are never committed. A user's
   optional ScreenScraper login is kept in memory only.
 - **No bundled third-party binaries, BIOS, firmware or games.**

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 — RomCrate, Pegasus launch lines and "Check my files"
+
+- **ShelfArt is now RomCrate.** Same app, new name now that it sorts, checks and sets up games as well as artwork. The command-line tool is now `romcrate-cli`. Downloads cached by ShelfArt are reused automatically. Because the app's ID changed, Windows/macOS install it as a new app (you can uninstall ShelfArt) and the app's saved settings start fresh.
+- **Pegasus launch lines.** Choose "Android handheld" on the Pegasus step and RomCrate writes the line that tells Pegasus how to start each console's emulator.
+  - Commands live in a data file with their source and test status. Only lines tested on a real device are switched on; currently ARMSX2 (Play Store) for PS2, tested on an AYN Odin 2 Portal. RetroArch (SNES, N64), melonDS and PPSSPP are included switched off, with a note asking you to test them.
+  - Your existing `metadata.pegasus.txt` files are never changed unless you turn on "Fix launch lines in Pegasus files I already have": then a `.bak` backup is made first and only the launch block is added (or a known-broken one replaced, such as the GitHub-build ARMSX2 line that fails on Play Store installs). Otherwise RomCrate shows you the exact line to add.
+  - Warns when an existing file doesn't list `.chd` but the folder has `.chd` games.
+  - Consoles split across an SD card and internal storage get the same collection name and launch line in both folders, so Pegasus shows them as one.
+  - CLI: `--pegasus-on android`, `--emulator ps2=armsx2-playstore`, `--fix-launch`, and `romcrate-cli emulators`.
+- **Check my files.** New button on the Import screen and `romcrate-cli check <folder>`: finds unfinished downloads (`.crdownload`, `.part`…), damaged zips (naming the broken file inside), PlayStation Store `.pkg` files, damaged or modified N64 ROMs (cartridge checksum, any byte order), `.mds/.mdf/.mdx` disc images that need converting, disc `.bin` files without their `.cue`, PS3 games, and PC games with SafeDisc/SecuROM/StarForce disc copy protection that probably won't run under Wine/GameNative (information only — RomCrate never modifies or works around copy protection). Import skips files with problems and says why.
+
 ## 0.2.0 — Import & sort
 
 - **New: Import & sort.** Pick any messy folder or `.zip` and ShelfArt sorts the games into `ROMs/<console>/`.

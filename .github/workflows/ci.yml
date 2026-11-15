@@ -66,10 +66,10 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Build
-        run: cargo build --release -p shelfart-cli --target x86_64-unknown-linux-musl
+        run: cargo build --release -p romcrate-cli --target x86_64-unknown-linux-musl
       - name: Check it is static and runs
         run: |
-          B=target/x86_64-unknown-linux-musl/release/shelfart-cli
+          B=target/x86_64-unknown-linux-musl/release/romcrate-cli
           file "$B"
           file "$B" | grep -q "static"
           "$B" --help | head -3

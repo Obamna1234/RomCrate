@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use url::Url;
 
-/// Kinds of artwork ShelfArt can produce.
+/// Kinds of artwork RomCrate can produce.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ArtKind {
@@ -34,7 +34,7 @@ pub enum ArtKind {
     Logo,
     /// Fan art / background.
     Fanart,
-    /// Composite built by ShelfArt: screenshot + box + logo.
+    /// Composite built by RomCrate: screenshot + box + logo.
     Mix,
     /// Short gameplay video (mp4).
     Video,
@@ -178,9 +178,14 @@ pub struct Libretro {
 }
 
 pub fn default_cache_dir() -> PathBuf {
-    dirs::cache_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("ShelfArt")
+    let base = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
+    let dir = base.join("RomCrate");
+    // Carry over downloads from when the app was called ShelfArt (saves re-downloading).
+    let old = base.join("ShelfArt");
+    if !dir.exists() && old.is_dir() {
+        let _ = std::fs::rename(&old, &dir);
+    }
+    dir
 }
 
 impl Libretro {

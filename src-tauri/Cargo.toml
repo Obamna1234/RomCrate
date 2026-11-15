@@ -1,6 +1,6 @@
 [package]
-name = "shelfart"
-description = "ShelfArt — account-free artwork scraper for emulated games"
+name = "romcrate"
+description = "RomCrate — account-free artwork scraper for emulated games"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ license.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-shelfart-core = { path = "../crates/shelfart-core" }
+romcrate-core = { path = "../crates/romcrate-core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

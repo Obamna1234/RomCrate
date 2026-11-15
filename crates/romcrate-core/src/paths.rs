@@ -1,5 +1,5 @@
 //! Safe file naming: nothing from the network or from file names can make
-//! ShelfArt write outside the folder the user chose.
+//! RomCrate write outside the folder the user chose.
 
 use std::path::{Component, Path, PathBuf};
 

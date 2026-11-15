@@ -71,7 +71,7 @@ jobs:
           TAG: ${{ steps.vars.outputs.tag }}
         run: |
           NOTES=$(awk '/^## /{n++} n==1' CHANGELOG.md | tail -n +2)
-          gh release create "$TAG" --draft --title "ShelfArt $TAG" --notes "${NOTES:-See CHANGELOG.md}" --verify-tag
+          gh release create "$TAG" --draft --title "RomCrate $TAG" --notes "${NOTES:-See CHANGELOG.md}" --verify-tag
           ID=$(gh release view "$TAG" --json databaseId --jq .databaseId)
           if [ -z "$ID" ]; then echo "::error::could not find the draft release id"; exit 1; fi
           echo "id=$ID" >> "$GITHUB_OUTPUT"
@@ -116,7 +116,7 @@ jobs:
       - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ShelfArt's own ScreenScraper developer registration (optional).
+          # RomCrate's own ScreenScraper developer registration (optional).
           SS_DEVID: ${{ secrets.SS_DEVID }}
           SS_DEVPASSWORD: ${{ secrets.SS_DEVPASSWORD }}
         with:
@@ -154,15 +154,15 @@ jobs:
         env:
           SS_DEVID: ${{ secrets.SS_DEVID }}
           SS_DEVPASSWORD: ${{ secrets.SS_DEVPASSWORD }}
-        run: cargo build --release -p shelfart-cli --target ${{ matrix.target }}
+        run: cargo build --release -p romcrate-cli --target ${{ matrix.target }}
       - name: Upload
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          OUT="shelfart-cli-${TAG}-${{ matrix.target }}${{ matrix.ext }}"
-          cp "target/${{ matrix.target }}/release/shelfart-cli${{ matrix.ext }}" "$OUT"
+          OUT="romcrate-cli-${TAG}-${{ matrix.target }}${{ matrix.ext }}"
+          cp "target/${{ matrix.target }}/release/romcrate-cli${{ matrix.ext }}" "$OUT"
           gh release upload "$TAG" "$OUT" --clobber
 
   publish:

@@ -11,7 +11,7 @@ use std::time::Duration;
 use thiserror::Error;
 use url::Url;
 
-/// The only hosts ShelfArt will ever contact.
+/// The only hosts RomCrate will ever contact.
 pub const ALLOWED_HOSTS: &[&str] = &[
     "thumbnails.libretro.com",
     "raw.githubusercontent.com",
@@ -81,9 +81,9 @@ impl SafeClient {
             .connect_timeout(Duration::from_secs(15))
             .timeout(Duration::from_secs(90))
             .user_agent(concat!(
-                "ShelfArt/",
+                "RomCrate/",
                 env!("CARGO_PKG_VERSION"),
-                " (+https://github.com/Obamna1234/ShelfArt)"
+                " (+https://github.com/Obamna1234/RomCrate)"
             ))
             .build()?;
         Ok(Self { client })

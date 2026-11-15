@@ -354,14 +354,14 @@ pub fn fingerprint(sys: &System, game: &Game) -> Fingerprint {
 
 /// N64 ROMs come in three byte orders; No-Intro checksums use big-endian (.z64).
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum N64Order {
+pub(crate) enum N64Order {
     Z64,
     V64,
     N64,
 }
 
 impl N64Order {
-    fn detect(head: &[u8]) -> Self {
+    pub(crate) fn detect(head: &[u8]) -> Self {
         match head.get(..4) {
             Some([0x37, 0x80, 0x40, 0x12]) => N64Order::V64,
             Some([0x40, 0x12, 0x37, 0x80]) => N64Order::N64,
@@ -369,7 +369,7 @@ impl N64Order {
         }
     }
 
-    fn to_z64(self, chunk: &mut [u8]) {
+    pub(crate) fn to_z64(self, chunk: &mut [u8]) {
         match self {
             N64Order::Z64 => {}
             N64Order::V64 => chunk

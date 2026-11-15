@@ -2,16 +2,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use base64::Engine;
+use romcrate_core::identify::Identifier;
+use romcrate_core::import::{self, ImportOptions, ImportPlan, Mode};
+use romcrate_core::launchers::{self, LauncherInfo, LauncherKind};
+use romcrate_core::net::SafeClient;
+use romcrate_core::scan::{self, Library};
+use romcrate_core::screenscraper::{self, ScreenScraper};
+use romcrate_core::source::default_cache_dir;
+use romcrate_core::systems::{self, System};
+use romcrate_core::{ArtKind, Event, Libretro, ScrapeConfig, Sources};
 use serde::Serialize;
-use shelfart_core::identify::Identifier;
-use shelfart_core::import::{self, ImportOptions, ImportPlan, Mode};
-use shelfart_core::launchers::{self, LauncherInfo, LauncherKind};
-use shelfart_core::net::SafeClient;
-use shelfart_core::scan::{self, Library};
-use shelfart_core::screenscraper::{self, ScreenScraper};
-use shelfart_core::source::default_cache_dir;
-use shelfart_core::systems::{self, System};
-use shelfart_core::{ArtKind, Event, Libretro, ScrapeConfig, Sources};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -24,7 +24,7 @@ struct AppState {
     library: Mutex<Library>,
     cancel: Mutex<Option<Arc<AtomicBool>>>,
     running: Arc<AtomicBool>,
-    /// Files ShelfArt produced or found this session; only these can be previewed.
+    /// Files RomCrate produced or found this session; only these can be previewed.
     previewable: Arc<Mutex<HashSet<PathBuf>>>,
     /// Folders the user chose this session; only these can be opened in the file manager.
     openable: Mutex<HashSet<PathBuf>>,
@@ -38,7 +38,7 @@ struct AppState {
 struct KindInfo {
     id: ArtKind,
     label: &'static str,
-    /// "free" (libretro), "extras" (ScreenScraper), "generated" (made by ShelfArt), "free+generated"
+    /// "free" (libretro), "extras" (ScreenScraper), "generated" (made by RomCrate), "free+generated"
     source: &'static str,
 }
 
@@ -52,6 +52,7 @@ struct Catalog {
     size_presets: Vec<(&'static str, &'static str, f32)>,
     screenscraper_available: bool,
     cache_dir: String,
+    launch_profiles: Vec<romcrate_core::launch::LaunchProfile>,
 }
 
 #[tauri::command]
@@ -78,6 +79,7 @@ fn get_catalog() -> Catalog {
         size_presets: launchers::size_presets(),
         screenscraper_available: screenscraper::available(),
         cache_dir: default_cache_dir().to_string_lossy().to_string(),
+        launch_profiles: romcrate_core::launch::db().profiles.clone(),
     }
 }
 
@@ -92,7 +94,7 @@ async fn scan_library(
     let app2 = app.clone();
     let (roots, errors) = tokio::task::spawn_blocking(move || {
         let last = std::sync::Mutex::new(std::time::Instant::now());
-        shelfart_core::archive::prepare_roots(&roots, &|p| {
+        romcrate_core::archive::prepare_roots(&roots, &|p| {
             let mut l = last.lock().unwrap();
             if l.elapsed().as_millis() > 150 || p.done_bytes == p.total_bytes {
                 *l = std::time::Instant::now();
@@ -154,7 +156,7 @@ async fn start_scrape(
     let mut config = config;
     // Only ever run the Real-ESRGAN program, never an arbitrary executable.
     if let Some(bin) = &config.ai_binary {
-        if !shelfart_core::imaging::is_esrgan_binary(bin) {
+        if !romcrate_core::imaging::is_esrgan_binary(bin) {
             config.ai_binary = None;
         }
     }
@@ -183,7 +185,7 @@ async fn start_scrape(
         None
     };
     let sources = Arc::new(Sources {
-        launchbox: Some(shelfart_core::launchbox::LaunchBox::new(
+        launchbox: Some(romcrate_core::launchbox::LaunchBox::new(
             client.clone(),
             &cache,
         )),
@@ -194,7 +196,7 @@ async fn start_scrape(
 
     let previewable = state.previewable.clone();
     let app2 = app.clone();
-    let emit: shelfart_core::scrape::Emit = Arc::new(move |e: Event| {
+    let emit: romcrate_core::scrape::Emit = Arc::new(move |e: Event| {
         if let Event::GameDone {
             preview: Some(p), ..
         } = &e
@@ -205,10 +207,28 @@ async fn start_scrape(
     });
     let running = state.running.clone();
     tauri::async_runtime::spawn(async move {
-        shelfart_core::run_scrape(lib, selected, config, sources, cancel, emit).await;
+        romcrate_core::run_scrape(lib, selected, config, sources, cancel, emit).await;
         running.store(false, Ordering::SeqCst);
     });
     Ok(())
+}
+
+/// "Check my files": find unfinished downloads, damaged archives, store
+/// packages, damaged N64 ROMs, disc formats that need converting and PC copy
+/// protection. Reads only.
+#[tauri::command]
+async fn check_files(paths: Vec<String>) -> Result<romcrate_core::preflight::Report, String> {
+    let paths: Vec<PathBuf> = paths
+        .into_iter()
+        .map(PathBuf::from)
+        .filter(|p| p.exists())
+        .collect();
+    if paths.is_empty() {
+        return Err("Choose a folder to check first".into());
+    }
+    tokio::task::spawn_blocking(move || romcrate_core::preflight::check(&paths, &|_| {}))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Look at a messy folder (or .zip) and work out where every game should go.
@@ -230,7 +250,7 @@ async fn plan_import(
     let app2 = app.clone();
     let (sources, errors) = tokio::task::spawn_blocking(move || {
         let last = std::sync::Mutex::new(std::time::Instant::now());
-        shelfart_core::archive::prepare_roots(&sources, &|p| {
+        romcrate_core::archive::prepare_roots(&sources, &|p| {
             let mut l = last.lock().unwrap();
             if l.elapsed().as_millis() > 150 || p.done_bytes == p.total_bytes {
                 *l = std::time::Instant::now();
@@ -322,7 +342,7 @@ async fn thumbnail(path: String, state: State<'_, AppState>) -> Result<String, S
     }
     tokio::task::spawn_blocking(move || -> Result<String, String> {
         let bytes = std::fs::read(&p).map_err(|e| e.to_string())?;
-        let img = shelfart_core::imaging::decode_validated(&bytes).map_err(|e| e.to_string())?;
+        let img = romcrate_core::imaging::decode_validated(&bytes).map_err(|e| e.to_string())?;
         let t = img.thumbnail(220, 220);
         let mut out = Vec::new();
         t.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
@@ -404,7 +424,7 @@ async fn save_missing_report(app: AppHandle, text: String) -> Result<bool, Strin
         .dialog()
         .file()
         .set_title("Save missing games list")
-        .set_file_name("shelfart-missing.txt")
+        .set_file_name("romcrate-missing.txt")
         .add_filter("Text", &["txt"])
         .blocking_save_file()
     else {
@@ -480,6 +500,7 @@ fn main() {
             cancel_scrape,
             plan_import,
             start_import,
+            check_files,
             thumbnail,
             guess_folder,
             cache_size,
@@ -488,5 +509,5 @@ fn main() {
             open_folder
         ])
         .run(tauri::generate_context!())
-        .expect("error while running ShelfArt");
+        .expect("error while running RomCrate");
 }

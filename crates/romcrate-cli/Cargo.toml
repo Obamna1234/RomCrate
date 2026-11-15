@@ -1,16 +1,16 @@
 [package]
-name = "shelfart-cli"
-description = "Command-line interface for ShelfArt"
+name = "romcrate-cli"
+description = "Command-line interface for RomCrate"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "shelfart-cli"
+name = "romcrate-cli"
 path = "src/main.rs"
 
 [dependencies]
-shelfart-core = { path = "../shelfart-core" }
+romcrate-core = { path = "../romcrate-core" }
 tokio.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
