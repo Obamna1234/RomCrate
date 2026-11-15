@@ -74,7 +74,8 @@ never = ["scph1001.bin", "readme.txt", "cover.jpg", "setup.exe", "failed downloa
          "Broken (USA).cue", "mystery.dat2", "evil.m3u", ".hidden.sfc", "passwd",
          "Unconfirmed 812733.crdownload", "Manhunt (PS2 Classics Vault) [SLUS20827].pkg",
          "Manhunt (Europe) (Disc 1).zip", "Broken Kart (USA).z64", "GTA San Andreas.mds",
-         "GTA San Andreas.mdf", "CmdLineExt03.dll", "manhunt.exe"]
+         "GTA San Andreas.mdf", "CmdLineExt03.dll", "manhunt.exe", "nds game.cht",
+         "Super_Famicom.dat", "Half Game (USA).iso.part"]
 
 print("== Copy import (Downloads → ROMs sorted)")
 have = tree(dst)
@@ -103,6 +104,9 @@ if not gui:
     ok("even though it was in" in pre, "explains that the PC disc in the PS2 folder is really a PC disc")
     ok("official PlayStation list" in pre, "Crash Bandicoot.chd found in the official PlayStation list")
     ok("checksum OK" in pre, "N64 ROMs with good checksums are marked 'checksum OK'")
+    ok("unknown free" not in pre and re.search(r"free\.", pre) is not None, "free space is found for a relative ROMs folder name")
+    ok("nds game.cht" not in pre and "Super_Famicom.dat" not in pre, "cheat files and scraper game lists are left alone, not listed as unknown games")
+    ok(re.search(r"Half Game \(USA\)\.iso\.part.*\n\s*skipped: [^\n]*Download didn't finish", pre) is not None, "a .part download is shown and refused in import")
     for name, why in [("Unconfirmed 812733.crdownload", "Download didn't finish"),
                       ("Manhunt (PS2 Classics Vault) [SLUS20827].pkg", "PlayStation Store package"),
                       ("Manhunt (Europe) (Disc 1).zip", "archive is damaged"),

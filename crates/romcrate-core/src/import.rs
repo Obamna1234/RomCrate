@@ -408,7 +408,7 @@ const NOT_GAME_EXTS: &[&str] = &[
     "txt", "nfo", "diz", "url", "html", "htm", "pdf", "jpg", "jpeg", "png", "gif", "bmp", "webp",
     "mp4", "mkv", "avi", "mp3", "flac", "ogg", "wav", "xml", "json", "ini", "cfg", "log", "md5",
     "sha1", "sfv", "torrent", "lnk", "db", "ds_store", "sub", "sbi", "srm", "sav", "state", "exe",
-    "dll", "bat", "sh", "py", "rar", "part",
+    "dll", "bat", "sh", "py", "rar", "cht", "cheat", "pnach", "ips", "bps", "ups",
 ];
 
 /// Words that don't help name a console in a folder ("PS2 Games" → "PS2").
@@ -646,7 +646,10 @@ fn walk(root: &Path, skip: &Path, out: &mut Vec<PathBuf>, ignored: &mut usize, d
             walk(&p, skip, out, ignored, depth + 1);
         } else if ft.is_file() {
             let ext = ext_of(&p);
-            if crate::scan::is_skip_file(&name) || NOT_GAME_EXTS.contains(&ext.as_str()) {
+            if crate::scan::is_skip_file(&name)
+                || NOT_GAME_EXTS.contains(&ext.as_str())
+                || is_database_file(&p, &ext)
+            {
                 *ignored += 1;
                 continue;
             }
@@ -661,6 +664,21 @@ fn walk(root: &Path, skip: &Path, out: &mut Vec<PathBuf>, ignored: &mut usize, d
 /// Reads files but writes nothing. `identifier` (optional) lets RomCrate use
 /// the official game lists for files whose console can't be read from inside
 /// (e.g. `.chd`) and to look up official names for renaming.
+/// Game lists written by scrapers and ROM managers (Skraper's `Super_Famicom.dat`,
+/// No-Intro/Redump `.dat` files): XML or clrmamepro text, not games.
+fn is_database_file(p: &Path, ext: &str) -> bool {
+    if !matches!(ext, "dat" | "xml") {
+        return false;
+    }
+    let head = read_head(p, 512);
+    let t = String::from_utf8_lossy(&head).to_lowercase();
+    let t = t.trim_start_matches('\u{feff}').trim_start();
+    t.starts_with("<?xml")
+        || t.contains("<datafile")
+        || t.starts_with("clrmamepro")
+        || t.contains("<!doctype datafile")
+}
+
 pub async fn plan(
     sources: &[PathBuf],
     dest: &Path,
@@ -671,6 +689,15 @@ pub async fn plan(
         !sources.is_empty(),
         "choose at least one folder to import from"
     );
+    // Work with full paths: a short name like "ROMs" must still find its drive
+    // for the free-space check, and compare correctly with the sources.
+    let dest_abs = std::path::absolute(dest).unwrap_or_else(|_| dest.to_path_buf());
+    let dest = dest_abs.as_path();
+    let sources: Vec<PathBuf> = sources
+        .iter()
+        .map(|s| std::path::absolute(s).unwrap_or_else(|_| s.clone()))
+        .collect();
+    let sources = sources.as_slice();
     for s in sources {
         anyhow::ensure!(s.is_dir(), "{} is not a folder", s.display());
         anyhow::ensure!(
@@ -1906,6 +1933,39 @@ mod tests {
             ))
             .unwrap();
         assert_eq!(p.items.len(), 1);
+    }
+
+    #[test]
+    fn cheats_and_game_lists_are_not_games() {
+        let t = tempfile::tempdir().unwrap();
+        let src = t.path().join("in");
+        write(&src.join("Game.cht"), b";@@@@@ Game Title: x\n");
+        write(
+            &src.join("Super_Famicom.dat"),
+            b"<?xml version=\"1.0\"?>\n<!DOCTYPE datafile PUBLIC \"x\">\n<datafile></datafile>",
+        );
+        write(&src.join("snes.dat"), b"clrmamepro (\n\tname \"x\"\n)\n");
+        write(&src.join("A.sfc"), &snes_rom(false));
+        let p = rt()
+            .block_on(plan(
+                std::slice::from_ref(&src),
+                &t.path().join("ROMs"),
+                &ImportOptions::default(),
+                None,
+            ))
+            .unwrap();
+        assert_eq!(p.items.len(), 1, "{:#?}", p.items);
+        assert_eq!(p.ignored_files, 3);
+    }
+
+    #[test]
+    fn relative_destination_still_gets_a_space_check() {
+        let p = std::path::absolute(Path::new("ROMs-relative-test")).unwrap();
+        assert!(p.is_absolute());
+        assert!(
+            free_space(&p).is_some(),
+            "free space found via the parent folder"
+        );
     }
 
     #[test]

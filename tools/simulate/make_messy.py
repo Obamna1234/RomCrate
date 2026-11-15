@@ -248,6 +248,11 @@ put("PC/Manhunt/CmdLineExt03.dll", b"MZ" + junk(500))
 put("PC/FEAR/Readme.txt", b"This game uses SecuROM copy protection.")
 put("PC/FEAR/FEAR.exe", b"MZ" + junk(500))
 
+# Not games: a cheat file and a scraper's game list (real case: Skraper's Super_Famicom.dat).
+put("ds/nds game.cht", b";@@@@@ Game Title: test\r\n;@@@@@ Game Code: ATSE\r\n")
+put("snes stuff/Super_Famicom.dat", b'<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "x">\n<datafile><header><name>Super Nintendo Entertainment System</name></header></datafile>\n')
+put("Half Game (USA).iso.part", junk(3000))
+
 # Destination already has a few things.
 os.makedirs(os.path.join(dst, "Nintendo 64"), exist_ok=True)  # existing folder name must be reused
 put("snes/SMW.smc", SMW, root=dst)            # identical → "already there"

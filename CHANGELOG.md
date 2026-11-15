@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+Found by testing with real game files (6 DS and 5 SNES cartridges — all 11 sorted to the right console, 10 identified and given the right cover):
+- Cheat files (`.cht`, `.pnach`…), patches (`.ips`, `.bps`, `.ups`) and scraper game lists (Skraper's `Super_Famicom.dat`, No-Intro/Redump `.dat`) are left alone during import instead of being listed as "console unknown".
+- Unfinished `.part` downloads are now shown and refused during import (they were silently skipped).
+- Using a short folder name like `ROMs` for the destination no longer hides the free-space check.
+
 ## 0.3.0 — RomCrate, Pegasus launch lines and "Check my files"
 
 - **ShelfArt is now RomCrate.** Same app, new name now that it sorts, checks and sets up games as well as artwork. The command-line tool is now `romcrate-cli`. Downloads cached by ShelfArt are reused automatically. Because the app's ID changed, Windows/macOS install it as a new app (you can uninstall ShelfArt) and the app's saved settings start fresh.
