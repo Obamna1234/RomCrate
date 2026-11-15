@@ -1,5 +1,5 @@
 [package]
-name = "shelfart-core"
+name = "romcrate-core"
 description = "Account-free, privacy-first game artwork scraper engine"
 version.workspace = true
 edition.workspace = true

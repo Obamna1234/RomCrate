@@ -4,14 +4,14 @@
 //! save → launcher metadata) runs exactly as in the app, for every launcher.
 
 use image::{Rgba, RgbaImage};
-use shelfart_core::identify::Identifier;
-use shelfart_core::launchbox::LaunchBox;
-use shelfart_core::launchers::LauncherKind;
-use shelfart_core::net::SafeClient;
-use shelfart_core::paths::safe_component;
-use shelfart_core::scan;
-use shelfart_core::scrape::{Emit, GameStatus};
-use shelfart_core::{ArtKind, Event, Libretro, ScrapeConfig, Sources, Summary};
+use romcrate_core::identify::Identifier;
+use romcrate_core::launchbox::LaunchBox;
+use romcrate_core::launchers::LauncherKind;
+use romcrate_core::net::SafeClient;
+use romcrate_core::paths::safe_component;
+use romcrate_core::scan;
+use romcrate_core::scrape::{Emit, GameStatus};
+use romcrate_core::{ArtKind, Event, Libretro, ScrapeConfig, Sources, Summary};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex};
 
 const SNES_REPO: &str = "Nintendo_-_Super_Nintendo_Entertainment_System";
 const PSX_REPO: &str = "Sony_-_PlayStation";
-const SNES_ROM: &[u8] = b"SHELFART-TEST-ROM-CONTENTS";
+const SNES_ROM: &[u8] = b"ROMCRATE-TEST-ROM-CONTENTS";
 
 fn png(w: u32, h: u32, c: [u8; 4]) -> Vec<u8> {
     let img = RgbaImage::from_pixel(w, h, Rgba(c));
@@ -199,7 +199,7 @@ fn scrape(fx: &Fixture, cfg: ScrapeConfig) -> Run {
         }
     });
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let summary = rt.block_on(shelfart_core::run_scrape(
+    let summary = rt.block_on(romcrate_core::run_scrape(
         lib,
         vec![],
         cfg,
@@ -464,7 +464,7 @@ fn pegasus_3d_box_takes_box_front() {
     // Super Metroid has a real 3D box in the LaunchBox database: that's used.
     let lb = image::open(fx.root.join("snes/media/game1/boxFront.png")).unwrap();
     assert_eq!(lb.width() * 444, lb.height() * 333);
-    // Chrono Trigger has none, so ShelfArt renders one from the 2D cover:
+    // Chrono Trigger has none, so RomCrate renders one from the 2D cover:
     // a rendered 3D box has transparent corners; a flat cover would not.
     let img = image::open(fx.root.join("snes/media/Chrono Trigger (USA)/boxFront.png"))
         .unwrap()

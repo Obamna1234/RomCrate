@@ -71,7 +71,10 @@ expected = {
     "dreamcast/Shenmue (USA) (Disc 1).chd": "Shenmue (USA) (Disc 1).chd",
 }
 never = ["scph1001.bin", "readme.txt", "cover.jpg", "setup.exe", "failed download.gba",
-         "Broken (USA).cue", "mystery.dat2", "evil.m3u", ".hidden.sfc", "passwd"]
+         "Broken (USA).cue", "mystery.dat2", "evil.m3u", ".hidden.sfc", "passwd",
+         "Unconfirmed 812733.crdownload", "Manhunt (PS2 Classics Vault) [SLUS20827].pkg",
+         "Manhunt (Europe) (Disc 1).zip", "Broken Kart (USA).z64", "GTA San Andreas.mds",
+         "GTA San Andreas.mdf", "CmdLineExt03.dll", "manhunt.exe"]
 
 print("== Copy import (Downloads → ROMs sorted)")
 have = tree(dst)
@@ -99,6 +102,26 @@ if not gui:
     ok("Nothing was changed" in pre, "preview alone changes nothing")
     ok("even though it was in" in pre, "explains that the PC disc in the PS2 folder is really a PC disc")
     ok("official PlayStation list" in pre, "Crash Bandicoot.chd found in the official PlayStation list")
+    ok("checksum OK" in pre, "N64 ROMs with good checksums are marked 'checksum OK'")
+    for name, why in [("Unconfirmed 812733.crdownload", "Download didn't finish"),
+                      ("Manhunt (PS2 Classics Vault) [SLUS20827].pkg", "PlayStation Store package"),
+                      ("Manhunt (Europe) (Disc 1).zip", "archive is damaged"),
+                      ("Broken Kart (USA).z64", "N64 ROM is damaged")]:
+        ok(re.search(re.escape(name) + r".*\n\s*skipped: [^\n]*" + re.escape(why), pre) is not None,
+           f"import preview refuses {name} ({why})")
+
+    chk = log("0-check.log")
+    for want in ["Download didn't finish", "PlayStation Store package", "archive is damaged",
+                 "Disc 1).bin", "N64 ROM is damaged", "N64 ROM verified",
+                 "chdman can't read", "SecuROM disc copy protection"]:
+        ok(want in chk, f"check my files reports: {want}")
+    ok(re.search(r"PC[/\\]Manhunt\n.*SecuROM", chk) is not None, "copy protection named per game folder (PC/Manhunt)")
+    ok(re.search(r"PC[/\\]FEAR\n.*SecuROM", chk) is not None, "readme mention found (PC/FEAR)")
+    for bad in ["crack", "no-cd", "nocd", "bypass"]:
+        ok(bad not in chk.lower(), f"no copy-protection bypass advice ('{bad}')")
+    ok(os.path.exists(os.path.join(root, "0-check.exit")) and open(os.path.join(root, "0-check.exit")).read().strip() == "1",
+       "check exits with code 1 when there are problems")
+
     rerun = log("3-import-rerun.log")
     m = re.search(r"Done: (\d+) imported, (\d+) already there", rerun)
     ok(m is not None and m.group(1) == "0", f"second import copies nothing again ({m.group(0) if m else 'no summary'})")

@@ -26,7 +26,7 @@ fn unscramble(b: &[u8]) -> String {
         .collect()
 }
 
-/// Whether this build of ShelfArt has ScreenScraper developer access.
+/// Whether this build of RomCrate has ScreenScraper developer access.
 pub fn available() -> bool {
     !creds::SS_DEVID.is_empty() && !creds::SS_DEVPASSWORD.is_empty()
 }
@@ -235,7 +235,7 @@ impl ScreenScraper {
             let mut q = url.query_pairs_mut();
             q.append_pair("devid", &unscramble(creds::SS_DEVID));
             q.append_pair("devpassword", &unscramble(creds::SS_DEVPASSWORD));
-            q.append_pair("softname", concat!("ShelfArt-", env!("CARGO_PKG_VERSION")));
+            q.append_pair("softname", concat!("RomCrate-", env!("CARGO_PKG_VERSION")));
             q.append_pair("output", "json");
             if let Some((u, p)) = &self.user {
                 q.append_pair("ssid", u);
@@ -300,7 +300,7 @@ impl ScreenScraper {
                     401 => "ScreenScraper is currently closed to guests (busy hours). Try later, or add your own ScreenScraper login in Settings.",
                     403 => "ScreenScraper rejected this app's registration.",
                     423 => "ScreenScraper's API is closed right now.",
-                    426 => "This ShelfArt version is too old for ScreenScraper. Please update.",
+                    426 => "This RomCrate version is too old for ScreenScraper. Please update.",
                     430 => "Daily ScreenScraper quota reached. Extras will resume tomorrow.",
                     431 => "Too many unrecognised games for ScreenScraper today.",
                     _ => "ScreenScraper error.",

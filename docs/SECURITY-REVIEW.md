@@ -1,6 +1,6 @@
 # Security review — v0.1.0 (14 November 2026)
 
-A review and penetration test of ShelfArt before its first release. The rule
+A review and penetration test of RomCrate before its first release. The rule
 for this pass: **no fix ships unless the full test suite still passes**, so
 hardening can't break working features.
 
@@ -58,7 +58,7 @@ hardening can't break working features.
 
 The audit job in CI flagged six newly published advisories in two libraries
 added after this review: `zip` 2.6 (RUSTSEC-2026-0367/0368/0369/0429 — all in
-`ZipArchive::extract`, which ShelfArt doesn't use; it has its own checked
+`ZipArchive::extract`, which RomCrate doesn't use; it has its own checked
 extraction) and `quick-xml` 0.37 (RUSTSEC-2026-0194/0195 — quadratic attribute
 check, `NsReader` memory use). Both were upgraded (`zip` 9.5, `quick-xml` 0.42)
 anyway; entity handling was rewritten to resolve only the five standard
@@ -66,7 +66,7 @@ entities and numeric references. `cargo audit` is back to 0 vulnerabilities.
 
 ## Dependency audit
 
-- **Rust (`cargo audit`, 521 crates): 0 vulnerabilities.** 5 informational warnings, all inside Tauri's Linux GTK/D-Bus stack (`glib` 0.18, `zbus`/`zvariant`, `proc-macro-error`): marked unmaintained, or an unsound `glib` iterator ShelfArt never calls. They'll clear when Tauri updates its Linux dependencies; Dependabot is set up to pick that up.
+- **Rust (`cargo audit`, 521 crates): 0 vulnerabilities.** 5 informational warnings, all inside Tauri's Linux GTK/D-Bus stack (`glib` 0.18, `zbus`/`zvariant`, `proc-macro-error`): marked unmaintained, or an unsound `glib` iterator RomCrate never calls. They'll clear when Tauri updates its Linux dependencies; Dependabot is set up to pick that up.
 - **npm (`npm audit`): 0 vulnerabilities.**
 
 ## Added after the review: zipped folders

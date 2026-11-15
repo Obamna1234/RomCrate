@@ -17,7 +17,9 @@ interface Catalog {
   version: string; launchers: Launcher[]; systems: SystemInfo[];
   kinds: { id: ArtKind; label: string; source: string }[];
   sizePresets: [string, string, number][]; screenscraperAvailable: boolean; cacheDir: string;
+  launchProfiles: LaunchProfile[];
 }
+interface LaunchProfile { id: string; emulator: string; platform: string; systems: string[]; verified: boolean; verified_on?: string; notes?: string }
 interface Game { stem: string; file_name: string; rel_path: string }
 interface ScannedSystem { system_id: string; system_name: string; maker: string; path: string; folder_name: string; games: Game[] }
 interface Library { systems: ScannedSystem[] }
@@ -53,6 +55,9 @@ interface Prefs {
   launchbox: boolean;
   gameInfo: boolean;
   pegasusLayout: "auto" | "per-game" | "skraper";
+  pegasusOn: "android" | "none";
+  emulators: Record<string, string>;
+  fixLaunch: boolean;
   importDest: string;
   importSources: string[];
   importMode: "copy" | "move";
@@ -63,18 +68,19 @@ const DEFAULT_PREFS: Prefs = {
   roots: [], deselected: [], launcher: "pegasus", theme: {}, folders: {}, kinds: {},
   size: "standard", upscale: "smart", aiBinary: "", regions: ["usa", "world", "europe", "australia", "uk", "japan"],
   identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto", launchbox: true, gameInfo: true,
+  pegasusOn: "none", emulators: {}, fixLaunch: false,
   importDest: "", importSources: [], importMode: "copy", importRename: false,
 };
 
 function loadPrefs(): Prefs {
   try {
-    const raw = localStorage.getItem("shelfart.prefs");
+    const raw = localStorage.getItem("romcrate.prefs");
     if (raw) return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
   } catch { /* storage unavailable */ }
   return { ...DEFAULT_PREFS };
 }
 function savePrefs() {
-  try { localStorage.setItem("shelfart.prefs", JSON.stringify(prefs)); } catch { /* ignore */ }
+  try { localStorage.setItem("romcrate.prefs", JSON.stringify(prefs)); } catch { /* ignore */ }
 }
 
 let catalog!: Catalog;
@@ -241,10 +247,10 @@ let manualSystem = "";
 function viewLibrary(): Node[] {
   const out: Node[] = [
     h("h1", {}, "Your games"),
-    h("p", { class: "lead" }, "Point ShelfArt at the folder that holds your games. It recognises system folders like snes, psx, gba or megadrive automatically, and identifies each game by its contents — even badly named files."),
+    h("p", { class: "lead" }, "Point RomCrate at the folder that holds your games. It recognises system folders like snes, psx, gba or megadrive automatically, and identifies each game by its contents — even badly named files."),
     h("div", { class: "row" },
       h("button", { class: "btn primary", onclick: addRoots }, "+ Add ROM folder"),
-      h("button", { class: "btn", onclick: addZip, title: "A .zip of your games folder — ShelfArt unzips it next to the zip first" }, "+ Add zipped folder"),
+      h("button", { class: "btn", onclick: addZip, title: "A .zip of your games folder — RomCrate unzips it next to the zip first" }, "+ Add zipped folder"),
       prefs.roots.length ? h("button", { class: "btn", onclick: rescan, disabled: scanning }, scanning ? "Scanning…" : "Rescan") : null),
     h("div", { class: "desc", style: "margin-top:10px;color:var(--faint)" },
       "Games scattered across random folders? ",
@@ -298,7 +304,7 @@ function viewLibrary(): Node[] {
       h("div", { class: "card" },
         h("div", { class: "row" },
           h("button", { class: "btn", onclick: async () => { const p = await open({ directory: true, title: "Choose a system folder" }); if (p && !Array.isArray(p)) { manualPath = p; render(); } } }, manualPath ? "Change folder" : "Choose folder"),
-          manualPath ? h("span", { class: "chip" }, h("span", { class: "path" }, manualPath)) : h("span", { style: "color:var(--faint)" }, "Pick a folder, then tell ShelfArt which system it is."),
+          manualPath ? h("span", { class: "chip" }, h("span", { class: "path" }, manualPath)) : h("span", { style: "color:var(--faint)" }, "Pick a folder, then tell RomCrate which system it is."),
         ),
         manualPath ? h("div", { class: "row", style: "margin-top:12px" },
           (() => {
@@ -327,7 +333,7 @@ function viewLauncher(): Node[] {
   const theme = themeOf(l);
   const out: Node[] = [
     h("h1", {}, "Launcher & theme"),
-    h("p", { class: "lead" }, "Where should the artwork go? ShelfArt saves files with the exact names and folders your launcher expects, so they show up without any renaming."),
+    h("p", { class: "lead" }, "Where should the artwork go? RomCrate saves files with the exact names and folders your launcher expects, so they show up without any renaming."),
     h("div", { class: "launchers" },
       catalog.launchers.map((x) => h("button", {
         class: `launcher ${x.id === l.id ? "on" : ""}`,
@@ -363,13 +369,52 @@ function viewLauncher(): Node[] {
       h("h2", {}, "Media folder layout"),
       seg([["auto", "Match what's there"], ["skraper", "Skraper style"], ["per-game", "Folder per game"]], prefs.pegasusLayout, (v) => { prefs.pegasusLayout = v; savePrefs(); render(); }),
       h("div", { class: "desc" }, {
-        auto: "If a system already has Skraper folders (media/box2dfront…), ShelfArt adds to them; otherwise it uses a folder per game.",
+        auto: "If a system already has Skraper folders (media/box2dfront…), RomCrate adds to them; otherwise it uses a folder per game.",
         skraper: "media/box2dfront/<game>.png, media/wheel/… — the layout Skraper makes. Needs “Skraper Assets” enabled in Pegasus (on by default).",
         "per-game": "media/<game>/boxFront.png — Pegasus' own layout.",
       }[prefs.pegasusLayout]));
   }
+  if (l.id === "pegasus") out.push(...launchSection());
   out.push(h("div", { class: "note" }, `→ ${l.where_note}`));
   out.push(footer("library", "artwork", "Continue", !folderReady()));
+  return out;
+}
+
+/** Pegasus needs a launch line per system to start games; pick the emulator per console. */
+function launchSection(): Node[] {
+  const out: Node[] = [
+    h("h2", {}, "Starting games from Pegasus"),
+    h("p", { class: "desc" }, "Pegasus needs a “launch” line in each console folder to start your games. RomCrate can write it for the emulator you use."),
+    seg([["android", "Android handheld"], ["none", "I'll add my own"]], prefs.pegasusOn, (v) => { prefs.pegasusOn = v; savePrefs(); render(); }),
+  ];
+  if (prefs.pegasusOn !== "android") return out;
+  const systemsHere = [...new Set(library.systems.map((s) => s.system_id))];
+  const rows = systemsHere
+    .map((id) => ({ id, name: library.systems.find((s) => s.system_id === id)!.system_name, profiles: catalog.launchProfiles.filter((p) => p.platform === "android" && p.systems.includes(id)) }))
+    .filter((r) => r.profiles.length)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!rows.length) {
+    out.push(h("div", { class: "desc", style: "margin-top:10px" }, library.systems.length
+      ? "None of your consoles have a known launch line yet — Pegasus files will get a placeholder for you to fill in."
+      : "Add your games on step 1 to choose emulators."));
+  } else {
+    out.push(h("div", { class: "card", style: "margin-top:12px" }, rows.map((r) => {
+      const sorted = [...r.profiles].sort((a, b) => Number(b.verified) - Number(a.verified));
+      const chosen = sorted.find((p) => p.id === prefs.emulators[r.id]) ?? sorted[0];
+      return h("div", { class: "emu-row" },
+        h("div", {}, h("div", { style: "font-weight:600" }, r.name),
+          h("div", { class: "hint" }, chosen.verified ? `Tested on ${chosen.verified_on ?? "a device"}` : "Not tested yet — written switched off, with a note so you can try it")),
+        h("span", { class: `badge ${chosen.verified ? "sure" : "attention"}` }, chosen.verified ? "Tested" : "Untested"),
+        h("select", {
+          class: "input",
+          onchange: (e: Event) => { prefs.emulators[r.id] = (e.target as HTMLSelectElement).value; savePrefs(); render(); },
+        }, sorted.map((p) => h("option", { value: p.id, selected: p.id === chosen.id }, p.emulator))));
+    })));
+  }
+  out.push(h("div", { style: "margin-top:12px" },
+    toggle(prefs.fixLaunch, "Fix launch lines in Pegasus files I already have",
+      "Off: your existing metadata.pegasus.txt files are never changed — RomCrate just shows you the line to add. On: a .bak backup is made first, then only the tested launch line is added (or a known-broken one replaced).",
+      () => { prefs.fixLaunch = !prefs.fixLaunch; })));
   return out;
 }
 
@@ -404,8 +449,8 @@ function viewArtwork(): Node[] {
         const on = chosen.includes(k.id);
         const src = k.source === "free" ? ["free", "Free"]
           : k.source === "launchbox" ? ["free", "Free · LaunchBox"]
-          : k.source === "launchbox+generated" ? ["free", "Free · LaunchBox / ShelfArt"]
-          : k.source === "generated" ? ["generated", "Made by ShelfArt"]
+          : k.source === "launchbox+generated" ? ["free", "Free · LaunchBox / RomCrate"]
+          : k.source === "generated" ? ["generated", "Made by RomCrate"]
           : ["extras", catalog.screenscraperAvailable ? "Extras" : "Coming soon"];
         return h("div", {
           class: `kind ${on ? "on" : ""} ${avail ? "" : "disabled"}`,
@@ -433,7 +478,7 @@ function viewArtwork(): Node[] {
         h("div", { class: "row" },
           h("input", { class: "input", style: "flex:1", value: prefs.aiBinary, placeholder: "Path to realesrgan-ncnn-vulkan(.exe)", oninput: (e: Event) => { prefs.aiBinary = (e.target as HTMLInputElement).value; savePrefs(); } }),
           h("button", { class: "btn", onclick: async () => { const p = await open({ multiple: false, title: "Choose realesrgan-ncnn-vulkan" }); if (p && !Array.isArray(p)) { prefs.aiBinary = p; savePrefs(); render(); } } }, "Browse…")),
-        h("div", { class: "hint" }, "Free download from github.com/xinntao/Real-ESRGAN (releases → ncnn-vulkan). If it isn't set, ShelfArt falls back to Smart."))));
+        h("div", { class: "hint" }, "Free download from github.com/xinntao/Real-ESRGAN (releases → ncnn-vulkan). If it isn't set, RomCrate falls back to Smart."))));
   }
   out.push(
     h("h2", {}, "Region preference"),
@@ -447,7 +492,7 @@ function viewArtwork(): Node[] {
         return h("select", { class: "input", style: "width:auto;padding:6px 10px", onchange: (e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) { prefs.regions.push(v); savePrefs(); render(); } } },
           h("option", { value: "" }, "+ Add region"), missing.map((r) => h("option", { value: r }, REGION_NAMES[r])));
       })()),
-    h("div", { class: "desc" }, "When a game has artwork from several regions, ShelfArt picks the first one on this list that exists."),
+    h("div", { class: "desc" }, "When a game has artwork from several regions, RomCrate picks the first one on this list that exists."),
     h("h2", {}, "Options"),
     h("div", { class: "card toggles" },
       toggle(prefs.launchbox, "Use the free LaunchBox games database", "Adds 3D boxes, back covers, cartridges, logos, fan art and game info. No account; downloads about 200 MB once a week.", () => (prefs.launchbox = !prefs.launchbox)),
@@ -486,6 +531,9 @@ async function startScrape() {
     pegasus_layout: prefs.pegasusLayout,
     use_launchbox: prefs.launchbox,
     game_info: prefs.gameInfo && prefs.launchbox,
+    launch: l.id === "pegasus" && prefs.pegasusOn === "android"
+      ? { platform: "android", perSystem: prefs.emulators, fixExisting: prefs.fixLaunch }
+      : { platform: null, perSystem: {}, fixExisting: false },
   };
   Object.assign(run, { running: true, total: selectedGames(), processed: 0, results: [], log: [], summary: null, filter: "all", currentSystem: "" });
   render();
@@ -537,7 +585,7 @@ function viewScrape(): Node[] {
   if (!run.running && !run.summary) {
     const kinds = kindsFor(l).map((k) => catalog.kinds.find((x) => x.id === k)!.label);
     out.push(
-      h("p", { class: "lead" }, "Everything's set. ShelfArt only ever saves into the folders below and never deletes your files."),
+      h("p", { class: "lead" }, "Everything's set. RomCrate only ever saves into the folders below and never deletes your files."),
       h("div", { class: "recap" },
         h("div", { class: "card" }, h("div", { class: "k" }, "Games"), h("div", { class: "v" }, `${selectedGames()} games in ${selectedSystems().length} systems`)),
         h("div", { class: "card" }, h("div", { class: "k" }, "Launcher"), h("div", { class: "v" }, `${l.name.split(" (")[0]} · ${themeOf(l).name}`), l.needs_folder ? h("div", { class: "note", style: "margin-top:6px" }, prefs.folders[l.id] ?? "") : null),
@@ -599,7 +647,7 @@ async function openOutput() {
 
 async function exportMissing() {
   if (!run.summary) return;
-  const text = `Games ShelfArt couldn't find artwork for (${new Date().toLocaleString()}):\n\n${run.summary.missingGames.join("\n")}\n`;
+  const text = `Games RomCrate couldn't find artwork for (${new Date().toLocaleString()}):\n\n${run.summary.missingGames.join("\n")}\n`;
   await invoke<boolean>("save_missing_report", { text }).then((ok) => ok && toast("Saved")).catch((e) => toast(String(e)));
 }
 
@@ -612,13 +660,13 @@ function viewSettings(): Node[] {
   const mb = cacheBytes === null ? "…" : `${(cacheBytes / 1048576).toFixed(1)} MB`;
   return [
     h("h1", {}, "Settings & privacy"),
-    h("p", { class: "lead" }, "ShelfArt works without an account, collects nothing and only talks to the artwork sources listed here."),
+    h("p", { class: "lead" }, "RomCrate works without an account, collects nothing and only talks to the artwork sources listed here."),
     h("h2", {}, "Privacy"),
     h("div", { class: "card" }, h("ul", { class: "privacy", style: "margin:0;padding-left:18px" },
       h("li", {}, h("strong", {}, "No account, no telemetry. "), "There is no sign-up, no analytics and no crash reporting."),
-      h("li", {}, h("strong", {}, "Only known sites. "), "ShelfArt connects over HTTPS to GitHub and libretro (free artwork and game databases), the LaunchBox games database and, if enabled, screenscraper.fr — nothing else, even if a server tries to redirect it."),
+      h("li", {}, h("strong", {}, "Only known sites. "), "RomCrate connects over HTTPS to GitHub and libretro (free artwork and game databases), the LaunchBox games database and, if enabled, screenscraper.fr — nothing else, even if a server tries to redirect it."),
       h("li", {}, h("strong", {}, "Clean files only. "), "Every image is fully decoded and re-saved as a fresh PNG, so nothing hidden in a download reaches your drive. Videos and manuals are checked to be real MP4/PDF files."),
-      h("li", {}, h("strong", {}, "Your files are safe. "), "ShelfArt never deletes games, never writes outside the folders you pick, and backs up gamelist.xml before changing it."))),
+      h("li", {}, h("strong", {}, "Your files are safe. "), "RomCrate never deletes games, never writes outside the folders you pick, and backs up gamelist.xml before changing it."))),
     h("h2", {}, "ScreenScraper login (optional)"),
     h("div", { class: "card" },
       h("div", { style: "color:var(--muted);margin-bottom:12px;line-height:1.5" },
@@ -641,7 +689,7 @@ function viewSettings(): Node[] {
       h("button", { class: "btn", onclick: async () => { await invoke("clear_cache"); cacheBytes = null; toast("Cache cleared"); render(); } }, "Clear cache")),
     h("h2", {}, "About"),
     h("div", { class: "card", style: "color:var(--muted);line-height:1.55" },
-      `ShelfArt ${catalog.version} — free and open source (MIT). Artwork from the libretro-thumbnails project and the LaunchBox Games Database`,
+      `RomCrate ${catalog.version} — free and open source (MIT). Artwork from the libretro-thumbnails project and the LaunchBox Games Database`,
       catalog.screenscraperAvailable ? " and ScreenScraper" : "",
       ". Game identification uses the No-Intro and Redump databases published by libretro. All artwork belongs to its respective owners."),
   ];
@@ -663,6 +711,42 @@ interface ImportPlan {
   neededBytes: number; freeBytes?: number; enoughSpace: boolean; ignoredFiles: number; notes: string[];
 }
 interface ImportSummary { imported: number; alreadyThere: number; failed: number; skipped: number; bytes: number; cancelled: boolean; folders: string[]; errors: string[] }
+
+interface Finding { severity: "info" | "warn" | "error"; path: string; title: string; advice: string; check: string }
+interface CheckReport { findings: Finding[]; filesChecked: number; errors: number; warnings: number }
+let checkState: { running: boolean; report: CheckReport | null } = { running: false, report: null };
+
+async function checkMyFiles() {
+  checkState = { running: true, report: null };
+  render();
+  try {
+    checkState.report = await invoke<CheckReport>("check_files", { paths: prefs.importSources });
+  } catch (e) {
+    toast(String(e));
+  }
+  checkState.running = false;
+  render();
+  document.getElementById("check-results")?.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+function checkPanel(): Node[] {
+  const r = checkState.report;
+  if (!r) return [];
+  const sevLabel = { error: "Problem", warn: "Warning", info: "OK" } as const;
+  const sevClass = { error: "attention", warn: "likely", info: "sure" } as const;
+  const shown = r.findings.filter((f) => f.severity !== "info" || f.check === "n64-checksum");
+  return [
+    h("h2", { id: "check-results" }, "Check my files"),
+    h("div", { class: r.errors ? "banner warn" : "banner" },
+      r.errors || r.warnings
+        ? `Checked ${r.filesChecked} files: ${r.errors} problem${r.errors === 1 ? "" : "s"} and ${r.warnings} warning${r.warnings === 1 ? "" : "s"}. Files with problems won't be imported.`
+        : `Checked ${r.filesChecked} files — no problems found.`),
+    h("div", { class: "imp-list" }, shown.map((f) => h("div", { class: "imp" },
+      h("div", {}),
+      h("div", {}, h("div", { class: "n" }, f.title), h("div", { class: "to" }, `\u200E${f.path}\u200E`), h("div", { class: f.severity === "error" ? "warnline" : "why" }, f.advice)),
+      h("span", { class: `badge ${sevClass[f.severity]}` }, sevLabel[f.severity])))),
+  ];
+}
 
 const imp = {
   planning: false, plan: null as ImportPlan | null,
@@ -765,7 +849,7 @@ function itemBadge(it: ImportItem) {
 function viewImport(): Node[] {
   const out: (Node | null)[] = [
     h("h1", {}, "Import & sort games"),
-    h("p", { class: "lead" }, "Point ShelfArt at a messy folder (or a .zip). It works out which console every game is for — by looking inside the files, not just their names — and puts each one into a console folder in your ROMs folder. You'll see everything before anything is copied."),
+    h("p", { class: "lead" }, "Point RomCrate at a messy folder (or a .zip). It works out which console every game is for — by looking inside the files, not just their names — and puts each one into a console folder in your ROMs folder. You'll see everything before anything is copied."),
   ];
 
   // 1. From / to / how
@@ -791,9 +875,12 @@ function viewImport(): Node[] {
         toggle(prefs.importRename, "Rename to official names", "Games identified from their contents get their official No-Intro / Redump name (single-file games only).", () => { prefs.importRename = !prefs.importRename; imp.plan = null; })),
       h("div", { class: "row", style: "margin-top:16px" },
         h("button", { class: "btn primary", disabled: !prefs.importSources.length || !prefs.importDest || imp.planning || imp.running, onclick: previewImport },
-          imp.planning ? "Looking at your files…" : imp.plan ? "Preview again" : "Preview")),
+          imp.planning ? "Looking at your files…" : imp.plan ? "Preview again" : "Preview"),
+        h("button", { class: "btn", disabled: !prefs.importSources.length || checkState.running || imp.running, onclick: checkMyFiles },
+          checkState.running ? "Checking…" : "Check my files")),
     ),
   );
+  out.push(...checkPanel());
 
   const p = imp.plan;
   if (!p) return out.filter((x): x is Node => !!x);
@@ -895,5 +982,5 @@ async function boot() {
 }
 
 boot().catch((e) => {
-  document.getElementById("main")!.replaceChildren(h("div", { class: "banner warn" }, `ShelfArt failed to start: ${e}`));
+  document.getElementById("main")!.replaceChildren(h("div", { class: "banner warn" }, `RomCrate failed to start: ${e}`));
 });

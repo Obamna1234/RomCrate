@@ -34,7 +34,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Build CLI
-        run: cargo build --release -p shelfart-cli
+        run: cargo build --release -p romcrate-cli
       - name: Make test collection
         run: |
           python -m pip install --quiet pycdlib
@@ -42,12 +42,12 @@ jobs:
       - name: Scrape like a user
         run: |
           set -o pipefail
-          B=target/release/shelfart-cli
+          B=target/release/romcrate-cli
           R="$RUNNER_TEMP/sim/$ROMS_NAME"
           O="$RUNNER_TEMP/sim/out"; mkdir -p "$O"
           $B scan "$R"                                       2>&1 | tee "$O/1-scan.log"
-          $B scrape --roms "$R" --launcher pegasus           2>&1 | tee "$O/2-pegasus.log"
-          $B scrape --roms "$R" --launcher pegasus           2>&1 | tee "$O/3-pegasus-rerun.log"
+          $B scrape --roms "$R" --launcher pegasus --pegasus-on android 2>&1 | tee "$O/2-pegasus.log"
+          $B scrape --roms "$R" --launcher pegasus --pegasus-on android 2>&1 | tee "$O/3-pegasus-rerun.log"
           $B scrape --roms "$R" --launcher es-de --folder "$RUNNER_TEMP/sim/ES-DE/downloaded_media" 2>&1 | tee "$O/4-esde.log"
       - name: Check results
         if: always()
@@ -57,11 +57,13 @@ jobs:
         if: always()
         run: |
           set -o pipefail
-          B="$PWD/target/release/shelfart-cli"
+          B="$PWD/target/release/romcrate-cli"
           I="$RUNNER_TEMP/sim/import"
           python tools/simulate/make_messy.py "$I"
           cp -R "$I/Downloads" "$I/Downloads2"
           cd "$I"
+          "$B" check Downloads > 0-check.log 2>&1 && echo 0 > 0-check.exit || echo $? > 0-check.exit
+          cat 0-check.log
           "$B" import --from Downloads --to "ROMs sorted"                               2>&1 | tee 1-import-preview.log
           "$B" import --from Downloads --to "ROMs sorted" --skip mystery.dat2 --yes      2>&1 | tee 2-import.log
           "$B" import --from Downloads --to "ROMs sorted" --skip mystery.dat2 --yes      2>&1 | tee 3-import-rerun.log
@@ -98,16 +100,16 @@ jobs:
           targets: x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - run: sudo apt-get update && sudo apt-get install -y musl-tools
-      - run: cargo build --release -p shelfart-cli --target x86_64-unknown-linux-musl
+      - run: cargo build --release -p romcrate-cli --target x86_64-unknown-linux-musl
       - name: Run inside Ubuntu 20.10
         run: |
           python3 -m pip install --quiet pycdlib
           python3 tools/simulate/make_fixtures.py "$RUNNER_TEMP/sim/roms"
-          cp target/x86_64-unknown-linux-musl/release/shelfart-cli "$RUNNER_TEMP/sim/"
+          cp target/x86_64-unknown-linux-musl/release/romcrate-cli "$RUNNER_TEMP/sim/"
           docker run --rm -v "$RUNNER_TEMP/sim:/sim" ubuntu:20.10 bash -c '
             set -e; cat /etc/os-release | head -2
-            /sim/shelfart-cli scan /sim/roms
-            /sim/shelfart-cli scrape --roms /sim/roms --launcher pegasus --systems snes,nes --no-launchbox
+            /sim/romcrate-cli scan /sim/roms
+            /sim/romcrate-cli scrape --roms /sim/roms --launcher pegasus --systems snes,nes --no-launchbox
           ' 2>&1 | tee "$RUNNER_TEMP/sim/ubuntu-20.10.log"
 
   gui:
@@ -154,7 +156,7 @@ jobs:
         shell: pwsh
         run: |
           $out = "$env:RUNNER_TEMP\sim\gui"
-          $p = Start-Process "$env:GITHUB_WORKSPACE\target\release\shelfart.exe" -PassThru
+          $p = Start-Process "$env:GITHUB_WORKSPACE\target\release\romcrate.exe" -PassThru
           Start-Sleep 20
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
@@ -174,12 +176,12 @@ jobs:
           sleep 2
           tauri-driver &
           sleep 5
-          python tools/simulate/drive_gui.py "$GITHUB_WORKSPACE/target/release/shelfart" "$RUNNER_TEMP/sim/$ROMS_NAME" "$RUNNER_TEMP/sim/gui" "$RUNNER_TEMP/sim/import"
+          python tools/simulate/drive_gui.py "$GITHUB_WORKSPACE/target/release/romcrate" "$RUNNER_TEMP/sim/$ROMS_NAME" "$RUNNER_TEMP/sim/gui" "$RUNNER_TEMP/sim/import"
 
       - name: Launch the app (macOS — no WebDriver for macOS webviews, so launch + screenshot only)
         if: runner.os == 'macOS'
         run: |
-          ./target/release/shelfart > "$RUNNER_TEMP/sim/gui/app-output.log" 2>&1 &
+          ./target/release/romcrate > "$RUNNER_TEMP/sim/gui/app-output.log" 2>&1 &
           PID=$!
           sleep 20
           screencapture -x "$RUNNER_TEMP/sim/gui/01-first-launch.png" || echo "screencapture not permitted"
@@ -220,8 +222,8 @@ jobs:
           gh release download -R $env:GITHUB_REPOSITORY -p "*_x64-setup.exe" -D $env:RUNNER_TEMP
           $setup = Get-ChildItem $env:RUNNER_TEMP -Filter *_x64-setup.exe | Select-Object -First 1
           Start-Process $setup.FullName -ArgumentList "/S" -Wait
-          $exe = Get-ChildItem "$env:LOCALAPPDATA\ShelfArt","$env:ProgramFiles\ShelfArt" -Filter shelfart.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $exe) { throw "installer did not put shelfart.exe where expected" }
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\RomCrate","$env:ProgramFiles\RomCrate","$env:LOCALAPPDATA\ShelfArt","$env:ProgramFiles\ShelfArt" -Include romcrate.exe,shelfart.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "installer did not put romcrate.exe where expected" }
           "installed at $($exe.FullName)"
           $p = Start-Process $exe.FullName -PassThru
           Start-Sleep 20

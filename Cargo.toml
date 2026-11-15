@@ -1,13 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/shelfart-core", "crates/shelfart-cli", "src-tauri"]
+members = ["crates/romcrate-core", "crates/romcrate-cli", "src-tauri"]
 
 [workspace.package]
 version = "0.2.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/Obamna1234/ShelfArt"
-authors = ["ShelfArt contributors"]
+repository = "https://github.com/Obamna1234/RomCrate"
+authors = ["RomCrate contributors"]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

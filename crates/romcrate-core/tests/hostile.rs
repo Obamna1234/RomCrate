@@ -1,16 +1,16 @@
-//! Penetration-style tests: feed ShelfArt hostile and malformed input and make
+//! Penetration-style tests: feed RomCrate hostile and malformed input and make
 //! sure it never crashes, never writes outside the chosen folder and never
 //! accepts something dangerous.
 
-use shelfart_core::identify::{self, GameDb};
-use shelfart_core::imaging;
-use shelfart_core::launchers::{self, GameArt, LauncherKind};
-use shelfart_core::matcher::{display_title, normalize_title, split_title, MatchPrefs, NameIndex};
-use shelfart_core::paths::{is_within, join_safe, safe_component};
-use shelfart_core::ps3bios;
-use shelfart_core::scan;
-use shelfart_core::source::{parse_listing, ArtKind};
-use shelfart_core::systems;
+use romcrate_core::identify::{self, GameDb};
+use romcrate_core::imaging;
+use romcrate_core::launchers::{self, GameArt, LauncherKind};
+use romcrate_core::matcher::{display_title, normalize_title, split_title, MatchPrefs, NameIndex};
+use romcrate_core::paths::{is_within, join_safe, safe_component};
+use romcrate_core::ps3bios;
+use romcrate_core::scan;
+use romcrate_core::source::{parse_listing, ArtKind};
+use romcrate_core::systems;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;

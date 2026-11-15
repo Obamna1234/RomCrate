@@ -1,4 +1,4 @@
-"""Drive the installed ShelfArt app like a user would, via tauri-driver (WebDriver).
+"""Drive the installed RomCrate app like a user would, via tauri-driver (WebDriver).
 
 Points the app at a ROM folder (pre-set in its saved preferences, since the
 native folder picker can't be clicked by WebDriver), walks every wizard step,
@@ -78,8 +78,8 @@ try:
     shot("first-launch")
     errs = d.get_log("browser") if "goog:loggingPrefs" in d.capabilities else []
 
-    prefs = {"roots": [roms], "launcher": "pegasus"}
-    d.execute_script("localStorage.setItem('shelfart.prefs', arguments[0]);", json.dumps(prefs))
+    prefs = {"roots": [roms], "launcher": "pegasus", "pegasusOn": "android"}
+    d.execute_script("localStorage.setItem('romcrate.prefs', arguments[0]);", json.dumps(prefs))
     d.refresh()
     wait_for(lambda: " games · " in body(), 120, "library scan")
     time.sleep(1)
@@ -121,16 +121,32 @@ try:
 
     if imp_dir:
         # ---- Import & sort, the way a user clicks through it.
-        prefs = json.loads(d.execute_script("return localStorage.getItem('shelfart.prefs')") or "{}")
+        prefs = json.loads(d.execute_script("return localStorage.getItem('romcrate.prefs')") or "{}")
         prefs["importSources"] = [os.path.join(imp_dir, "Downloads")]
         prefs["importDest"] = os.path.join(imp_dir, "ROMs sorted")
         prefs["importMode"] = "copy"
-        d.execute_script("localStorage.setItem('shelfart.prefs', arguments[0]);", json.dumps(prefs))
+        d.execute_script("localStorage.setItem('romcrate.prefs', arguments[0]);", json.dumps(prefs))
         d.refresh()
         wait_for(lambda: "Your games" in body(), 60, "app to reload")
         d.find_element(By.ID, "nav-import").click()
         time.sleep(1)
         shot("import-start")
+        chk = [b for b in d.find_elements(By.TAG_NAME, "button") if b.text.strip() == "Check my files"]
+        if not chk:
+            problems.append("import: no 'Check my files' button")
+        else:
+            chk[0].click()
+            if wait_for(lambda: "problems and" in body() or "no problems found" in body(), 300, "check my files"):
+                time.sleep(1)
+                d.execute_script("document.getElementById('check-results')?.scrollIntoView({block:'start'})")
+                time.sleep(1)
+                shot("check-my-files")
+                t = body()
+                for want in ["Download didn't finish", "archive is damaged", "N64 ROM is damaged", "SecuROM"]:
+                    if want not in t:
+                        problems.append(f"check my files: '{want}' not shown")
+            d.execute_script("document.getElementById('main').scrollTop = 0")
+            time.sleep(1)
         pv = [b for b in d.find_elements(By.TAG_NAME, "button") if b.text.strip() == "Preview"]
         if not pv:
             problems.append("import: no Preview button")

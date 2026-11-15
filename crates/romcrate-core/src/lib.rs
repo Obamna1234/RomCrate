@@ -1,4 +1,4 @@
-//! ShelfArt core: an account-free, privacy-first artwork scraper for emulated games.
+//! RomCrate core: an account-free, privacy-first artwork scraper for emulated games.
 //!
 //! Pipeline: [`scan`] ROM folders → load the artwork list for each system from
 //! [`source`] → [`matcher`] picks the right artwork for each game → download
@@ -9,11 +9,13 @@ pub mod archive;
 pub mod identify;
 pub mod imaging;
 pub mod import;
+pub mod launch;
 pub mod launchbox;
 pub mod launchers;
 pub mod matcher;
 pub mod net;
 pub mod paths;
+pub mod preflight;
 pub mod ps3bios;
 pub mod scan;
 pub mod scrape;

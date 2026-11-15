@@ -1,5 +1,5 @@
 //! Zipped game folders: if the user picks a `.zip` instead of a folder,
-//! ShelfArt unpacks it next to the zip and then carries on as normal.
+//! RomCrate unpacks it next to the zip and then carries on as normal.
 //!
 //! Safety rules for untrusted archives:
 //! * every entry path is checked — nothing can be written outside the target

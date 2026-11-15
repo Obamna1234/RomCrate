@@ -1,7 +1,7 @@
 //! The LaunchBox Games Database: a free, community-maintained database that
 //! LaunchBox publishes as a single daily download (no account, no API key).
 //!
-//! It gives ShelfArt game information (descriptions, genre, developer,
+//! It gives RomCrate game information (descriptions, genre, developer,
 //! publisher, release date, players, rating) and extra image types the
 //! libretro collection doesn't have: 3D boxes, back covers, cartridges,
 //! clear logos and fan art.
@@ -64,7 +64,7 @@ struct LbImage {
     region: Option<String>,
 }
 
-/// Everything ShelfArt needs from the database for one platform.
+/// Everything RomCrate needs from the database for one platform.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct PlatformDb {
     version: u32,

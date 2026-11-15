@@ -430,6 +430,27 @@ pub fn finalize_system(
     results: &[GameArt],
     overwrite: bool,
 ) -> anyhow::Result<Vec<String>> {
+    finalize_system_with(
+        launcher,
+        folder,
+        sys,
+        ss,
+        results,
+        overwrite,
+        &crate::launch::LaunchChoice::default(),
+    )
+}
+
+/// Like [`finalize_system`], with Pegasus launch lines.
+pub fn finalize_system_with(
+    launcher: LauncherKind,
+    folder: Option<&Path>,
+    sys: &System,
+    ss: &ScannedSystem,
+    results: &[GameArt],
+    overwrite: bool,
+    launch: &crate::launch::LaunchChoice,
+) -> anyhow::Result<Vec<String>> {
     match launcher {
         LauncherKind::EmulationStation => write_gamelist(
             &ss.path.join("gamelist.xml"),
@@ -456,7 +477,7 @@ pub fn finalize_system(
             None => Ok(vec![]),
         },
         LauncherKind::Pegasus | LauncherKind::PegasusSkraper => {
-            write_pegasus_metadata(sys, ss, results)
+            write_pegasus_metadata(sys, ss, results, launch)
         }
         LauncherKind::RetroArch => match folder {
             Some(f) => write_retroarch_playlist(f, sys, ss),
@@ -491,26 +512,35 @@ fn write_pegasus_metadata(
     sys: &System,
     ss: &ScannedSystem,
     results: &[GameArt],
+    launch: &crate::launch::LaunchChoice,
 ) -> anyhow::Result<Vec<String>> {
-    let has_meta = ["metadata.pegasus.txt", "metadata.txt"]
+    use crate::launch;
+    let profile = launch.profile_for(sys.id);
+    let existing = ["metadata.pegasus.txt", "metadata.txt"]
         .iter()
-        .any(|f| ss.path.join(f).exists());
-    if has_meta {
-        return Ok(vec![format!(
-            "{}: kept your existing Pegasus metadata file; art is in the media folder.",
-            ss.system_name
-        )]);
+        .map(|f| ss.path.join(f))
+        .find(|p| p.exists());
+    if let Some(path) = existing {
+        return update_existing_pegasus(sys, ss, &path, profile, launch.fix_existing);
     }
     let mut exts: Vec<&str> = sys.extensions.to_vec();
     exts.sort();
     exts.dedup();
     let mut s = String::new();
-    s.push_str("# Created by ShelfArt. Edit freely — ShelfArt never overwrites this file.\n");
+    s.push_str("# Created by RomCrate. Edit freely — RomCrate never overwrites this file.\n");
     s.push_str(&format!("collection: {}\n", sys.name));
     s.push_str(&format!("shortname: {}\n", ss.folder_name));
     s.push_str(&format!("extensions: {}\n", exts.join(", ")));
-    s.push_str("# Add how Pegasus should start these games, for example:\n");
-    s.push_str("# launch: retroarch -L \"/path/to/core\" \"{file.path}\"\n\n");
+    match profile {
+        Some(p) => {
+            s.push_str(&launch::render_block(p));
+            s.push('\n');
+        }
+        None => {
+            s.push_str("# Add how Pegasus should start these games, for example:\n");
+            s.push_str("# launch: retroarch -L \"/path/to/core\" \"{file.path}\"\n\n");
+        }
+    }
     for g in &ss.games {
         let art = results.iter().find(|r| r.game.path == g.path);
         let info = art.and_then(|r| r.info.as_ref());
@@ -549,10 +579,106 @@ fn write_pegasus_metadata(
         s.push('\n');
     }
     std::fs::write(ss.path.join("metadata.pegasus.txt"), s)?;
-    Ok(vec![format!(
-        "{}: created metadata.pegasus.txt — add a 'launch:' line so Pegasus can start the games.",
+    let note = match profile {
+        Some(p) if p.verified => format!(
+            "{}: created metadata.pegasus.txt with the tested launch line for {}.",
+            ss.system_name, p.emulator
+        ),
+        Some(p) => format!(
+            "{}: created metadata.pegasus.txt. The launch line for {} hasn't been tested on a device yet, so it's commented out — remove the '# ' to try it.",
+            ss.system_name, p.emulator
+        ),
+        None => format!(
+            "{}: created metadata.pegasus.txt — add a 'launch:' line so Pegasus can start the games.",
+            ss.system_name
+        ),
+    };
+    Ok(vec![note])
+}
+
+/// An existing Pegasus file is never changed unless the user opted in
+/// (`fix_existing`); then a backup is made first and only the launch block
+/// is added or replaced.
+fn update_existing_pegasus(
+    sys: &System,
+    ss: &ScannedSystem,
+    path: &Path,
+    profile: Option<&'static crate::launch::LaunchProfile>,
+    fix_existing: bool,
+) -> anyhow::Result<Vec<String>> {
+    use crate::launch;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let mut notes = vec![format!(
+        "{}: kept your existing {name}; art is in the media folder.",
         ss.system_name
-    )])
+    )];
+    let text = std::fs::read_to_string(path)?;
+
+    // Disc games stored as .chd but the file doesn't list .chd.
+    let has_chd = ss
+        .games
+        .iter()
+        .any(|g| g.file_name.to_lowercase().ends_with(".chd"));
+    let header: String = text
+        .lines()
+        .take_while(|l| !l.trim_start().starts_with("game:"))
+        .filter(|l| {
+            let t = l.trim_start();
+            t.starts_with("extension") || l.starts_with(' ')
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    if has_chd && header.contains("extension") && !header.contains("chd") {
+        notes.push(format!(
+            "{}: your {name} doesn't list .chd in 'extensions:', so Pegasus won't show your .chd games. Add chd to that line.",
+            ss.system_name
+        ));
+    }
+
+    let Some(p) = profile else { return Ok(notes) };
+    let block = launch::render_block(p);
+    let bad = launch::find_known_bad(&text, sys.id);
+    let missing = !launch::has_launch(&text);
+    if !missing && bad.is_none() {
+        return Ok(notes);
+    }
+    let problem = match bad {
+        Some(b) => format!("its launch line won't work: {}", b.why),
+        None => "it has no launch line, so Pegasus can't start these games".to_string(),
+    };
+    if fix_existing && p.verified {
+        let new_text = match bad {
+            Some(_) => Some(launch::replace_launch(&text, &block)),
+            None => launch::insert_launch(&text, &block),
+        };
+        if let Some(new_text) = new_text {
+            let backup = launch::backup_path(path);
+            std::fs::copy(path, &backup)?;
+            crate::imaging::save_bytes(new_text.as_bytes(), path)?;
+            notes.push(format!(
+                "{}: {problem}. Fixed with the tested launch line for {} (your original is saved as {}).",
+                ss.system_name,
+                p.emulator,
+                backup.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+            ));
+            return Ok(notes);
+        }
+    }
+    notes.push(format!(
+        "{}: {problem}. {}\n{}",
+        ss.system_name,
+        if p.verified {
+            "Add this to the top of the file (or turn on \"Fix launch lines in existing Pegasus files\"):"
+        } else {
+            "This launch line hasn't been tested yet; try it by adding it to the top of the file:"
+        },
+        block.trim_end()
+    ));
+    Ok(notes)
 }
 
 fn one_line(s: &str) -> String {

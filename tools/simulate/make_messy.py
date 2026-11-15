@@ -2,7 +2,7 @@
 that already has a few things in it.
 
 Files have real console *headers* (built here from public format specs, no
-copyrighted data) so ShelfArt has to work out the console from the contents,
+copyrighted data) so RomCrate has to work out the console from the contents,
 not the name or folder.
 
 Usage: python make_messy.py <sim dir>
@@ -72,12 +72,38 @@ def snes(copier=False):
     return (bytes(512) if copier else b"") + bytes(r)
 
 
+def n64_crc(rom):
+    """Standard N64 header checksum (CIC-6102 seed), independent of RomCrate's Rust code."""
+    M = 0xFFFFFFFF
+    t1 = t2 = t3 = t4 = t5 = t6 = 0xF8CA4DDC
+    for i in range(0x1000, 0x101000, 4):
+        d = int.from_bytes(rom[i:i + 4], "big")
+        if (t6 + d) & M < t6:
+            t4 = (t4 + 1) & M
+        t6 = (t6 + d) & M
+        t3 ^= d
+        sh = d & 0x1F
+        r = ((d << sh) | (d >> (32 - sh))) & M if sh else d
+        t5 = (t5 + r) & M
+        t2 = t2 ^ r if t2 > d else t2 ^ (t6 ^ d)
+        t1 = (t1 + (t5 ^ d)) & M
+    return t6 ^ t4 ^ t3, t5 ^ t2 ^ t1
+
+
+def n64_z64(damaged=False):
+    r = bytearray(junk(0x101000 + 0x2000))
+    r[0:4] = bytes([0x80, 0x37, 0x12, 0x40])
+    c1, c2 = n64_crc(r)
+    r[0x10:0x14] = c1.to_bytes(4, "big")
+    r[0x14:0x18] = c2.to_bytes(4, "big")
+    if damaged:
+        r[0x8000] ^= 0xFF
+    return bytes(r)
+
+
 def n64_v64():
-    return bytes([0x37, 0x80, 0x40, 0x12]) + junk(64 * 1024)
-
-
-def n64_z64():
-    return bytes([0x80, 0x37, 0x12, 0x40]) + junk(64 * 1024)
+    z = n64_z64()
+    return bytes(b for i in range(0, len(z), 2) for b in (z[i + 1], z[i]))
 
 
 def megadrive():
@@ -204,6 +230,23 @@ put("Broken (USA).cue", b'FILE "Broken (USA).bin" BINARY\r\n')  # bin missing
 put("mystery.dat2", junk(5000))                            # nobody knows
 put("evil.m3u", b"../../../../etc/passwd\r\n")
 put(".hidden.sfc", snes())
+
+# Problems "Check my files" must catch (named after real cases).
+put("Unconfirmed 812733.crdownload", junk(4000))
+put("Manhunt (PS2 Classics Vault) [SLUS20827].pkg", b"\x7fPKG" + junk(4000))
+zbad = io.BytesIO()
+with zipfile.ZipFile(zbad, "w", zipfile.ZIP_STORED) as z:
+    z.writestr("Manhunt (Europe) (Disc 1).bin", junk(50_000))
+zb = bytearray(zbad.getvalue())
+zb[300] ^= 0xFF  # damage the stored data
+put("Manhunt (Europe) (Disc 1).zip", bytes(zb))
+put("Broken Kart (USA).z64", n64_z64(damaged=True))
+put("GTA San Andreas/GTA San Andreas.mds", b"MEDIA DESCRIPTOR" + junk(100))
+put("GTA San Andreas/GTA San Andreas.mdf", junk(8000))
+put("PC/Manhunt/manhunt.exe", b"MZ" + junk(500))
+put("PC/Manhunt/CmdLineExt03.dll", b"MZ" + junk(500))
+put("PC/FEAR/Readme.txt", b"This game uses SecuROM copy protection.")
+put("PC/FEAR/FEAR.exe", b"MZ" + junk(500))
 
 # Destination already has a few things.
 os.makedirs(os.path.join(dst, "Nintendo 64"), exist_ok=True)  # existing folder name must be reused

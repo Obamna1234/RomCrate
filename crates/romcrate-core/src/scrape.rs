@@ -4,7 +4,7 @@
 //! Source order for each piece of art:
 //! 1. libretro-thumbnails (free, unlimited) for box art, screenshots, titles, logos
 //! 2. ScreenScraper guest mode (optional) for everything else and for gaps
-//! 3. ShelfArt itself: mix images and 3D boxes rendered from the 2D cover
+//! 3. RomCrate itself: mix images and 3D boxes rendered from the 2D cover
 
 use crate::identify::{self, Fingerprint, GameDb, Identifier};
 use crate::imaging::{self, Size, Upscale};
@@ -61,6 +61,9 @@ pub struct ScrapeConfig {
     pub use_launchbox: bool,
     /// Write descriptions, genre, release date… into launcher files.
     pub game_info: bool,
+    /// Pegasus launch lines (which emulator starts each system).
+    #[serde(default)]
+    pub launch: crate::launch::LaunchChoice,
 }
 
 impl Default for ScrapeConfig {
@@ -84,6 +87,7 @@ impl Default for ScrapeConfig {
             pegasus_layout: launchers::PegasusLayout::Auto,
             use_launchbox: true,
             game_info: true,
+            launch: crate::launch::LaunchChoice::default(),
         }
     }
 }
@@ -422,13 +426,14 @@ pub async fn run(
             }
         }
         if cfg.write_metadata {
-            match launchers::finalize_system(
+            match launchers::finalize_system_with(
                 launcher,
                 cfg.folder.as_deref(),
                 sys,
                 &ss,
                 &arts,
                 cfg.overwrite,
+                &cfg.launch,
             ) {
                 Ok(notes) => notes.into_iter().for_each(|n| log(&emit, "info", n)),
                 Err(e) => log(&emit, "warn", format!("{}: {e}", ss.system_name)),

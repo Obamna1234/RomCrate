@@ -100,6 +100,15 @@ for sysdir, f, pat in expect:
     title = (pegasus(sysdir) or {}).get(f, "<missing>")
     ok(re.search(pat, title, re.I) is not None, f"{sysdir}/{f} → '{title}'")
 
+print("\n== Pegasus launch lines (Android)")
+ps2_meta = os.path.join(roms, "ps2", "metadata.pegasus.txt")
+ps2_text = open(ps2_meta, encoding="utf-8").read() if os.path.exists(ps2_meta) else ""
+ok("launch: am start\n  -n come.nanodata.armsx2/com.armsx2.MainActivity\n" in ps2_text, "PS2 gets the tested ARMSX2 (Play Store) launch line")
+ok(ps2_text.count("\nlaunch:") == 1, "exactly one active launch line for PS2")
+snes_meta = os.path.join(roms, "snes", "metadata.pegasus.txt")
+snes_text = open(snes_meta, encoding="utf-8").read() if os.path.exists(snes_meta) else ""
+ok("# launch: am start" in snes_text and "\nlaunch:" not in snes_text, "SNES RetroArch line is written switched off (untested)")
+
 pct = 100 * covered / max(1, total)
 print(f"\n== Cover coverage: {covered}/{total} games ({pct:.0f}%)")
 ok(pct >= 80, "at least 80% of games got a cover")

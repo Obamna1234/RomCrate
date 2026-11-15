@@ -209,3 +209,8 @@ select.input { appearance: none; }
 .space { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 14px 0; }
 select.input { padding: 6px 10px; }
 .sys-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 16px; }
+
+.emu-row { display: grid; grid-template-columns: 1fr auto minmax(220px, 280px); gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.emu-row:last-child { border-bottom: 0; }
+.emu-row select.input { width: 100%; }
+@media (max-width: 820px) { .emu-row { grid-template-columns: 1fr auto; } .emu-row select.input { grid-column: 1 / -1; } }

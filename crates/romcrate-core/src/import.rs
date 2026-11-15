@@ -658,7 +658,7 @@ fn walk(root: &Path, skip: &Path, out: &mut Vec<PathBuf>, ignored: &mut usize, d
 // ---------------------------------------------------------------- plan
 
 /// Look at everything under `sources` and decide where each game goes.
-/// Reads files but writes nothing. `identifier` (optional) lets ShelfArt use
+/// Reads files but writes nothing. `identifier` (optional) lets RomCrate use
 /// the official game lists for files whose console can't be read from inside
 /// (e.g. `.chd`) and to look up official names for renaming.
 pub async fn plan(
@@ -977,6 +977,28 @@ pub async fn plan(
                     ItemState::NeedsSystem,
                 ),
             };
+            // "Check my files": problems that make a game unusable stop it here.
+            let (mut state, mut reason, mut warnings) = (state, reason, warnings);
+            for f in &files {
+                for finding in crate::preflight::check_file(f) {
+                    match finding.severity {
+                        crate::preflight::Severity::Error => {
+                            state = ItemState::Skipped(format!(
+                                "{} — {}",
+                                finding.title, finding.advice
+                            ));
+                        }
+                        crate::preflight::Severity::Warn => {
+                            warnings.push(format!("{} — {}", finding.title, finding.advice));
+                        }
+                        crate::preflight::Severity::Info => {
+                            if finding.check == "n64-checksum" {
+                                reason.push_str(" · checksum OK");
+                            }
+                        }
+                    }
+                }
+            }
             let mut it = item(
                 items.len(),
                 &main,
@@ -988,7 +1010,7 @@ pub async fn plan(
                 state,
                 warnings,
             );
-            if !missing.is_empty() {
+            if !missing.is_empty() && !matches!(it.state, ItemState::Skipped(_)) {
                 it.state = ItemState::Skipped("incomplete — fix or re-download it first".into());
             }
             items.push(it);

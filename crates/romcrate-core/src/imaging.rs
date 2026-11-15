@@ -137,7 +137,7 @@ pub async fn ai_upscale(binary: &Path, img: &DynamicImage) -> anyhow::Result<Dyn
     );
     // Unique, private directory (not a predictable name in a shared temp folder).
     let tmp = tempfile::Builder::new()
-        .prefix("shelfart-esrgan-")
+        .prefix("romcrate-esrgan-")
         .tempdir()?;
     let input = tmp.path().join("in.png");
     let output = tmp.path().join("out.png");
