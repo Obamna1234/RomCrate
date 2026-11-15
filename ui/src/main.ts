@@ -391,7 +391,8 @@ function launchSection(): Node[] {
   const systemsHere = [...new Set(library.systems.map((s) => s.system_id))];
   const rows = systemsHere
     .map((id) => ({ id, name: library.systems.find((s) => s.system_id === id)!.system_name, profiles: catalog.launchProfiles.filter((p) => p.platform === "android" && p.systems.includes(id)) }))
-    .filter((r) => r.profiles.length);
+    .filter((r) => r.profiles.length)
+    .sort((a, b) => a.name.localeCompare(b.name));
   if (!rows.length) {
     out.push(h("div", { class: "desc", style: "margin-top:10px" }, library.systems.length
       ? "None of your consoles have a known launch line yet — Pegasus files will get a placeholder for you to fill in."
@@ -400,15 +401,14 @@ function launchSection(): Node[] {
     out.push(h("div", { class: "card", style: "margin-top:12px" }, rows.map((r) => {
       const sorted = [...r.profiles].sort((a, b) => Number(b.verified) - Number(a.verified));
       const chosen = sorted.find((p) => p.id === prefs.emulators[r.id]) ?? sorted[0];
-      return h("div", { class: "row", style: "justify-content:space-between;padding:6px 0" },
+      return h("div", { class: "emu-row" },
         h("div", {}, h("div", { style: "font-weight:600" }, r.name),
           h("div", { class: "hint" }, chosen.verified ? `Tested on ${chosen.verified_on ?? "a device"}` : "Not tested yet — written switched off, with a note so you can try it")),
-        h("div", { class: "row" },
-          h("span", { class: `badge ${chosen.verified ? "sure" : "attention"}` }, chosen.verified ? "Tested" : "Untested"),
-          h("select", {
-            class: "input",
-            onchange: (e: Event) => { prefs.emulators[r.id] = (e.target as HTMLSelectElement).value; savePrefs(); render(); },
-          }, sorted.map((p) => h("option", { value: p.id, selected: p.id === chosen.id }, p.emulator)))));
+        h("span", { class: `badge ${chosen.verified ? "sure" : "attention"}` }, chosen.verified ? "Tested" : "Untested"),
+        h("select", {
+          class: "input",
+          onchange: (e: Event) => { prefs.emulators[r.id] = (e.target as HTMLSelectElement).value; savePrefs(); render(); },
+        }, sorted.map((p) => h("option", { value: p.id, selected: p.id === chosen.id }, p.emulator))));
     })));
   }
   out.push(h("div", { style: "margin-top:12px" },
