@@ -143,9 +143,9 @@ try:
         problems.append("pegasus task: no 'Write launch lines' button")
     else:
         wl[0].click()
-        if wait_for(lambda: "What changed" in body(), 60, "launch lines written"):
-            time.sleep(1)
-            shot("pegasus-task")
+        wait_for(lambda: "what changed" in body().lower(), 60, "launch lines written")
+        time.sleep(1)
+        shot("pegasus-task")
 
     if "failed to start" in body().lower():
         problems.append("app shows 'failed to start'")
