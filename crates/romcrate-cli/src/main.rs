@@ -20,6 +20,9 @@ USAGE:
   romcrate-cli scrape --roms <folder> --launcher <name> [options]
   romcrate-cli launchers
   romcrate-cli emulators            (Pegasus launch lines RomCrate knows)
+  romcrate-cli devices              (devices RomCrate has defaults for)
+  romcrate-cli pegasus --roms <dir>... [--pegasus-on android] [--emulator s=id] [--fix-launch]
+                                    (write just the Pegasus launch lines, no artwork)
   romcrate-cli import --from <folder|zip> --to <ROMs folder> [options]
 
 CHECK MY FILES:
@@ -119,6 +122,69 @@ fn main() -> anyhow::Result<()> {
             );
             if report.errors > 0 {
                 std::process::exit(1);
+            }
+            Ok(())
+        }
+        Some("devices") => {
+            for d in romcrate_core::devices::all() {
+                println!(
+                    "{:<18} {:<46} {}x{}  {}",
+                    d.id,
+                    d.name,
+                    d.screen.width,
+                    d.screen.height,
+                    if d.too_demanding.is_empty() {
+                        String::new()
+                    } else {
+                        format!("too demanding: {}", d.too_demanding.join(", "))
+                    }
+                );
+            }
+            Ok(())
+        }
+        Some("pegasus") => {
+            let mut roots = Vec::new();
+            let mut choice = romcrate_core::launch::LaunchChoice {
+                platform: Some("android".into()),
+                ..Default::default()
+            };
+            let mut it = args[1..].iter();
+            while let Some(a) = it.next() {
+                let mut val = || {
+                    it.next()
+                        .cloned()
+                        .with_context(|| format!("{a} needs a value"))
+                };
+                match a.as_str() {
+                    "--roms" => roots.push(PathBuf::from(val()?)),
+                    "--pegasus-on" => {
+                        let v = val()?;
+                        if v != "android" {
+                            bail!("--pegasus-on supports: android");
+                        }
+                    }
+                    "--emulator" => {
+                        let v = val()?;
+                        let (sys, id) = v
+                            .split_once('=')
+                            .context("use --emulator <system>=<profile id>")?;
+                        let p = romcrate_core::launch::profile(id)
+                            .with_context(|| format!("unknown emulator profile '{id}'"))?;
+                        if !p.systems.iter().any(|s| s == sys) {
+                            bail!("{} doesn't run {sys} games", p.emulator);
+                        }
+                        choice.per_system.insert(sys.to_string(), id.to_string());
+                    }
+                    "--fix-launch" => choice.fix_existing = true,
+                    other => bail!("unknown option {other}\n\n{HELP}"),
+                }
+            }
+            if roots.is_empty() {
+                bail!("--roms <your ROMs folder> is required");
+            }
+            let lib = scan::scan_roots(&unzip_roots(&roots));
+            for n in romcrate_core::launchers::write_launch_lines(&lib, &choice) {
+                println!("{n}");
             }
             Ok(())
         }

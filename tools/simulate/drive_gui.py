@@ -74,22 +74,41 @@ def step(i):
 
 try:
     d.set_window_size(1280, 860)
-    wait_for(lambda: "Your games" in body(), 60, "app to load")
-    shot("first-launch")
-    errs = d.get_log("browser") if "goog:loggingPrefs" in d.capabilities else []
+    d.execute_script("localStorage.clear()")
+    d.refresh()
+    # First start: pick the device.
+    if not wait_for(lambda: "What will you play on?" in body(), 60, "device picker on first start"):
+        problems.append("first start doesn't ask for the device")
+    shot("first-launch-device")
+    odin = [b for b in d.find_elements(By.CSS_SELECTOR, "button.device") if "Odin 2 Portal" in b.text]
+    if not odin:
+        problems.append("Odin 2 Portal not offered")
+    else:
+        odin[0].click()
+        if wait_for(lambda: "What would you like to do?" in body(), 20, "home after picking a device"):
+            shot("home")
+        got = json.loads(d.execute_script("return localStorage.getItem('romcrate.prefs')") or "{}")
+        for k, want in [("device", "odin2-portal"), ("launcher", "pegasus"), ("pegasusOn", "android"), ("size", "standard")]:
+            if got.get(k) != want:
+                problems.append(f"device defaults: {k} = {got.get(k)!r}, expected {want!r}")
+        for t in ["Set up everything", "Custom — pick what to do", "Pegasus launch lines", "Get artwork"]:
+            if t not in body():
+                problems.append(f"home: '{t}' missing")
 
-    prefs = {"roots": [roms], "launcher": "pegasus", "pegasusOn": "android"}
+    prefs = json.loads(d.execute_script("return localStorage.getItem('romcrate.prefs')") or "{}")
+    prefs.update({"roots": [roms], "launcher": "pegasus", "pegasusOn": "android"})
     d.execute_script("localStorage.setItem('romcrate.prefs', arguments[0]);", json.dumps(prefs))
     d.refresh()
+    d.find_element(By.ID, "nav-art").click()
     wait_for(lambda: " games · " in body(), 120, "library scan")
     time.sleep(1)
     shot("library")
 
-    step(1)
-    shot("launcher")
     step(2)
-    shot("artwork")
+    shot("launcher")
     step(3)
+    shot("artwork")
+    step(4)
     shot("scrape-ready")
 
     start = [b for b in d.find_elements(By.TAG_NAME, "button") if b.text.strip() == "Start scraping"]
@@ -113,8 +132,20 @@ try:
     d.find_element(By.ID, "nav-settings").click()
     time.sleep(1.5)
     shot("settings")
-    step(0)
+    step(1)
     shot("library-after")
+
+    # Custom task: launch lines only.
+    d.find_element(By.ID, "nav-pegasus").click()
+    time.sleep(1.5)
+    wl = [b for b in d.find_elements(By.TAG_NAME, "button") if b.text.strip() == "Write launch lines"]
+    if not wl:
+        problems.append("pegasus task: no 'Write launch lines' button")
+    else:
+        wl[0].click()
+        wait_for(lambda: "what changed" in body().lower(), 60, "launch lines written")
+        time.sleep(1)
+        shot("pegasus-task")
 
     if "failed to start" in body().lower():
         problems.append("app shows 'failed to start'")

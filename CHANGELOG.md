@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 — Your device, Home, and an activity log
+
+- **"What will you play on?"** On first start you pick your device (AYN Odin 2 Portal / Odin 2 / Odin 2 Mini, Retroid Pocket 5, Anbernic RG556, Anbernic RG35XX/RG40XX family, Steam Deck, PC/TV, or "Not sure — safe defaults"). RomCrate then picks the frontend layout, Android launch lines and artwork size for that screen, and marks consoles the device can't realistically run. Change it any time from the sidebar. Specs and sources are in `data/devices.json`; only the Odin 2 Portal is marked as tested on a real unit.
+- **New Home screen with two clear choices:**
+  - **Set up everything** (recommended) walks you through sorting, choosing folders, frontend, artwork and launcher files — with a "My games are already sorted" shortcut for people who are already set up.
+  - **Custom — pick what to do** runs one task on its own: Check my files, Import & sort, Get artwork, or Pegasus launch lines. Disc compression and the device setup checklist appear there as "soon".
+- **Pegasus launch lines on their own:** write or fix launch lines without re-scraping (app task, and `romcrate-cli pegasus --roms <dir>`).
+- **Activity log:** everything RomCrate does — games found or not found and why, files skipped, errors — is saved to a daily log on your computer (kept 30 days). Open it from Settings or Home.
+- CLI: `romcrate-cli devices`.
+
 ## 0.3.1
 
 Found by testing with real game files (6 DS and 5 SNES cartridges — all 11 sorted to the right console, 10 identified and given the right cover):

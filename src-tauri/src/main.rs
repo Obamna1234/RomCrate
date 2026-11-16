@@ -53,6 +53,16 @@ struct Catalog {
     screenscraper_available: bool,
     cache_dir: String,
     launch_profiles: Vec<romcrate_core::launch::LaunchProfile>,
+    devices: Vec<DeviceInfo>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceInfo {
+    #[serde(flatten)]
+    device: romcrate_core::devices::Device,
+    size_preset: &'static str,
+    launch_platform: Option<&'static str>,
 }
 
 #[tauri::command]
@@ -80,6 +90,14 @@ fn get_catalog() -> Catalog {
         screenscraper_available: screenscraper::available(),
         cache_dir: default_cache_dir().to_string_lossy().to_string(),
         launch_profiles: romcrate_core::launch::db().profiles.clone(),
+        devices: romcrate_core::devices::all()
+            .iter()
+            .map(|d| DeviceInfo {
+                device: d.clone(),
+                size_preset: d.size_preset(),
+                launch_platform: d.launch_platform(),
+            })
+            .collect(),
     }
 }
 
@@ -203,6 +221,13 @@ async fn start_scrape(
         {
             previewable.lock().unwrap().insert(p.clone());
         }
+        if let Some(line) = romcrate_core::activity::describe(&e) {
+            romcrate_core::activity::append(
+                &romcrate_core::activity::log_dir(),
+                "Artwork",
+                &[line],
+            );
+        }
         let _ = app2.emit("scrape-event", &e);
     });
     let running = state.running.clone();
@@ -211,6 +236,37 @@ async fn start_scrape(
         running.store(false, Ordering::SeqCst);
     });
     Ok(())
+}
+
+/// Just the Pegasus launch lines for these ROM folders (no artwork).
+#[tauri::command]
+async fn write_launch_lines(
+    roots: Vec<String>,
+    launch: romcrate_core::launch::LaunchChoice,
+) -> Result<Vec<String>, String> {
+    let roots: Vec<PathBuf> = roots
+        .into_iter()
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .collect();
+    if roots.is_empty() {
+        return Err("Add your ROM folders first".into());
+    }
+    if launch.platform.is_none() {
+        return Err("Choose where you run Pegasus first".into());
+    }
+    tokio::task::spawn_blocking(move || {
+        let lib = romcrate_core::scan::scan_roots(&roots);
+        let notes = romcrate_core::launchers::write_launch_lines(&lib, &launch);
+        romcrate_core::activity::append(
+            &romcrate_core::activity::log_dir(),
+            "Pegasus launch lines",
+            &notes,
+        );
+        notes
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// "Check my files": find unfinished downloads, damaged archives, store
@@ -226,9 +282,34 @@ async fn check_files(paths: Vec<String>) -> Result<romcrate_core::preflight::Rep
     if paths.is_empty() {
         return Err("Choose a folder to check first".into());
     }
-    tokio::task::spawn_blocking(move || romcrate_core::preflight::check(&paths, &|_| {}))
-        .await
-        .map_err(|e| e.to_string())
+    let report =
+        tokio::task::spawn_blocking(move || romcrate_core::preflight::check(&paths, &|_| {}))
+            .await
+            .map_err(|e| e.to_string())?;
+    let mut lines: Vec<String> = report
+        .findings
+        .iter()
+        .filter(|f| f.severity != romcrate_core::preflight::Severity::Info)
+        .map(|f| {
+            format!(
+                "{:?}: {} — {}\n{}",
+                f.severity,
+                f.title,
+                f.path.display(),
+                f.advice
+            )
+        })
+        .collect();
+    lines.push(format!(
+        "Checked {} files: {} problems, {} warnings",
+        report.files_checked, report.errors, report.warnings
+    ));
+    romcrate_core::activity::append(
+        &romcrate_core::activity::log_dir(),
+        "Check my files",
+        &lines,
+    );
+    Ok(report)
 }
 
 /// Look at a messy folder (or .zip) and work out where every game should go.
@@ -317,6 +398,36 @@ async fn start_import(
                     return;
                 }
                 *l = std::time::Instant::now();
+            }
+            match &e {
+                import::ImportEvent::ItemDone { ok, message, .. } => {
+                    romcrate_core::activity::append(
+                        &romcrate_core::activity::log_dir(),
+                        "Import",
+                        &[format!("{} {message}", if *ok { "OK" } else { "FAILED" })],
+                    )
+                }
+                import::ImportEvent::Finished { summary } => {
+                    let mut l = vec![format!(
+                        "Finished: {} imported, {} already there, {} left out, {} failed{}",
+                        summary.imported,
+                        summary.already_there,
+                        summary.skipped,
+                        summary.failed,
+                        if summary.cancelled {
+                            " (stopped early)"
+                        } else {
+                            ""
+                        }
+                    )];
+                    l.extend(summary.errors.iter().cloned());
+                    romcrate_core::activity::append(
+                        &romcrate_core::activity::log_dir(),
+                        "Import",
+                        &l,
+                    );
+                }
+                _ => {}
             }
             let _ = app.emit("import-event", &e);
         });
@@ -456,6 +567,27 @@ fn open_folder(app: AppHandle, path: String, state: State<'_, AppState>) -> Resu
         .map_err(|e| e.to_string())
 }
 
+/// Where the activity log lives (shown in Settings).
+#[tauri::command]
+fn log_info() -> serde_json::Value {
+    let dir = romcrate_core::activity::log_dir();
+    serde_json::json!({
+        "dir": dir.to_string_lossy(),
+        "today": romcrate_core::activity::today_file(&dir).to_string_lossy(),
+    })
+}
+
+/// Open the activity log folder in the file manager.
+#[tauri::command]
+fn open_log_folder(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = romcrate_core::activity::log_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    app.opener()
+        .open_path(dir.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 /// On small screens (e.g. 1024×768, or big display scaling) shrink the window so it
 /// isn't opened partly off-screen.
 fn fit_to_screen(app: &tauri::App) {
@@ -490,6 +622,7 @@ fn main() {
         .manage(AppState::default())
         .setup(|app| {
             fit_to_screen(app);
+            romcrate_core::activity::prune(&romcrate_core::activity::log_dir());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -501,6 +634,9 @@ fn main() {
             plan_import,
             start_import,
             check_files,
+            write_launch_lines,
+            log_info,
+            open_log_folder,
             thumbnail,
             guess_folder,
             cache_size,
