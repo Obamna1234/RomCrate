@@ -438,6 +438,13 @@ pub fn write_launch_lines(
             Err(e) => notes.push(format!("{}: {e}", ss.system_name)),
         }
     }
+    if notes.is_empty() {
+        notes.push(
+            "No games found, so nothing was written. Pick the folder that holds your console \
+             folders (like ROMs, with snes, ps2 … inside). Empty (0-byte) files are ignored."
+                .to_string(),
+        );
+    }
     notes
 }
 

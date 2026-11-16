@@ -51,7 +51,10 @@ fn untested_emulators_are_commented_out() {
     let notes = finalize(&dir, "snes", &android());
     let meta = fs::read_to_string(dir.join("metadata.pegasus.txt")).unwrap();
     assert!(!launch::has_launch(&meta), "{meta}");
-    assert!(meta.contains("# launch: am start --user 0"));
+    assert!(
+        meta.contains("# launch: am start\n#   -n com.retroarch/"),
+        "{meta}"
+    );
     assert!(meta.contains("NOT tested"));
     assert!(notes[0].contains("commented out"));
 }
@@ -227,4 +230,15 @@ fn launch_lines_only_task_writes_every_system() {
         notes.iter().any(|n| n.contains("Super Nintendo")),
         "{notes:?}"
     );
+}
+
+#[test]
+fn launch_lines_task_says_when_there_is_nothing_to_do() {
+    let t = tempfile::tempdir().unwrap();
+    write(&t.path().join("n64/empty.z64"), b"");
+    let lib = romcrate_core::scan::scan_roots(&[t.path().to_path_buf()]);
+    let notes = romcrate_core::launchers::write_launch_lines(&lib, &android());
+    assert_eq!(notes.len(), 1);
+    assert!(notes[0].starts_with("No games found"), "{notes:?}");
+    assert!(!t.path().join("n64/metadata.pegasus.txt").exists());
 }

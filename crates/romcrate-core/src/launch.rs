@@ -329,6 +329,35 @@ mod tests {
     }
 
     #[test]
+    fn owners_tested_lines_are_on_and_exact() {
+        let c = LaunchChoice {
+            platform: Some("android".into()),
+            ..Default::default()
+        };
+        let cases = [
+            ("n64", "retroarch-n64", "launch: am start\n  -n com.retroarch/.browser.retroactivity.RetroActivityFuture\n  -e ROM \"{file.path}\"\n  -e LIBRETRO /data/data/com.retroarch/cores/mupen64plus_next_gles3_libretro_android.so\n"),
+            ("nds", "melonds", "launch: am start\n  -n me.magnum.melonds/me.magnum.melonds.ui.emulator.EmulatorActivity\n  -d {file.uri}\n  --grant-read-uri-permission\n"),
+            ("wii", "dolphin-wii", "launch: am start\n  -n org.dolphinemu.dolphinemu/.ui.main.MainActivity\n  -a android.intent.action.VIEW\n  --es AutoStartFile \"{file.path}\"\n"),
+            ("ps2", "armsx2-playstore", "launch: am start\n  -n come.nanodata.armsx2/"),
+        ];
+        for (sys, id, line) in cases {
+            let p = c.profile_for(sys).unwrap();
+            assert_eq!(p.id, id, "{sys}");
+            assert!(p.verified, "{id}");
+            let b = render_block(p);
+            assert!(has_launch(&b) && b.contains(line), "{b}");
+        }
+        // Not launched by anyone yet: written, but switched off.
+        for sys in ["snes", "nes", "gb", "gbc", "gba", "psx", "psp", "gc"] {
+            let p = c.profile_for(sys).unwrap();
+            assert!(!p.verified, "{sys}");
+            assert!(!has_launch(&render_block(p)), "{sys}");
+        }
+        // Play Store RetroArch is the default over the retroarch.com build.
+        assert_eq!(c.profile_for("snes").unwrap().package, "com.retroarch");
+    }
+
+    #[test]
     fn untested_profiles_are_commented_out() {
         let b = render_block(profile("retroarch64-snes").unwrap());
         assert!(!has_launch(&b), "{b}");
