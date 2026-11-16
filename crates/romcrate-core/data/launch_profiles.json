@@ -5,7 +5,9 @@
       "id": "armsx2-playstore",
       "emulator": "ARMSX2 (Play Store)",
       "platform": "android",
-      "systems": ["ps2"],
+      "systems": [
+        "ps2"
+      ],
       "package": "come.nanodata.armsx2",
       "activity": "com.armsx2.MainActivity",
       "launch": "am start\n  -n come.nanodata.armsx2/com.armsx2.MainActivity\n  -a android.intent.action.VIEW\n  -d \"{file.uri}\"\n  --activity-clear-task\n  --activity-clear-top\n  --activity-no-history",
@@ -19,7 +21,9 @@
       "id": "armsx2-github",
       "emulator": "ARMSX2 (GitHub build)",
       "platform": "android",
-      "systems": ["ps2"],
+      "systems": [
+        "ps2"
+      ],
       "package": "com.armsx2",
       "activity": "com.armsx2.MainActivity",
       "launch": "am start\n  -n com.armsx2/com.armsx2.MainActivity\n  -a android.intent.action.VIEW\n  -d \"{file.uri}\"\n  --activity-clear-task\n  --activity-clear-top\n  --activity-no-history",
@@ -29,68 +33,204 @@
       "notes": "Only for the GitHub build of ARMSX2. If you installed ARMSX2 from the Play Store, use the Play Store profile instead."
     },
     {
+      "id": "retroarch-n64",
+      "emulator": "RetroArch (Play Store) · Mupen64Plus-Next core",
+      "platform": "android",
+      "systems": [
+        "n64"
+      ],
+      "package": "com.retroarch",
+      "activity": "com.retroarch.browser.retroactivity.RetroActivityFuture",
+      "launch": "am start\n  -n com.retroarch/.browser.retroactivity.RetroActivityFuture\n  -e ROM \"{file.path}\"\n  -e LIBRETRO /data/data/com.retroarch/cores/mupen64plus_next_gles3_libretro_android.so\n  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg\n  -e IME com.android.inputmethod.latin/.LatinIME\n  -e DATADIR /data/data/com.retroarch\n  -e SDCARD /storage/emulated/0\n  -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files",
+      "verified": true,
+      "verified_on": "AYN Odin 2 Portal, Android 13",
+      "verified_date": "2026-11-16",
+      "source": "Project owner's working metadata.pegasus.txt, games launched from Pegasus on a real device",
+      "notes": "Install the 'Nintendo - Nintendo 64 (Mupen64Plus-Next)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'."
+    },
+    {
+      "id": "retroarch-snes",
+      "emulator": "RetroArch (Play Store) · Snes9x core",
+      "platform": "android",
+      "systems": [
+        "snes"
+      ],
+      "package": "com.retroarch",
+      "activity": "com.retroarch.browser.retroactivity.RetroActivityFuture",
+      "launch": "am start\n  -n com.retroarch/.browser.retroactivity.RetroActivityFuture\n  -e ROM \"{file.path}\"\n  -e LIBRETRO /data/data/com.retroarch/cores/snes9x_libretro_android.so\n  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg\n  -e IME com.android.inputmethod.latin/.LatinIME\n  -e DATADIR /data/data/com.retroarch\n  -e SDCARD /storage/emulated/0\n  -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files",
+      "verified": false,
+      "verified_date": "2026-11-16",
+      "source": "Project owner's metadata.pegasus.txt (same pattern as the tested RetroArch N64 line), not launched on a device yet",
+      "notes": "Install the 'Nintendo - SNES / SFC (Snes9x - Current)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'."
+    },
+    {
+      "id": "retroarch-nes",
+      "emulator": "RetroArch (Play Store) · Nestopia core",
+      "platform": "android",
+      "systems": [
+        "nes"
+      ],
+      "package": "com.retroarch",
+      "activity": "com.retroarch.browser.retroactivity.RetroActivityFuture",
+      "launch": "am start\n  -n com.retroarch/.browser.retroactivity.RetroActivityFuture\n  -e ROM \"{file.path}\"\n  -e LIBRETRO /data/data/com.retroarch/cores/nestopia_libretro_android.so\n  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg\n  -e IME com.android.inputmethod.latin/.LatinIME\n  -e DATADIR /data/data/com.retroarch\n  -e SDCARD /storage/emulated/0\n  -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files",
+      "verified": false,
+      "verified_date": "2026-11-16",
+      "source": "Project owner's metadata.pegasus.txt (same pattern as the tested RetroArch N64 line), not launched on a device yet",
+      "notes": "Install the 'Nintendo - NES / Famicom (Nestopia UE)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'."
+    },
+    {
+      "id": "retroarch-gb",
+      "emulator": "RetroArch (Play Store) · Gambatte core",
+      "platform": "android",
+      "systems": [
+        "gb",
+        "gbc"
+      ],
+      "package": "com.retroarch",
+      "activity": "com.retroarch.browser.retroactivity.RetroActivityFuture",
+      "launch": "am start\n  -n com.retroarch/.browser.retroactivity.RetroActivityFuture\n  -e ROM \"{file.path}\"\n  -e LIBRETRO /data/data/com.retroarch/cores/gambatte_libretro_android.so\n  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg\n  -e IME com.android.inputmethod.latin/.LatinIME\n  -e DATADIR /data/data/com.retroarch\n  -e SDCARD /storage/emulated/0\n  -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files",
+      "verified": false,
+      "verified_date": "2026-11-16",
+      "source": "Project owner's metadata.pegasus.txt (same pattern as the tested RetroArch N64 line), not launched on a device yet",
+      "notes": "Install the 'Nintendo - Game Boy / Color (Gambatte)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'."
+    },
+    {
+      "id": "retroarch-gba",
+      "emulator": "RetroArch (Play Store) · mGBA core",
+      "platform": "android",
+      "systems": [
+        "gba"
+      ],
+      "package": "com.retroarch",
+      "activity": "com.retroarch.browser.retroactivity.RetroActivityFuture",
+      "launch": "am start\n  -n com.retroarch/.browser.retroactivity.RetroActivityFuture\n  -e ROM \"{file.path}\"\n  -e LIBRETRO /data/data/com.retroarch/cores/mgba_libretro_android.so\n  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg\n  -e IME com.android.inputmethod.latin/.LatinIME\n  -e DATADIR /data/data/com.retroarch\n  -e SDCARD /storage/emulated/0\n  -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files",
+      "verified": false,
+      "verified_date": "2026-11-16",
+      "source": "Project owner's metadata.pegasus.txt (same pattern as the tested RetroArch N64 line), not launched on a device yet",
+      "notes": "Install the 'Nintendo - Game Boy Advance (mGBA)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'."
+    },
+    {
+      "id": "retroarch-psx",
+      "emulator": "RetroArch (Play Store) · SwanStation core",
+      "platform": "android",
+      "systems": [
+        "psx"
+      ],
+      "package": "com.retroarch",
+      "activity": "com.retroarch.browser.retroactivity.RetroActivityFuture",
+      "launch": "am start\n  -n com.retroarch/.browser.retroactivity.RetroActivityFuture\n  -e ROM \"{file.path}\"\n  -e LIBRETRO /data/data/com.retroarch/cores/swanstation_libretro_android.so\n  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg\n  -e IME com.android.inputmethod.latin/.LatinIME\n  -e DATADIR /data/data/com.retroarch\n  -e SDCARD /storage/emulated/0\n  -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files",
+      "verified": false,
+      "verified_date": "2026-11-16",
+      "source": "Project owner's metadata.pegasus.txt (same pattern as the tested RetroArch N64 line), not launched on a device yet",
+      "notes": "Install the 'Sony - PlayStation (SwanStation)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'."
+    },
+    {
       "id": "retroarch64-snes",
       "emulator": "RetroArch (64-bit) · Snes9x core",
       "platform": "android",
-      "systems": ["snes"],
+      "systems": [
+        "snes"
+      ],
       "package": "com.retroarch.aarch64",
       "activity": "com.retroarch.browser.retroactivity.RetroActivityFuture",
       "launch": "am start --user 0\n  -n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture\n  -e ROM {file.path}\n  -e LIBRETRO /data/data/com.retroarch.aarch64/cores/snes9x_libretro_android.so\n  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch.aarch64/files/retroarch.cfg\n  -e QUITFOCUS\n  --activity-clear-top\n  --activity-clear-task\n  --activity-no-history",
       "verified": false,
       "verified_date": "2026-11-15",
       "source": "Pegasus docs, Platform Notes: Android (RetroArch64 example) https://pegasus-frontend.org/docs/user-guide/platform-android/",
-      "notes": "Install the Snes9x core first (RetroArch → Online Updater → Core Downloader). The Play Store RetroArch uses the package 'com.retroarch' instead of 'com.retroarch.aarch64'."
+      "notes": "Install the Snes9x core first (RetroArch → Online Updater → Core Downloader). Only for the 64-bit build from retroarch.com; for the Play Store RetroArch use the 'RetroArch (Play Store)' profile."
     },
     {
       "id": "retroarch64-n64",
       "emulator": "RetroArch (64-bit) · Mupen64Plus-Next core",
       "platform": "android",
-      "systems": ["n64"],
+      "systems": [
+        "n64"
+      ],
       "package": "com.retroarch.aarch64",
       "activity": "com.retroarch.browser.retroactivity.RetroActivityFuture",
       "launch": "am start --user 0\n  -n com.retroarch.aarch64/com.retroarch.browser.retroactivity.RetroActivityFuture\n  -e ROM {file.path}\n  -e LIBRETRO /data/data/com.retroarch.aarch64/cores/mupen64plus_next_gles3_libretro_android.so\n  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch.aarch64/files/retroarch.cfg\n  -e QUITFOCUS\n  --activity-clear-top\n  --activity-clear-task\n  --activity-no-history",
       "verified": false,
       "verified_date": "2026-11-15",
       "source": "Pegasus docs, Platform Notes: Android (RetroArch64 example), core file name from the RetroArch core list https://pegasus-frontend.org/docs/user-guide/platform-android/",
-      "notes": "Install 'Nintendo - Nintendo 64 (Mupen64Plus-Next)' first. If you get a black screen with the Vulkan driver, set the RDP plugin to ParaLLEl-RDP or use the gl driver for this core."
+      "notes": "Install 'Nintendo - Nintendo 64 (Mupen64Plus-Next)' first. If you get a black screen with the Vulkan driver, set the RDP plugin to ParaLLEl-RDP or use the gl driver for this core. Only for the 64-bit build from retroarch.com; for the Play Store RetroArch use the 'RetroArch (Play Store)' profile."
     },
     {
       "id": "melonds",
       "emulator": "melonDS (Android)",
       "platform": "android",
-      "systems": ["nds"],
+      "systems": [
+        "nds"
+      ],
       "package": "me.magnum.melonds",
       "activity": "me.magnum.melonds.ui.emulator.EmulatorActivity",
-      "launch": "am start\n  -n me.magnum.melonds/me.magnum.melonds.ui.emulator.EmulatorActivity\n  -a android.intent.action.VIEW\n  -d \"{file.uri}\"\n  --activity-clear-task\n  --activity-clear-top",
-      "verified": false,
-      "verified_date": "2026-11-15",
-      "source": "melonDS Android README, 'Launching from third-party frontends' (package, activity, ROM URI as intent data) https://github.com/rafaelvcaetano/melonDS-android",
-      "notes": "melonDS needs the ROM folder scanned in its own settings first."
+      "launch": "am start\n  -n me.magnum.melonds/me.magnum.melonds.ui.emulator.EmulatorActivity\n  -d {file.uri}\n  --grant-read-uri-permission",
+      "verified": true,
+      "verified_on": "AYN Odin 2 Portal, Android 13",
+      "verified_date": "2026-11-16",
+      "source": "Project owner's working metadata.pegasus.txt, games launched from Pegasus on a real device; package and activity from the melonDS Android README https://github.com/rafaelvcaetano/melonDS-android",
+      "notes": "melonDS needs the ROM folder added in its own settings first. '--grant-read-uri-permission' lets melonDS open the game Pegasus hands it."
     },
     {
       "id": "ppsspp",
       "emulator": "PPSSPP",
       "platform": "android",
-      "systems": ["psp"],
+      "systems": [
+        "psp"
+      ],
       "package": "org.ppsspp.ppsspp",
       "activity": ".PpssppActivity",
-      "launch": "am start\n  -n org.ppsspp.ppsspp/.PpssppActivity\n  -a android.intent.action.VIEW\n  -d \"{file.uri}\"\n  --activity-clear-task\n  --activity-clear-top",
+      "launch": "am start\n  -n org.ppsspp.ppsspp/.PpssppActivity\n  -a android.intent.action.VIEW\n  -d \"{file.path}\"",
       "verified": false,
-      "verified_date": "2026-11-15",
-      "source": "LaunchBox for Android help, 'Custom Emulator (With Code)' PPSSPP example https://feedback.launchbox-app.com/help/articles/7096169-custom-emulator-with-code",
+      "verified_date": "2026-11-16",
+      "source": "Project owner's metadata.pegasus.txt, not launched on a device yet; activity from the LaunchBox for Android PPSSPP example https://feedback.launchbox-app.com/help/articles/7096169-custom-emulator-with-code",
       "notes": "PPSSPP Gold uses the package 'org.ppsspp.ppssppgold'."
+    },
+    {
+      "id": "dolphin-wii",
+      "emulator": "Dolphin",
+      "platform": "android",
+      "systems": [
+        "wii"
+      ],
+      "package": "org.dolphinemu.dolphinemu",
+      "activity": ".ui.main.MainActivity",
+      "launch": "am start\n  -n org.dolphinemu.dolphinemu/.ui.main.MainActivity\n  -a android.intent.action.VIEW\n  --es AutoStartFile \"{file.path}\"",
+      "verified": true,
+      "verified_on": "AYN Odin 2 Portal, Android 13",
+      "verified_date": "2026-11-16",
+      "source": "Project owner's working metadata.pegasus.txt, games launched from Pegasus on a real device",
+      "notes": "Dolphin from the Play Store or dolphin-emu.org. Dolphin MMJR and other forks use different package names."
+    },
+    {
+      "id": "dolphin-gc",
+      "emulator": "Dolphin",
+      "platform": "android",
+      "systems": [
+        "gc"
+      ],
+      "package": "org.dolphinemu.dolphinemu",
+      "activity": ".ui.main.MainActivity",
+      "launch": "am start\n  -n org.dolphinemu.dolphinemu/.ui.main.MainActivity\n  -a android.intent.action.VIEW\n  --es AutoStartFile \"{file.path}\"",
+      "verified": false,
+      "verified_date": "2026-11-16",
+      "source": "Same line as the owner's tested Wii line; GameCube games not launched with it yet",
+      "notes": "Dolphin from the Play Store or dolphin-emu.org. Dolphin MMJR and other forks use different package names."
     }
   ],
   "known_bad": [
     {
       "pattern": "com.armsx2/com.armsx2.MainActivity",
-      "systems": ["ps2"],
+      "systems": [
+        "ps2"
+      ],
       "why": "This is the GitHub build's name. On a Play Store install of ARMSX2 it fails with \"Activity not found\".",
       "fix": "armsx2-playstore"
     },
     {
       "pattern": "kr.co.iefriends.pcsx2.MainActivity",
-      "systems": ["ps2"],
+      "systems": [
+        "ps2"
+      ],
       "why": "This is an old ARMSX2 activity name that newer versions no longer have.",
       "fix": "armsx2-playstore"
     }
