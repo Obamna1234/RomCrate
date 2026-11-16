@@ -18,6 +18,8 @@ pub const ALLOWED_HOSTS: &[&str] = &[
     "api.github.com",
     "gamesdb.launchbox-app.com",
     "images.launchbox-app.com",
+    // Android's USB tool (platform-tools), only when you ask to send games to a handheld.
+    "dl.google.com",
 ];
 /// ScreenScraper serves its API and media from several sub-domains.
 pub const ALLOWED_DOMAIN_SUFFIXES: &[&str] = &[".screenscraper.fr"];

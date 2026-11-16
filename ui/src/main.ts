@@ -1,3 +1,4 @@
+import { deviceArt } from "./deviceArt";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -67,6 +68,8 @@ interface Prefs {
   fixLaunch: boolean;
   importDest: string;
   importSources: string[];
+  /** Console folder on this PC → storage on the handheld. */
+  sendTargets: Record<string, string>;
   importMode: "copy" | "move";
   importRename: boolean;
 }
@@ -76,7 +79,7 @@ const DEFAULT_PREFS: Prefs = {
   size: "standard", upscale: "smart", aiBinary: "", regions: ["usa", "world", "europe", "australia", "uk", "japan"],
   identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto", launchbox: true, gameInfo: true,
   pegasusOn: "none", device: "", emulators: {}, fixLaunch: false,
-  importDest: "", importSources: [], importMode: "copy", importRename: false,
+  importDest: "", importSources: [], importMode: "copy", importRename: false, sendTargets: {},
 };
 
 function loadPrefs(): Prefs {
@@ -96,7 +99,7 @@ let library: Library = { systems: [] };
 let scanning = false;
 let unzip: { name: string; pct: number } | null = null;
 const scanNotes: string[] = [];
-let view: "home" | "device" | "pegasus" | "library" | "launcher" | "artwork" | "scrape" | "settings" | "import" = "home";
+let view: "home" | "device" | "pegasus" | "library" | "launcher" | "artwork" | "scrape" | "settings" | "import" | "send" = "home";
 // Session-only ScreenScraper login — never stored.
 let ssUser = "";
 let ssPass = "";
@@ -170,6 +173,7 @@ const STEPS = [
   { id: "launcher", t: "Launcher & theme", s: () => `${launcher().name.split(" (")[0]} · ${themeOf(launcher()).name}` },
   { id: "artwork", t: "Artwork", s: () => `${kindsFor(launcher()).length} types · ${catalog.sizePresets.find((p) => p[0] === prefs.size)?.[1].split(" —")[0]}` },
   { id: "scrape", t: "Scrape", s: () => (run.running ? `${run.processed}/${run.total}` : run.summary ? "Finished" : "Ready when you are") },
+  { id: "send", t: "Send to handheld", s: () => (snd.running ? `${snd.done}/${snd.total} files` : snd.summary ? `${snd.summary.copied} copied` : "Optional — over USB") },
 ] as const;
 
 function renderNav() {
@@ -182,7 +186,8 @@ function renderNav() {
         || (st.id === "library" && library.systems.length > 0 && view !== "library")
         || (st.id === "launcher" && folderReady() && i < cur)
         || (st.id === "artwork" && kindsFor(launcher()).length > 0 && i < cur)
-        || (st.id === "scrape" && !!run.summary && !run.running);
+        || (st.id === "scrape" && !!run.summary && !run.running)
+        || (st.id === "send" && !!snd.summary && !snd.running && !snd.summary.failed);
       return h("button", { class: `step ${view === st.id ? "active" : ""} ${done ? "done" : ""}`, onclick: () => go(st.id) },
         h("div", { class: "num" }, done ? "✓" : String(i + 1)),
         h("div", {}, h("div", { class: "t" }, st.t), h("div", { class: "s" }, st.s())));
@@ -192,6 +197,7 @@ function renderNav() {
 
 function go(v: typeof view) {
   view = v;
+  if (v === "settings") { logInfo = null; cacheBytes = null; }
   render();
   document.getElementById("main")!.scrollTop = 0;
 }
@@ -199,17 +205,26 @@ function go(v: typeof view) {
 function render() {
   renderNav();
   const main = document.getElementById("main")!;
-  const views = { home: viewHome, device: viewDevice, pegasus: viewPegasus, library: viewLibrary, launcher: viewLauncher, artwork: viewArtwork, scrape: viewScrape, settings: viewSettings, import: viewImport };
+  const views = { send: viewSend, home: viewHome, device: viewDevice, pegasus: viewPegasus, library: viewLibrary, launcher: viewLauncher, artwork: viewArtwork, scrape: viewScrape, settings: viewSettings, import: viewImport };
   document.getElementById("nav-home")?.classList.toggle("active", view === "home");
   document.getElementById("nav-pegasus")?.classList.toggle("active", view === "pegasus");
   const d = currentDevice();
   document.getElementById("nav-device")!.replaceChildren(
+    prefs.device ? artOf(prefs.device, "chip-art") : "",
     h("div", { class: "k" }, "Games are for"),
     h("div", { class: "v" }, d ? d.name : prefs.device === "unsure" ? "Not sure — safe defaults" : "Choose your device…"));
-  const keep = main.dataset.view === view ? main.scrollTop : 0;
+  const sameView = main.dataset.view === view;
+  const keep = sameView ? main.scrollTop : 0;
+  // Activity panels follow the newest line, like a terminal — unless you've
+  // scrolled up to read something, then they stay where you are.
+  const logs = [...main.querySelectorAll<HTMLElement>(".log")].map((l) => ({ top: l.scrollTop, atEnd: l.scrollTop + l.clientHeight >= l.scrollHeight - 12 }));
   main.replaceChildren(...views[view]());
   main.dataset.view = view;
   main.scrollTop = keep;
+  main.querySelectorAll<HTMLElement>(".log").forEach((l, i) => {
+    const was = sameView ? logs[i] : undefined;
+    l.scrollTop = !was || was.atEnd ? l.scrollHeight : was.top;
+  });
 }
 
 function footer(back: typeof view | null, next: typeof view | null, nextLabel = "Continue", nextDisabled = false) {
@@ -258,8 +273,18 @@ function applyDevice(id: string) {
   toast(d ? `Set up for ${d.name}. You can still change any setting.` : "Using safe defaults. You can pick a device any time.");
 }
 
+/** Drawing of a device (our own line art; no photos or logos). */
+function artOf(id: string, cls = "art"): HTMLElement {
+  const d = document.createElement("div");
+  d.className = cls;
+  d.innerHTML = deviceArt(id);
+  return d;
+}
+
 function viewDevice(): Node[] {
+  if (!logInfo) loadLogInfo();
   const card = (d: DeviceInfo) => h("button", { class: `device ${prefs.device === d.id ? "on" : ""}`, onclick: () => applyDevice(d.id) },
+    artOf(d.id),
     h("div", { class: "n" }, d.name),
     h("div", { class: "f" }, d.family),
     h("div", { class: "spec" }, `${d.screen.inches ? `${d.screen.inches}" ` : ""}${d.screen.width}×${d.screen.height}${d.chipset ? ` · ${d.chipset}` : ""}`),
@@ -272,10 +297,14 @@ function viewDevice(): Node[] {
     h("div", { class: "device-grid" },
       ...catalog.devices.map(card),
       h("button", { class: `device ${prefs.device === "unsure" ? "on" : ""}`, onclick: () => applyDevice("unsure") },
+        artOf("unsure"),
         h("div", { class: "n" }, "Not sure / something else"),
         h("div", { class: "f" }, "Use safe defaults"),
         h("div", { class: "spec" }, "Works for most setups. Pick a device later for better defaults."))),
-    h("div", { class: "note", style: "margin-top:16px" }, "Only devices marked “Tested on this device” have been checked on a real unit. Specs for the others come from the makers and reviews."),
+    h("div", { class: "note", style: "margin-top:16px" }, "Only devices marked “Tested on this device” have been checked on a real unit. Specs for the others come from the makers and reviews. The pictures are simple drawings made for RomCrate."),
+    h("div", { class: "note", style: "margin-top:10px" },
+      "RomCrate keeps its log and downloads in ", logInfo ? h("span", { class: "path" }, `\u200E${dataFolderText(logInfo)}\u200E`) : "your app data folder", ". ",
+      h("button", { class: "link", style: "text-decoration:underline", onclick: chooseDataFolder }, "Change…")),
   ];
 }
 
@@ -286,6 +315,7 @@ function viewHome(): Node[] {
     ["📥 Import & sort", "Put games from a messy folder into console folders.", "import", () => go("import")],
     ["🖼️ Get artwork", "Covers and screenshots — e.g. for a game you just downloaded.", "art", () => go("library")],
     ["🚀 Pegasus launch lines", "Make Pegasus start your games, without re-scraping.", "pegasus", () => go("pegasus")],
+    ["📲 Send to handheld", "Copy games and artwork to your Android handheld over USB.", "send", () => go("send")],
     ["🗜️ Compress discs", "Shrink disc games to CHD. Coming in the next version.", "soon", null],
     ["✅ Device setup checklist", "Recommended emulator settings for your device. Coming soon.", "soon", null],
   ];
@@ -423,7 +453,7 @@ async function rescan() {
 /** A background rescan only rebuilds the screen that shows its result —
  * otherwise the screen you're on would flash a few seconds after start-up. */
 function renderIfShowsLibrary() {
-  if (["library", "launcher", "pegasus", "artwork", "scrape"].includes(view)) render(); else renderNav();
+  if (["library", "launcher", "pegasus", "artwork", "scrape", "send"].includes(view)) render(); else renderNav();
 }
 
 let manualPath = "";
@@ -770,7 +800,15 @@ function handleEvent(e: any) {
       if (r.preview) invoke<string>("thumbnail", { path: r.preview }).then((d) => { r.thumb = d; queueRender(); }).catch(() => {});
       break;
     }
-    case "log": if (e.level !== "debug") run.log.push({ level: e.level, message: e.message }); break;
+    case "log": {
+      if (e.level === "debug") break;
+      // "Downloading … 10 MB of 104 MB", "… 20 MB of 104 MB": one line that updates.
+      const last = run.log[run.log.length - 1];
+      const stem = (m: string) => m.split("…")[0];
+      if (last && / MB of /.test(e.message) && / MB of /.test(last.message) && stem(last.message) === stem(e.message)) run.log[run.log.length - 1] = { level: e.level, message: e.message };
+      else run.log.push({ level: e.level, message: e.message });
+      break;
+    }
     case "finished": run.running = false; run.summary = e.summary; toast(e.summary.cancelled ? "Scrape stopped" : "All done!"); break;
   }
   queueRender();
@@ -812,7 +850,8 @@ function viewScrape(): Node[] {
       h("span", {}, s ? "" : `${pct}%`)),
     h("div", { class: "row" },
       run.running ? h("button", { class: "btn danger", onclick: () => invoke("cancel_scrape") }, "Stop") : null,
-      s ? h("button", { class: "btn primary", onclick: () => { run.summary = null; run.results = []; render(); } }, "Scrape again") : null,
+      s && currentDevice()?.launchPlatform === "android" ? h("button", { class: "btn primary", onclick: () => go("send") }, "Send to handheld →") : null,
+      s ? h("button", { class: `btn ${currentDevice()?.launchPlatform === "android" ? "" : "primary"}`, onclick: () => { run.summary = null; run.results = []; render(); } }, "Scrape again") : null,
       s ? h("button", { class: "btn", onclick: () => openOutput() }, "Open artwork folder") : null,
       s && s.missingGames.length ? h("button", { class: "btn", onclick: exportMissing }, `Save list of ${s.missingGames.length} missing`) : null),
   );
@@ -831,7 +870,7 @@ function viewScrape(): Node[] {
       h("div", { class: "m" }, r.status === "skipped" ? `${r.method === "hash" ? "✓ identified · " : ""}Already had art` : r.matched ? `${r.method === "hash" ? "✓ identified · " : ""}${r.saved.length} saved` : r.status === "missing" ? "Not in the collections" : r.message ?? ""))))));
 
   if (run.log.length) {
-    out.push(h("h2", {}, "Activity"), h("div", { class: "log" }, run.log.slice(-200).map((l) => h("div", { class: l.level }, l.message))));
+    out.push(h("h2", {}, "Activity"), h("div", { class: "log" }, run.log.slice(-2000).map((l) => h("div", { class: l.level }, l.message))), logButtons());
   }
   return out.filter((x): x is Node => !!x);
 }
@@ -852,10 +891,43 @@ async function exportMissing() {
 
 let cacheBytes: number | null = null;
 
-let logDir = "";
+interface LogInfo { dir: string; today: string; dataDir: string | null; defaultLogDir: string; defaultCacheDir: string; cacheDir: string; logEnabled: boolean }
+let logInfo: LogInfo | null = null;
+function loadLogInfo() {
+  invoke<LogInfo>("log_info").then((i) => { logInfo = i; if (view === "settings" || view === "device") render(); }).catch(() => {});
+}
+
+/** Where RomCrate keeps its own files, in words. */
+function dataFolderText(i: LogInfo): string {
+  return i.dataDir ?? `${i.defaultLogDir.replace(/[\\/]logs$/, "")} (log) and ${i.defaultCacheDir} (downloads)`;
+}
+
+async function chooseDataFolder() {
+  const picked = await open({ directory: true, multiple: false, title: "Where should RomCrate keep its log and downloads?" });
+  if (!picked || Array.isArray(picked)) return;
+  await setDataFolder(picked);
+}
+
+async function setDataFolder(path: string | null) {
+  try {
+    const notes = await invoke<string[]>("set_data_dir", { path });
+    cacheBytes = null;
+    toast(notes.length ? `Done — ${notes.join("; ")}` : "Done — RomCrate will keep its files there from now on.");
+  } catch (e) {
+    toast(`Couldn't use that folder: ${e}`);
+  }
+  loadLogInfo();
+}
+
+/** Buttons shown under every Activity panel. */
+function logButtons(): Node {
+  return h("div", { class: "row", style: "margin-top:8px" },
+    h("button", { class: "btn", onclick: () => invoke("open_log_file").catch((e) => toast(String(e))) }, "Open log (.txt)"),
+    h("button", { class: "btn", onclick: () => invoke<string>("save_problem_report").then(() => toast("Problem report saved and opened.")).catch((e) => toast(String(e))) }, "Save problem report"));
+}
 
 function viewSettings(): Node[] {
-  if (!logDir) invoke<{ dir: string }>("log_info").then((i) => { logDir = i.dir; if (view === "settings") render(); });
+  if (!logInfo) loadLogInfo();
   if (cacheBytes === null) invoke<number>("cache_size").then((b) => { cacheBytes = b; if (view === "settings") render(); });
   const mb = cacheBytes === null ? "…" : `${(cacheBytes / 1048576).toFixed(1)} MB`;
   return [
@@ -867,11 +939,21 @@ function viewSettings(): Node[] {
       h("li", {}, h("strong", {}, "Only known sites. "), "RomCrate connects over HTTPS to GitHub and libretro (free artwork and game databases), the LaunchBox games database and, if enabled, screenscraper.fr — nothing else, even if a server tries to redirect it."),
       h("li", {}, h("strong", {}, "Clean files only. "), "Every image is fully decoded and re-saved as a fresh PNG, so nothing hidden in a download reaches your drive. Videos and manuals are checked to be real MP4/PDF files."),
       h("li", {}, h("strong", {}, "Your files are safe. "), "RomCrate never deletes games, never writes outside the folders you pick, and backs up gamelist.xml before changing it."))),
+    h("h2", {}, "RomCrate's own files"),
+    h("div", { class: "card" },
+      h("div", { class: "desc" }, "RomCrate keeps two things of its own: the activity log, and downloaded databases and artwork indexes (so it doesn't re-download them every time). You choose where. Your games and artwork always go where you point RomCrate, never here."),
+      logInfo ? h("div", { class: "to", style: "margin-top:8px" }, `\u200E${dataFolderText(logInfo)}\u200E`) : null,
+      h("div", { class: "row", style: "margin-top:10px" },
+        h("button", { class: "btn", onclick: chooseDataFolder }, "Change folder…"),
+        logInfo?.dataDir ? h("button", { class: "btn", onclick: () => setDataFolder(null) }, "Use the default again") : null),
+      h("div", { class: "hint", style: "margin-top:6px" }, "Changing it moves the existing log and downloads to the new folder. The default is your system's usual place for app data — it always exists and is cleaned up when you uninstall.")),
     h("h2", {}, "Activity log"),
     h("div", { class: "card" },
-      h("div", { class: "desc" }, "Everything RomCrate does — games found or not found and why, files skipped, errors — is written to a daily log on this computer (kept for 30 days). Handy for checking what happened, or for sharing when asking for help. It stays on your computer."),
-      logDir ? h("div", { class: "to", style: "margin-top:8px" }, `\u200E${logDir}\u200E`) : null,
-      h("div", { class: "row", style: "margin-top:10px" },
+      logInfo ? toggle(logInfo.logEnabled, "Keep an activity log", "Everything RomCrate does — games found or not found and why, files skipped, errors — written to a daily .txt file (kept for 30 days). It stays on your computer.",
+        () => { const on = !logInfo!.logEnabled; invoke("set_log_enabled", { on }).then(() => { logInfo!.logEnabled = on; render(); }).catch((e) => toast(String(e))); }) : null,
+      h("div", { class: "desc", style: "margin-top:8px" }, "Something went wrong? “Save problem report” makes a short .txt with just the problems from the last week, your user name taken out of the paths — easy to share when asking for help."),
+      logButtons(),
+      h("div", { class: "row", style: "margin-top:8px" },
         h("button", { class: "btn", onclick: () => invoke("open_log_folder").catch((e) => toast(String(e))) }, "Open log folder"))),
     h("h2", {}, "ScreenScraper login (optional)"),
     h("div", { class: "card" },
@@ -891,7 +973,7 @@ function viewSettings(): Node[] {
     h("h2", {}, "Cache"),
     h("div", { class: "card" },
       h("div", { style: "color:var(--muted);margin-bottom:12px" }, `Downloaded artwork lists, databases and original images are cached so re-runs are fast and work offline. Currently ${mb}.`),
-      h("div", { class: "note", style: "margin:0 0 12px" }, catalog.cacheDir),
+      h("div", { class: "note", style: "margin:0 0 12px" }, logInfo?.cacheDir ?? catalog.cacheDir),
       h("button", { class: "btn", onclick: async () => { await invoke("clear_cache"); cacheBytes = null; toast("Cache cleared"); render(); } }, "Clear cache")),
     h("h2", {}, "About"),
     h("div", { class: "card", style: "color:var(--muted);line-height:1.55" },
@@ -1147,7 +1229,7 @@ function viewImport(): Node[] {
           h("button", { class: "btn primary big", onclick: scrapeImported }, "Get artwork for these games →"),
           h("button", { class: "btn", onclick: () => invoke("open_folder", { path: p.dest }).catch((e) => toast(String(e))) }, "Open ROMs folder")));
     }
-    if (imp.log.length) prog.push(h("h2", {}, "Activity"), h("div", { class: "log" }, imp.log.slice(-300).map((l) => h("div", { class: l.ok ? "" : "error" }, `${l.ok ? "✓" : "✗"} ${l.message}`))));
+    if (imp.log.length) prog.push(h("h2", {}, "Activity"), h("div", { class: "log" }, imp.log.slice(-2000).map((l) => h("div", { class: l.ok ? "" : "error" }, `${l.ok ? "✓" : "✗"} ${l.message}`))), logButtons());
   }
   if (!imp.running && !imp.summary) {
     out.push(h("div", { class: "footer-bar" }, h("span", {}),
@@ -1184,6 +1266,194 @@ function viewImport(): Node[] {
   return out.filter((x): x is Node => !!x);
 }
 
+
+// ---------------------------------------------------------------- send to handheld
+
+interface AdbDevice { serial: string; state: string; model: string | null }
+interface Volume { path: string; label: string; sizeBytes: number; freeBytes: number; romsDir: string | null; consoleFolders: string[] }
+interface SendPlan { files: { local: string; remote: string; bytes: number }[]; alreadyThere: number; conflicts: string[]; perVolume: { volume: string; label: string; bytes: number; freeBytes: number; fits: boolean }[]; folders: [string, string][]; notes: string[] }
+interface SendSummary { copied: number; verified: number; failed: number; alreadyThere: number; conflicts: number; bytes: number; cancelled: boolean }
+
+const snd = {
+  status: null as null | { found: boolean; path: string | null; version: string | null; source: string | null },
+  terms: "",
+  installing: false, installPct: 0,
+  devices: [] as AdbDevice[], serial: "", volumes: [] as Volume[], error: "",
+  plan: null as SendPlan | null, planning: false,
+  running: false, done: 0, total: 0, summary: null as SendSummary | null,
+  log: [] as { ok: boolean; message: string }[],
+  poll: 0 as number,
+};
+
+const human = (b: number) => b >= 1073741824 ? `${(b / 1073741824).toFixed(1)} GB` : b >= 1048576 ? `${Math.round(b / 1048576)} MB` : `${Math.ceil(b / 1024)} KB`;
+
+async function sendRefresh() {
+  const first = !snd.status;
+  try {
+    if (!snd.status) { const r = await invoke<{ status: typeof snd.status; termsUrl: string }>("adb_status"); snd.status = r.status; snd.terms = r.termsUrl; }
+    if (!snd.status?.found) { if (view === "send" && first) render(); return; }
+    const devs = await invoke<AdbDevice[]>("adb_devices");
+    const changed = JSON.stringify(devs) !== JSON.stringify(snd.devices);
+    snd.devices = devs; snd.error = "";
+    const ready = devs.filter((d) => d.state === "device");
+    if (!ready.some((d) => d.serial === snd.serial)) { snd.serial = ready[0]?.serial ?? ""; snd.volumes = []; snd.plan = null; }
+    let volsChanged = false;
+    if (snd.serial && !snd.volumes.length) { snd.volumes = await invoke<Volume[]>("adb_volumes", { serial: snd.serial }); volsChanged = true; }
+    // Only redraw when something actually changed — the check runs every few
+    // seconds and a redraw would close a drop-down you have open.
+    if ((changed || volsChanged || first) && view === "send") render();
+  } catch (e) {
+    const was = snd.error;
+    snd.error = String(e);
+    if (view === "send" && was !== snd.error) render();
+  }
+}
+
+function startSendPolling() {
+  if (snd.poll) return;
+  snd.poll = window.setInterval(() => { if (view !== "send") { clearInterval(snd.poll); snd.poll = 0; return; } if (!snd.running && !snd.planning) void sendRefresh(); }, 3000);
+}
+
+async function installAdb() {
+  snd.installing = true; snd.installPct = 0; render();
+  try {
+    await invoke<string>("adb_install");
+    snd.status = null; toast("Android's USB tool is ready.");
+  } catch (e) { toast(`Couldn't get the USB tool: ${e}`); }
+  snd.installing = false;
+  await sendRefresh();
+}
+
+/** Volume chosen for a console folder: your choice, else one that already has a ROMs folder, else the SD card, else internal. */
+function volumeFor(path: string): string {
+  const v = prefs.sendTargets[path];
+  if (v && snd.volumes.some((x) => x.path === v)) return v;
+  return (snd.volumes.find((x) => x.romsDir && !x.path.includes("emulated")) ?? snd.volumes.find((x) => x.romsDir) ?? snd.volumes.find((x) => !x.path.includes("emulated")) ?? snd.volumes[0])?.path ?? "";
+}
+
+async function planSend() {
+  snd.planning = true; snd.plan = null; render();
+  try {
+    const targets = selectedSystems().map((s) => ({ local: s.path, systemId: s.system_id, volume: volumeFor(s.path) }));
+    snd.plan = await invoke<SendPlan>("send_plan", { serial: snd.serial, targets });
+  } catch (e) { toast(String(e)); }
+  snd.planning = false; render();
+}
+
+async function startSend() {
+  snd.running = true; snd.done = 0; snd.total = snd.plan?.files.length ?? 0; snd.summary = null; snd.log = []; render();
+  try { await invoke("start_send"); } catch (e) { snd.running = false; toast(String(e)); render(); }
+}
+
+function handleSendEvent(e: any) {
+  if (e.type === "started") snd.total = e.files;
+  if (e.type === "file") { snd.done++; snd.log.push({ ok: e.ok, message: `${e.remote} — ${e.message}` }); }
+  if (e.type === "finished") {
+    snd.running = false; snd.summary = e.summary; snd.plan = null; snd.volumes = [];
+    toast(e.summary.failed ? `Finished with ${e.summary.failed} problem(s) — see the log` : "All sent!");
+    void sendRefresh();
+  }
+  if (view === "send") queueRender(); else renderNav();
+}
+
+function viewSend(): Node[] {
+  if (!snd.status && !snd.error) void sendRefresh();
+  startSendPolling();
+  const out: (Node | null)[] = [
+    h("h1", {}, "Send to handheld"),
+    h("p", { class: "lead" }, "Copies your games, artwork and Pegasus files to your Android handheld over the USB cable — into internal storage or the SD card, into the console folders already there. Nothing on the handheld is overwritten or deleted, and every game is checked after copying."),
+  ];
+  const st = snd.status;
+  // 1. The USB tool.
+  if (!st) out.push(h("div", { class: "card" }, "Checking…"));
+  else if (!st.found) {
+    out.push(h("h2", {}, "1 · Android's USB tool"),
+      h("div", { class: "card" },
+        h("div", { class: "desc" }, "Sending needs “adb”, Android's own USB tool from Google (about 10 MB, part of “platform-tools”). RomCrate downloads it from dl.google.com, checks it against Google's published checksum, and keeps it in RomCrate's folder. It's never bundled with RomCrate."),
+        h("div", { class: "hint", style: "margin-top:6px" }, "By downloading you accept Google's terms for platform-tools: ", h("span", { class: "path" }, snd.terms)),
+        h("div", { class: "row", style: "margin-top:10px" },
+          h("button", { class: "btn primary", disabled: snd.installing, onclick: installAdb }, snd.installing ? `Downloading… ${snd.installPct}%` : "Download the USB tool from Google"))));
+    return out.filter((x): x is Node => !!x);
+  }
+  // 2. The handheld.
+  const ready = snd.devices.filter((d) => d.state === "device");
+  const waiting = snd.devices.filter((d) => d.state !== "device");
+  out.push(h("h2", {}, "1 · Your handheld"));
+  if (ready.length) {
+    out.push(h("div", { class: "card" },
+      ready.length > 1 ? h("select", { onchange: (e: Event) => { snd.serial = (e.target as HTMLSelectElement).value; snd.volumes = []; snd.plan = null; void sendRefresh(); } },
+        ready.map((d) => h("option", { value: d.serial, selected: d.serial === snd.serial }, d.model ?? d.serial))) :
+        h("div", { class: "v" }, `✓ ${ready[0].model ?? ready[0].serial} connected`),
+      snd.volumes.length ? h("div", { class: "desc", style: "margin-top:6px" }, snd.volumes.map((v) => `${v.label}: ${human(v.freeBytes)} free${v.romsDir ? ` · has ${v.romsDir}/` : ""}`).join("   ·   ")) : h("div", { class: "desc" }, "Reading storage…")));
+  } else {
+    out.push(h("div", { class: "card" },
+      waiting.some((d) => d.state === "unauthorized")
+        ? h("div", { class: "banner warn" }, h("div", {}, h("b", {}, "Almost there: "), "unlock the handheld and tap “Allow” on the “Allow USB debugging?” message. Tick “Always allow from this computer” so it doesn't ask again."))
+        : waiting.length ? h("div", { class: "banner warn" }, "The handheld is connected but not responding — unplug it and plug it back in.")
+        : h("div", {}, h("div", { class: "v" }, "No handheld found yet"),
+          h("ol", { class: "how" },
+            h("li", {}, "On the handheld: Settings → About (phone/device) → tap “Build number” 7 times until it says you're a developer."),
+            h("li", {}, "Settings → System → Developer options → turn on “USB debugging”."),
+            h("li", {}, "Plug it in with a USB cable that carries data, and tap “Allow” when asked."),
+            h("li", {}, "This screen notices it within a few seconds.")),
+          h("div", { class: "hint" }, "USB debugging only lets this computer copy files and run Android's own commands while you allow it. You can turn it off again afterwards.")),
+      snd.error ? h("div", { class: "hint", style: "color:var(--bad);margin-top:8px" }, snd.error) : null));
+    out.push(logPanelSend());
+    return out.filter((x): x is Node => !!x);
+  }
+  // 3. What goes where.
+  const systems = selectedSystems();
+  out.push(h("h2", {}, "2 · What goes where"));
+  if (!systems.length) {
+    out.push(h("div", { class: "banner warn" }, "Choose your game folders first."), h("button", { class: "btn primary", onclick: () => go("library") }, "Choose game folders →"));
+    return out.filter((x): x is Node => !!x);
+  }
+  out.push(h("div", { class: "card emu-list" }, systems.map((s) => {
+    const vol = volumeFor(s.path);
+    return h("div", { class: "emu-row" },
+      h("div", {}, h("div", { class: "t" }, s.system_name), h("div", { class: "desc" }, `${s.games.length} game${s.games.length === 1 ? "" : "s"} · from ${shortPath(s.path)}`)),
+      h("span", {}),
+      h("select", { disabled: snd.running, onchange: (e: Event) => { prefs.sendTargets[s.path] = (e.target as HTMLSelectElement).value; savePrefs(); snd.plan = null; render(); } },
+        snd.volumes.map((v) => h("option", { value: v.path, selected: v.path === vol }, v.label))));
+  })));
+  if (!snd.plan && !snd.running && !snd.summary)
+    out.push(h("div", { class: "row", style: "margin-top:12px" }, h("button", { class: "btn primary", disabled: snd.planning || !snd.volumes.length, onclick: planSend }, snd.planning ? "Looking at the handheld…" : "Check what will be copied")));
+  // 4. The plan.
+  const p = snd.plan;
+  if (p && !snd.running) {
+    const bytes = p.files.reduce((a, f) => a + f.bytes, 0);
+    const full = p.perVolume.filter((v) => !v.fits);
+    out.push(h("h2", {}, "3 · Ready"),
+      h("div", { class: "card" },
+        h("div", { class: "v" }, p.files.length ? `${p.files.length} files to copy (${human(bytes)})` : "Everything is already on the handheld"),
+        h("div", { class: "desc", style: "margin-top:4px" }, `${p.alreadyThere} already there (skipped)${p.conflicts.length ? ` · ${p.conflicts.length} left alone because a different file with the same name is on the handheld` : ""}`),
+        h("ul", { class: "desc", style: "margin:8px 0 0;padding-left:18px" }, p.folders.map(([from, to]) => h("li", {}, `${shortPath(from)}  →  ${to}`))),
+        ...p.notes.map((n) => h("div", { class: "hint" }, n)),
+        ...full.map((v) => h("div", { class: "banner warn", style: "margin-top:8px" }, `Not enough space on ${v.label}: needs ${human(v.bytes)} plus 200 MB spare, ${human(v.freeBytes)} free. Pick the other storage for some consoles, or free up space.`)),
+        h("div", { class: "row", style: "margin-top:12px" },
+          h("button", { class: "btn primary big", disabled: !p.files.length || full.length > 0, onclick: startSend }, "Send to handheld"),
+          h("button", { class: "btn", onclick: planSend }, "Check again"))));
+  }
+  if (snd.running || snd.summary) {
+    const pct = snd.total ? Math.round((snd.done / snd.total) * 100) : 0;
+    out.push(h("h2", {}, snd.running ? "Sending…" : "Done"),
+      h("div", { class: "progress" }, h("div", { style: `width:${snd.running ? pct : 100}%` })),
+      h("div", { class: "desc" }, snd.running ? `${snd.done} of ${snd.total} files` :
+        `${snd.summary!.copied} copied (${snd.summary!.verified} games checked by checksum) · ${snd.summary!.alreadyThere} already there · ${snd.summary!.failed} failed${snd.summary!.cancelled ? " · stopped early" : ""}`),
+      snd.running ? h("button", { class: "btn", style: "margin-top:10px", onclick: () => invoke("cancel_scrape") }, "Stop after this file") :
+        h("button", { class: "btn", style: "margin-top:10px", onclick: () => { snd.summary = null; render(); } }, "Send more"));
+  }
+  out.push(logPanelSend());
+  return out.filter((x): x is Node => !!x);
+}
+
+function logPanelSend(): Node | null {
+  if (!snd.log.length) return null;
+  const wrap = h("div", {});
+  wrap.append(h("h2", {}, "Activity"), h("div", { class: "log" }, snd.log.slice(-2000).map((l) => h("div", { class: l.ok ? "" : "error" }, `${l.ok ? "✓" : "✗"} ${l.message}`))), logButtons());
+  return wrap;
+}
+
 // ---------------------------------------------------------------- boot
 
 async function boot() {
@@ -1198,6 +1468,9 @@ async function boot() {
   document.getElementById("nav-device")!.addEventListener("click", () => go("device"));
   view = prefs.device ? "home" : "device";
   await listen("import-event", (ev) => handleImportEvent(ev.payload));
+  await listen("send-event", (ev) => handleSendEvent(ev.payload));
+  await listen<{ done: number; total: number | null }>("adb-install-progress", (ev) => { snd.installPct = ev.payload.total ? Math.round((ev.payload.done / ev.payload.total) * 100) : 0; if (view === "send") render(); });
+  document.getElementById("nav-send")?.addEventListener("click", () => go("send"));
   if (!catalog.launchers.some((l) => l.id === prefs.launcher)) prefs.launcher = "pegasus";
   await listen("scrape-event", (ev) => handleEvent(ev.payload));
   await listen<{ zip: string; doneBytes: number; totalBytes: number }>("unzip-progress", (ev) => {

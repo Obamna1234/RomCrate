@@ -245,3 +245,21 @@ select.input { padding: 6px 10px; }
 .device .f, .device .spec { color: var(--muted); font-size: 12.5px; }
 .device .row { gap: 6px; margin-top: 4px; }
 .mode .mode-title { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }
+
+/* ---------- device drawings ---------- */
+.device .art { height: 108px; display: flex; align-items: center; justify-content: center; margin: -2px 0 6px; border-radius: 10px; background: radial-gradient(ellipse at 50% 60%, rgba(124,108,255,.10), transparent 70%); }
+.device .art svg, .chip-art svg { height: 100%; width: auto; max-width: 100%; }
+.chip-art { height: 34px; margin-bottom: 6px; opacity: .95; }
+.chip-art svg { display: block; }
+.art .body, .chip-art .body { fill: #2b3147; stroke: #66709a; stroke-width: 1.6; }
+.art .body.dashed { stroke-dasharray: 5 4; fill: transparent; }
+.art .screen, .chip-art .screen { fill: #0a0c12; stroke: #3a4058; stroke-width: 1; }
+.art .glow, .chip-art .glow { fill: rgba(124,108,255,.18); }
+.device.on .art .glow { fill: rgba(124,108,255,.38); }
+.art .ctl, .chip-art .ctl { fill: #1c2030; stroke: #8890b5; stroke-width: 1.3; }
+.art .ctl-in, .chip-art .ctl-in { fill: #2e3448; }
+.art .btn, .chip-art .btn { fill: #4a5275; stroke: #9aa2c6; stroke-width: .8; }
+.art .q { fill: var(--faint); font: 700 34px Inter, system-ui, sans-serif; }
+
+ol.how { margin: 10px 0; padding-left: 20px; color: var(--muted); line-height: 1.7; }
+ol.how li::marker { color: var(--accent-2); font-weight: 700; }
