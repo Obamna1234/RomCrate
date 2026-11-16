@@ -183,6 +183,29 @@ fn a_damaged_copy_is_caught_and_removed() {
 }
 
 #[test]
+fn an_sd_card_android_wont_let_us_write_to_is_caught_before_copying() {
+    let _g = ONE_AT_A_TIME.lock().unwrap();
+    let t = tempfile::tempdir().unwrap();
+    let a = stand_in(t.path(), "device");
+    std::env::set_var("FAKE_ADB_READONLY", "/storage/1A2B-3C4D");
+    let sd = a.can_write("FAKE0001", "/storage/1A2B-3C4D");
+    let internal = a.can_write("FAKE0001", "/storage/emulated/0");
+    std::env::remove_var("FAKE_ADB_READONLY");
+    let e = sd.unwrap_err().to_string();
+    assert!(
+        e.contains("Choose Internal storage") && e.contains("card reader"),
+        "{e}"
+    );
+    assert!(internal.is_ok());
+    assert!(
+        !t.path()
+            .join("device/storage/emulated/0/.romcrate-write-test")
+            .exists(),
+        "test file cleaned up"
+    );
+}
+
+#[test]
 fn unauthorized_handheld_gets_a_clear_message() {
     let _g = ONE_AT_A_TIME.lock().unwrap();
     let t = tempfile::tempdir().unwrap();

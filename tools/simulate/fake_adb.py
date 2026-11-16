@@ -28,6 +28,9 @@ if args[:1] == ["-s"]:
     if os.environ.get("FAKE_ADB_STATE") == "unauthorized":
         print("adb: device unauthorized.", file=sys.stderr); sys.exit(1)
     cmd, rest = args[2], args[3:]
+    ro = os.environ.get("FAKE_ADB_READONLY")  # a storage this "handheld" won't let us write to
+    if ro and cmd == "shell" and "touch" in rest[0] and ro in rest[0]:
+        print(f"touch: '{ro}/.romcrate-write-test': Permission denied"); sys.exit(0)
     if cmd == "shell":
         p = subprocess.run(["sh", "-c", to_fake(rest[0])], capture_output=True, text=True)
         sys.stdout.write(from_fake(p.stdout)); sys.stderr.write(from_fake(p.stderr)); sys.exit(p.returncode)

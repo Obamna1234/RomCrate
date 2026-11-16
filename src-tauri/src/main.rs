@@ -734,6 +734,10 @@ async fn send_plan(
     let serial2 = serial.clone();
     let plan = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         let vols = adb.volumes(&serial2)?;
+        let used: HashSet<&str> = targets.iter().map(|t| t.volume.as_str()).collect();
+        for v in used {
+            adb.can_write(&serial2, v)?;
+        }
         let mut err = None;
         let plan = romcrate_core::adb::plan(&targets, &vols, &mut |d| {
             adb.list_files(&serial2, d).unwrap_or_else(|e| {

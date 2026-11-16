@@ -197,6 +197,25 @@ impl Adb {
             .ok_or_else(|| anyhow::anyhow!("the handheld couldn't check the file"))
     }
 
+    /// Can this computer write to a storage on the handheld? (Some handhelds
+    /// don't allow writing to the SD card over USB debugging.)
+    pub fn can_write(&self, serial: &str, volume: &str) -> anyhow::Result<()> {
+        let probe = format!("{volume}/.romcrate-write-test");
+        let out = self.shell(
+            serial,
+            &format!(
+                "touch {p} 2>&1 && rm -f {p} && echo OK; true",
+                p = q(&probe)
+            ),
+        )?;
+        anyhow::ensure!(
+            out.trim_end().ends_with("OK"),
+            "Android doesn't let this computer write to {volume} over USB ({}). Choose Internal storage for those consoles, or put the SD card in a card reader on your PC.",
+            out.trim()
+        );
+        Ok(())
+    }
+
     pub fn remove(&self, serial: &str, remote: &str) -> anyhow::Result<()> {
         self.shell(serial, &format!("rm -f {}", q(remote)))
             .map(|_| ())
