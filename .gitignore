@@ -13,3 +13,4 @@ Thumbs.db
 *.chd
 *.rvz
 *.wbfs
+__pycache__/

@@ -793,6 +793,30 @@ impl Ctx {
         }
 
         let n = saved.len();
+        // Nothing new found, but the game already has art from before (for
+        // example a cover, with only the logo missing): say that, rather than
+        // showing the old cover under a red "not found".
+        if n == 0 && !existing.is_empty() && errors.is_empty() {
+            send(
+                GameStatus::Skipped,
+                matched_label,
+                method,
+                vec![],
+                missing,
+                preview_of(&existing),
+                Some("Kept the art already in your folder — nothing new found for the rest".into()),
+            );
+            return (
+                GameStatus::Skipped,
+                Some(GameArt {
+                    game: game.clone(),
+                    files,
+                    info,
+                    matched: best.clone().or(canonical.clone()),
+                }),
+                0,
+            );
+        }
         let status = if n == 0 && matched_label.is_none() {
             GameStatus::Missing
         } else if n == 0 && !errors.is_empty() {

@@ -73,14 +73,26 @@ fn name_of(p: &Path) -> String {
         .unwrap_or_default()
 }
 
-const UNFINISHED_EXTS: &[&str] = &[
-    "crdownload",
-    "part",
-    "download",
-    "partial",
-    "opdownload",
-    "tmp",
+const UNFINISHED_EXTS: &[&str] = &["crdownload", "part", "download", "partial", "opdownload"];
+/// Folders other programs keep their own files in. Nothing in them is a game
+/// download, so "Check my files" doesn't look inside (that only caused false
+/// alarms like a game's save files when someone checked all of Documents).
+const OTHER_PROGRAM_DIRS: &[&str] = &[
+    "my games",
+    "saved games",
+    "appdata",
+    "node_modules",
+    "$recycle.bin",
+    "system volume information",
+    ".godot",
+    ".import",
+    "__pycache__",
+    ".cache",
+    ".git",
 ];
+/// Zips smaller than this that can't be opened aren't game downloads (a game
+/// zip, even a broken one, is far bigger) — usually a program's own data file.
+const TINY_ZIP: u64 = 64 * 1024;
 const ART_DIRS: &[&str] = &[
     "media",
     "images",
@@ -110,7 +122,15 @@ pub fn check_file(path: &Path) -> Vec<Finding> {
     let name = name_of(path);
     let lname = name.to_lowercase();
 
-    if UNFINISHED_EXTS.contains(&ext.as_str()) || lname.starts_with("unconfirmed ") {
+    // ".tmp" is used by every program for scratch files; it only means an
+    // unfinished download when it sits on a game or archive name ("x.iso.tmp").
+    let tmp_download = ext == "tmp"
+        && path
+            .file_stem()
+            .map(|s| is_game_or_archive_ext(&ext_of(Path::new(s))))
+            .unwrap_or(false);
+    if UNFINISHED_EXTS.contains(&ext.as_str()) || tmp_download || lname.starts_with("unconfirmed ")
+    {
         out.push(f(
             Severity::Error,
             path,
@@ -173,6 +193,24 @@ pub fn check_file(path: &Path) -> Vec<Finding> {
     out
 }
 
+fn looks_like_web_page(path: &Path) -> bool {
+    let Ok(b) = fs::read(path) else { return false };
+    let t = String::from_utf8_lossy(&b[..b.len().min(512)]).to_lowercase();
+    let t = t.trim_start_matches('\u{feff}').trim_start();
+    t.starts_with('<') || t.contains("<html")
+}
+
+fn is_game_or_archive_ext(ext: &str) -> bool {
+    !ext.is_empty()
+        && ([
+            "zip", "7z", "rar", "iso", "chd", "bin", "cue", "rvz", "wbfs", "cso", "pbp", "pkg",
+        ]
+        .contains(&ext)
+            || crate::systems::SYSTEMS
+                .iter()
+                .any(|s| s.extensions.contains(&ext)))
+}
+
 fn sibling_with_ext(path: &Path, ext: &str) -> Option<PathBuf> {
     let stem = path.file_stem()?.to_string_lossy().to_lowercase();
     let dir = path.parent()?;
@@ -202,8 +240,27 @@ fn check_zip(path: &Path) -> Vec<Finding> {
     let Ok(file) = File::open(path) else {
         return vec![];
     };
+    let small = file.metadata().map(|m| m.len() < TINY_ZIP).unwrap_or(false);
     let mut ar = match zip::ZipArchive::new(file) {
         Ok(a) => a,
+        Err(_) if small && looks_like_web_page(path) => {
+            return vec![f(
+                Severity::Error,
+                path,
+                "corrupt-archive",
+                "This \".zip\" is a web page, not a game",
+                "The download link failed and saved an error page instead. Download the game again.",
+            )]
+        }
+        Err(_) if small => {
+            return vec![f(
+                Severity::Info,
+                path,
+                "not-a-game-zip",
+                "Small .zip that isn't a working archive — ignored",
+                "It's too small to be a game, so it's probably another program's data file. RomCrate leaves it alone.",
+            )]
+        }
         Err(e) => return bad(format!("It can't be opened ({e}).")),
     };
     let mut total = 0u64;
@@ -619,7 +676,7 @@ fn walk(dir: &Path, files: &mut Vec<PathBuf>, dirs: &mut Vec<PathBuf>, depth: us
         let p = e.path();
         if ft.is_dir() {
             // Skip artwork folders only: PC games keep real files in "System", "bin"…
-            if ART_DIRS.contains(&name.as_str()) || name == ".git" {
+            if ART_DIRS.contains(&name.as_str()) || OTHER_PROGRAM_DIRS.contains(&name.as_str()) {
                 continue;
             }
             dirs.push(p.clone());
@@ -736,6 +793,45 @@ mod tests {
     }
 
     #[test]
+    fn other_programs_files_are_not_flagged() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path();
+        let w = |p: &str, b: &[u8]| {
+            let p = r.join(p);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(p, b).unwrap();
+        };
+        // What a real Documents folder had: a game's save temp file, a Godot
+        // project's scratch file, a game's tiny config.zip that isn't a zip.
+        w(
+            "My Games/Skyrim Special Edition/Saves/Quicksave0.ess.tmp",
+            b"save",
+        );
+        w("skit-gubbe-3d/game_world.tscn6552314879.tmp", b"godot");
+        w(
+            "Call of Duty Modern Warfare/players/config.zip",
+            b"not really a zip",
+        );
+        // Real unfinished game downloads are still caught.
+        w("Downloads/Crash Bandicoot.iso.tmp", b"x");
+        w("Downloads/Spyro.zip.crdownload", b"x");
+        let rep = check(&[r.to_path_buf()], &|_| {});
+        let errs: Vec<_> = rep
+            .findings
+            .iter()
+            .filter(|f| f.severity != Severity::Info)
+            .map(|f| name_of(&f.path))
+            .collect();
+        assert_eq!(
+            errs,
+            ["Crash Bandicoot.iso.tmp", "Spyro.zip.crdownload"],
+            "{:?}",
+            rep.findings
+        );
+        assert_eq!(rep.errors, 2);
+    }
+
+    #[test]
     fn damaged_zip_names_the_bad_file() {
         let t = tempfile::tempdir().unwrap();
         let p = t.path().join("Manhunt (Europe) (Disc 1).zip");
@@ -756,7 +852,17 @@ mod tests {
         assert_eq!(r[0].check, "corrupt-archive");
         assert!(r[0].advice.contains("Disc 1).bin"), "{r:?}");
         // Not a zip at all.
+        fs::write(&p, b"<!DOCTYPE html><title>403 Forbidden</title>").unwrap();
+        assert_eq!(
+            check_file(&p)[0].check,
+            "corrupt-archive",
+            "error page saved as .zip"
+        );
+        // Small, not a zip, not a web page: another program's file — ignored.
         fs::write(&p, b"nope").unwrap();
+        assert_eq!(check_file(&p)[0].severity, Severity::Info);
+        // Big and broken: still a damaged download.
+        fs::write(&p, rnd(200_000, 9)).unwrap();
         assert_eq!(check_file(&p)[0].check, "corrupt-archive");
     }
 

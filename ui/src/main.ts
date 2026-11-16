@@ -206,7 +206,10 @@ function render() {
   document.getElementById("nav-device")!.replaceChildren(
     h("div", { class: "k" }, "Games are for"),
     h("div", { class: "v" }, d ? d.name : prefs.device === "unsure" ? "Not sure — safe defaults" : "Choose your device…"));
+  const keep = main.dataset.view === view ? main.scrollTop : 0;
   main.replaceChildren(...views[view]());
+  main.dataset.view = view;
+  main.scrollTop = keep;
 }
 
 function footer(back: typeof view | null, next: typeof view | null, nextLabel = "Continue", nextDisabled = false) {
@@ -362,6 +365,23 @@ function viewPegasus(): Node[] {
 // ---------------------------------------------------------------- view: library
 
 /** Which of the user's chosen folders a system folder lives in (shown when there are several). */
+/** "I:\\ScreenScraper Test\\ROMs\\n64" → "ScreenScraper Test\\ROMs\\n64" (last three parts). */
+function shortPath(path: string): string {
+  const sep = path.includes("\\") ? "\\" : "/";
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  return (parts.length > 3 ? "…" + sep : "") + parts.slice(-3).join(sep);
+}
+
+/** A whole personal folder or drive (Documents, Desktop, home, C:\\): checking
+ * it means reading every other program's files too. */
+function isBroadFolder(path: string): boolean {
+  const p = path.replace(/[\\/]+$/, "");
+  return /^[A-Za-z]:$/.test(p) || p === "" ||
+    /[\\/](Documents|Desktop|OneDrive)$/i.test(p) ||
+    /^[A-Za-z]:[\\/]Users[\\/][^\\/]+$/i.test(p) ||
+    /^\/(home|Users)\/[^/]+$/.test(p);
+}
+
 function rootLabel(path: string): string {
   const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
   const root = prefs.roots.map(norm).filter((r) => norm(path).startsWith(r + "/")).sort((a, b) => b.length - a.length)[0];
@@ -389,7 +409,7 @@ async function addZip() {
 async function rescan() {
   scanNotes.length = 0;
   scanning = true;
-  render();
+  renderIfShowsLibrary();
   try {
     library = await invoke<Library>("scan_library", { roots: prefs.roots });
   } catch (e) {
@@ -397,7 +417,13 @@ async function rescan() {
   }
   scanning = false;
   unzip = null;
-  render();
+  renderIfShowsLibrary();
+}
+
+/** A background rescan only rebuilds the screen that shows its result —
+ * otherwise the screen you're on would flash a few seconds after start-up. */
+function renderIfShowsLibrary() {
+  if (["library", "launcher", "pegasus", "artwork", "scrape"].includes(view)) render(); else renderNav();
 }
 
 let manualPath = "";
@@ -440,6 +466,17 @@ function viewLibrary(): Node[] {
 
   if (library.systems.length) {
     const allOn = selectedSystems().length === library.systems.length;
+    // The same console in more than one folder (e.g. an old test copy and a
+    // fresh import): every game would get its art made twice.
+    const twice = [...new Set(library.systems.map((s) => s.system_id))]
+      .map((id) => library.systems.filter((s) => s.system_id === id))
+      .filter((list) => list.length > 1);
+    for (const list of twice) {
+      out.push(h("div", { class: "banner warn", style: "margin-top:14px" }, h("div", {},
+        h("b", {}, `${list[0].system_name} is in ${list.length} folders: `),
+        list.map((s) => shortPath(s.path)).join(" and "),
+        ". If one is an older copy of the same games, untick it below (or remove its folder above) — otherwise each game shows up, and gets its artwork made, twice.")));
+    }
     out.push(
       h("h2", {}, `Systems found (${library.systems.length})`),
       h("div", { class: "row", style: "margin:-2px 0 12px" },
@@ -452,7 +489,7 @@ function viewLibrary(): Node[] {
             onclick: () => { prefs.deselected = on ? [...prefs.deselected, s.path] : prefs.deselected.filter((p) => p !== s.path); savePrefs(); render(); },
           }, h("div", { class: "check" }),
             h("div", {}, h("div", { class: "name" }, s.system_name),
-              h("div", { class: "meta" }, `${s.games.length} game${s.games.length === 1 ? "" : "s"} · ${s.folder_name}/${prefs.roots.length > 1 ? ` in ${rootLabel(s.path)}` : ""}`),
+              h("div", { class: "meta" }, `${s.games.length} game${s.games.length === 1 ? "" : "s"} · ${library.systems.filter((o) => o.system_id === s.system_id).length > 1 ? shortPath(s.path) : `${s.folder_name}/${prefs.roots.length > 1 ? ` in ${rootLabel(s.path)}` : ""}`}`),
               fitBadge(s.system_id)));
         })),
     );
@@ -791,7 +828,7 @@ function viewScrape(): Node[] {
     h("div", { class: "img" }, r.thumb ? h("img", { src: r.thumb, alt: "" }) : r.status === "missing" ? "No artwork found" : "…"),
     h("div", { class: "cap" },
       h("div", { class: "g" }, h("span", { class: `dot ${r.status}` }), r.matched ? nice(r.matched) : r.game),
-      h("div", { class: "m" }, r.matched ? `${r.method === "hash" ? "✓ identified · " : ""}${r.saved.length} saved` : r.status === "missing" ? "Not in the collections" : r.message ?? ""))))));
+      h("div", { class: "m" }, r.status === "skipped" ? `${r.method === "hash" ? "✓ identified · " : ""}Already had art` : r.matched ? `${r.method === "hash" ? "✓ identified · " : ""}${r.saved.length} saved` : r.status === "missing" ? "Not in the collections" : r.message ?? ""))))));
 
   if (run.log.length) {
     out.push(h("h2", {}, "Activity"), h("div", { class: "log" }, run.log.slice(-200).map((l) => h("div", { class: l.level }, l.message))));
@@ -987,14 +1024,24 @@ function handleImportEvent(e: any) {
     case "started": imp.total = e.bytes; break;
     case "progress": imp.done = e.doneBytes; imp.total = e.totalBytes; imp.current = e.current; break;
     case "itemDone": imp.log.push({ ok: e.ok, message: e.ok ? `${e.name} — ${e.message}` : e.message }); break;
-    case "finished": imp.running = false; imp.summary = e.summary; break;
+    case "finished": {
+      imp.running = false; imp.summary = e.summary;
+      // The ROMs folder you imported into is "your games" from now on — no
+      // need to choose it again on the next step.
+      const dest = imp.plan?.dest ?? prefs.importDest;
+      const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+      const covered = prefs.roots.some((r) => norm(dest).startsWith(norm(r) + "/") || norm(r) === norm(dest));
+      if (dest && !covered) { prefs.roots.push(dest); savePrefs(); void rescan(); }
+      break;
+    }
   }
   if (view === "import") queueRender();
 }
 
 async function scrapeImported() {
   const dest = imp.plan?.dest ?? prefs.importDest;
-  if (dest && !prefs.roots.includes(dest)) prefs.roots.push(dest);
+  const n = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (dest && !prefs.roots.some((r) => n(r) === n(dest) || n(dest).startsWith(n(r) + "/"))) prefs.roots.push(dest);
   savePrefs();
   go("library");
   await rescan();
@@ -1029,7 +1076,9 @@ function viewImport(): Node[] {
           h("button", { class: "btn", onclick: () => pickImportSource(false), disabled: imp.running }, "+ Add folder"),
           h("button", { class: "btn", onclick: () => pickImportSource(true), disabled: imp.running }, "+ Add .zip")),
         prefs.importSources.length ? h("div", { class: "chips", style: "margin-top:8px" }, prefs.importSources.map((r) => h("span", { class: "chip", title: r }, h("span", { class: "path" }, `‎${r}‎`),
-          h("button", { class: "x", title: "Remove", disabled: imp.running, onclick: () => { prefs.importSources = prefs.importSources.filter((x) => x !== r); savePrefs(); imp.plan = null; render(); } }, "×")))) : null),
+          h("button", { class: "x", title: "Remove", disabled: imp.running, onclick: () => { prefs.importSources = prefs.importSources.filter((x) => x !== r); savePrefs(); imp.plan = null; render(); } }, "×")))) : null,
+        prefs.importSources.some(isBroadFolder) ? h("div", { class: "banner info", style: "margin-top:10px" },
+          "That's a whole personal folder (or drive), so RomCrate looks through everything in it — other programs' files and saves too. That's safe (it only reads), but slower. For a quicker, cleaner check, pick the folder your downloaded games are in.") : null),
       h("div", { class: "field" }, h("label", {}, "Into your ROMs folder"),
         h("div", { class: "row" },
           h("button", { class: "btn", onclick: pickImportDest, disabled: imp.running }, prefs.importDest ? "Change…" : "Choose folder…"),
