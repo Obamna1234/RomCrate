@@ -52,6 +52,16 @@ jobs:
       - name: Check results
         if: always()
         run: python tools/simulate/check.py "$RUNNER_TEMP/sim" | tee "$RUNNER_TEMP/sim/out/5-check.log"
+      - name: Get Android's USB tool from Google (checksum-verified) and run it
+        if: always()
+        run: |
+          set -o pipefail
+          B=target/release/romcrate-cli
+          mkdir -p "$RUNNER_TEMP/sim/out"
+          $B usb-tool install 2>&1 | tee "$RUNNER_TEMP/sim/out/7-usb-tool.log"
+          $B usb-tool status  2>&1 | tee -a "$RUNNER_TEMP/sim/out/7-usb-tool.log"
+          grep -q "Checksum matches Google's list" "$RUNNER_TEMP/sim/out/7-usb-tool.log"
+          grep -q "Android Debug Bridge version" "$RUNNER_TEMP/sim/out/7-usb-tool.log"
 
       - name: Import & sort like a user
         if: always()

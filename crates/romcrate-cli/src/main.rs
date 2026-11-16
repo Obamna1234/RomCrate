@@ -21,6 +21,8 @@ USAGE:
   romcrate-cli launchers
   romcrate-cli emulators            (Pegasus launch lines RomCrate knows)
   romcrate-cli devices              (devices RomCrate has defaults for)
+  romcrate-cli usb-tool install|status
+                                    (Android's USB tool from Google, for sending games to a handheld)
   romcrate-cli pegasus --roms <dir>... [--pegasus-on android] [--emulator s=id] [--fix-launch]
                                     (write just the Pegasus launch lines, no artwork)
   romcrate-cli import --from <folder|zip> --to <ROMs folder> [options]
@@ -122,6 +124,40 @@ fn main() -> anyhow::Result<()> {
             );
             if report.errors > 0 {
                 std::process::exit(1);
+            }
+            Ok(())
+        }
+        Some("usb-tool") => {
+            use romcrate_core::adb;
+            match args.get(1).map(String::as_str) {
+                Some("install") => {
+                    println!("Downloading Android's USB tool (platform-tools) from Google…");
+                    println!(
+                        "By downloading you accept Google's terms: {}",
+                        adb::TERMS_URL
+                    );
+                    let client = romcrate_core::net::SafeClient::new()?;
+                    let exe = rt.block_on(adb::install(&client, &|_, _| {}))?;
+                    println!(
+                        "Checksum matches Google's list. Installed: {}",
+                        exe.display()
+                    );
+                }
+                Some("status") | None => {
+                    let s = adb::Adb::status();
+                    if s.found {
+                        println!(
+                            "Found ({}): {}\n{}",
+                            s.source.unwrap_or_default(),
+                            s.path.unwrap_or_default(),
+                            s.version.unwrap_or_else(|| "version unknown".into())
+                        );
+                    } else {
+                        println!("Not installed. Run: romcrate-cli usb-tool install");
+                        std::process::exit(1);
+                    }
+                }
+                Some(other) => bail!("usb-tool: unknown action {other} (use install or status)"),
             }
             Ok(())
         }

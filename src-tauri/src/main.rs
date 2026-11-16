@@ -31,6 +31,8 @@ struct AppState {
     /// The last import preview. Importing only ever acts on this plan, so the
     /// interface can't ask for arbitrary files to be copied or moved.
     import_plan: Mutex<Option<ImportPlan>>,
+    /// The last "send to handheld" plan (serial + files). Sending only acts on this.
+    send_plan: Mutex<Option<(String, romcrate_core::adb::SendPlan)>>,
 }
 
 #[derive(Serialize)]
@@ -649,6 +651,175 @@ fn save_problem_report(app: AppHandle) -> Result<String, String> {
     Ok(f.to_string_lossy().to_string())
 }
 
+// ---------------------------------------------------------------- send to handheld
+
+fn find_adb() -> Result<romcrate_core::adb::Adb, String> {
+    romcrate_core::adb::Adb::find()
+        .map(|(a, _)| a)
+        .ok_or_else(|| "Android's USB tool isn't installed yet".to_string())
+}
+
+#[tauri::command]
+async fn adb_status() -> serde_json::Value {
+    let st = tokio::task::spawn_blocking(romcrate_core::adb::Adb::status)
+        .await
+        .ok();
+    serde_json::json!({ "status": st, "termsUrl": romcrate_core::adb::TERMS_URL })
+}
+
+/// Download Google's platform-tools (checked against Google's checksum).
+#[tauri::command]
+async fn adb_install(app: AppHandle) -> Result<String, String> {
+    let client = romcrate_core::net::SafeClient::new().map_err(|e| e.to_string())?;
+    let app2 = app.clone();
+    let exe = romcrate_core::adb::install(&client, &move |done, total| {
+        let _ = app2.emit(
+            "adb-install-progress",
+            serde_json::json!({ "done": done, "total": total }),
+        );
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    romcrate_core::activity::append(
+        &romcrate_core::activity::log_dir(),
+        "Send to handheld",
+        &[format!(
+            "Downloaded Android's USB tool (platform-tools) from Google, checksum OK: {}",
+            exe.display()
+        )],
+    );
+    Ok(exe.to_string_lossy().into())
+}
+
+#[tauri::command]
+async fn adb_devices() -> Result<Vec<romcrate_core::adb::Device>, String> {
+    let adb = find_adb()?;
+    tokio::task::spawn_blocking(move || adb.devices())
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn adb_volumes(serial: String) -> Result<Vec<romcrate_core::adb::Volume>, String> {
+    let adb = find_adb()?;
+    tokio::task::spawn_blocking(move || adb.volumes(&serial))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+/// Work out what to copy. Only console folders from "Your games" can be sent.
+#[tauri::command]
+async fn send_plan(
+    serial: String,
+    targets: Vec<romcrate_core::adb::Target>,
+    state: State<'_, AppState>,
+) -> Result<romcrate_core::adb::SendPlan, String> {
+    let known: HashSet<PathBuf> = state
+        .library
+        .lock()
+        .unwrap()
+        .systems
+        .iter()
+        .map(|s| s.path.clone())
+        .collect();
+    if let Some(t) = targets.iter().find(|t| !known.contains(&t.local)) {
+        return Err(format!(
+            "{} isn't one of your game folders",
+            t.local.display()
+        ));
+    }
+    let adb = find_adb()?;
+    let serial2 = serial.clone();
+    let plan = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let vols = adb.volumes(&serial2)?;
+        let mut err = None;
+        let plan = romcrate_core::adb::plan(&targets, &vols, &mut |d| {
+            adb.list_files(&serial2, d).unwrap_or_else(|e| {
+                err.get_or_insert(e.to_string());
+                Default::default()
+            })
+        })?;
+        if let Some(e) = err {
+            anyhow::bail!("couldn't look at the handheld: {e}");
+        }
+        Ok(plan)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    *state.send_plan.lock().unwrap() = Some((serial, plan.clone()));
+    Ok(plan)
+}
+
+#[tauri::command]
+async fn start_send(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let (serial, plan) = state
+        .send_plan
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or("Check what will be copied first")?;
+    let adb = find_adb()?;
+    if state.running.swap(true, Ordering::SeqCst) {
+        return Err("Something is already running".into());
+    }
+    let cancel = Arc::new(AtomicBool::new(false));
+    *state.cancel.lock().unwrap() = Some(cancel.clone());
+    let running = state.running.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let log = |l: String| {
+            romcrate_core::activity::append(
+                &romcrate_core::activity::log_dir(),
+                "Send to handheld",
+                &[l],
+            )
+        };
+        log(format!(
+            "Started: {} files ({}) to {serial}; {} already there, {} left alone (different file with the same name on the handheld)",
+            plan.files.len(),
+            romcrate_core::archive::human(plan.files.iter().map(|f| f.bytes).sum()),
+            plan.already_there,
+            plan.conflicts.len()
+        ));
+        for c in &plan.conflicts {
+            log(format!(
+                "Left alone (a different file is already there): {c}"
+            ));
+        }
+        for n in &plan.notes {
+            log(n.clone());
+        }
+        romcrate_core::adb::send(
+            &adb,
+            &serial,
+            &plan,
+            &|e| {
+                match &e {
+                    romcrate_core::adb::SendEvent::File { remote, ok, message, .. } => log(format!(
+                        "{} {remote} — {message}",
+                        if *ok { "OK" } else { "FAILED" }
+                    )),
+                    romcrate_core::adb::SendEvent::Finished { summary } => log(format!(
+                        "Finished: {} copied ({} checked by checksum), {} failed, {} already there{}",
+                        summary.copied,
+                        summary.verified,
+                        summary.failed,
+                        summary.already_there,
+                        if summary.cancelled { " — stopped early" } else { "" }
+                    )),
+                    _ => {}
+                }
+                let _ = app.emit("send-event", &e);
+            },
+            &|| cancel.load(Ordering::Relaxed),
+        );
+        running.store(false, Ordering::SeqCst);
+    });
+    Ok(())
+}
+
 /// Open the activity log folder in the file manager.
 #[tauri::command]
 fn open_log_folder(app: AppHandle) -> Result<(), String> {
@@ -710,6 +881,12 @@ fn main() {
             log_info,
             open_log_folder,
             open_log_file,
+            adb_status,
+            adb_install,
+            adb_devices,
+            adb_volumes,
+            send_plan,
+            start_send,
             save_problem_report,
             set_data_dir,
             set_log_enabled,

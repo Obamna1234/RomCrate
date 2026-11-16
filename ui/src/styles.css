@@ -260,3 +260,6 @@ select.input { padding: 6px 10px; }
 .art .ctl-in, .chip-art .ctl-in { fill: #2e3448; }
 .art .btn, .chip-art .btn { fill: #4a5275; stroke: #9aa2c6; stroke-width: .8; }
 .art .q { fill: var(--faint); font: 700 34px Inter, system-ui, sans-serif; }
+
+ol.how { margin: 10px 0; padding-left: 20px; color: var(--muted); line-height: 1.7; }
+ol.how li::marker { color: var(--accent-2); font-weight: 700; }
