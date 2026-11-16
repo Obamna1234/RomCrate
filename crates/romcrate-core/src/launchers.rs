@@ -421,6 +421,26 @@ impl GameArt {
     }
 }
 
+/// Just the Pegasus launch lines, without scraping: creates metadata files that
+/// are missing (with the launch block) and, if `choice.fix_existing`, adds or
+/// fixes the launch block in existing ones (backup first). Returns notes.
+pub fn write_launch_lines(
+    lib: &crate::scan::Library,
+    choice: &crate::launch::LaunchChoice,
+) -> Vec<String> {
+    let mut notes = Vec::new();
+    for ss in &lib.systems {
+        let Some(sys) = crate::systems::by_id(&ss.system_id) else {
+            continue;
+        };
+        match finalize_system_with(LauncherKind::Pegasus, None, sys, ss, &[], false, choice) {
+            Ok(n) => notes.extend(n),
+            Err(e) => notes.push(format!("{}: {e}", ss.system_name)),
+        }
+    }
+    notes
+}
+
 /// Write/update launcher metadata for a system after scraping. Returns notes for the log.
 pub fn finalize_system(
     launcher: LauncherKind,

@@ -18,6 +18,12 @@ interface Catalog {
   kinds: { id: ArtKind; label: string; source: string }[];
   sizePresets: [string, string, number][]; screenscraperAvailable: boolean; cacheDir: string;
   launchProfiles: LaunchProfile[];
+  devices: DeviceInfo[];
+}
+interface DeviceInfo {
+  id: string; name: string; family: string; platform: string; screen: { width: number; height: number; inches: number };
+  chipset: string; launcher: string; too_demanding: string[]; limited: string[]; tested: boolean; tested_note?: string; notes?: string;
+  sizePreset: string; launchPlatform: string | null;
 }
 interface LaunchProfile { id: string; emulator: string; platform: string; systems: string[]; verified: boolean; verified_on?: string; notes?: string }
 interface Game { stem: string; file_name: string; rel_path: string }
@@ -56,6 +62,7 @@ interface Prefs {
   gameInfo: boolean;
   pegasusLayout: "auto" | "per-game" | "skraper";
   pegasusOn: "android" | "none";
+  device: string;
   emulators: Record<string, string>;
   fixLaunch: boolean;
   importDest: string;
@@ -68,7 +75,7 @@ const DEFAULT_PREFS: Prefs = {
   roots: [], deselected: [], launcher: "pegasus", theme: {}, folders: {}, kinds: {},
   size: "standard", upscale: "smart", aiBinary: "", regions: ["usa", "world", "europe", "australia", "uk", "japan"],
   identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto", launchbox: true, gameInfo: true,
-  pegasusOn: "none", emulators: {}, fixLaunch: false,
+  pegasusOn: "none", device: "", emulators: {}, fixLaunch: false,
   importDest: "", importSources: [], importMode: "copy", importRename: false,
 };
 
@@ -89,7 +96,7 @@ let library: Library = { systems: [] };
 let scanning = false;
 let unzip: { name: string; pct: number } | null = null;
 const scanNotes: string[] = [];
-let view: "library" | "launcher" | "artwork" | "scrape" | "settings" | "import" = "library";
+let view: "home" | "device" | "pegasus" | "library" | "launcher" | "artwork" | "scrape" | "settings" | "import" = "home";
 // Session-only ScreenScraper login — never stored.
 let ssUser = "";
 let ssPass = "";
@@ -158,6 +165,7 @@ const REGION_NAMES: Record<string, string> = {
 // ---------------------------------------------------------------- navigation
 
 const STEPS = [
+  { id: "import", t: "Sort new games", s: () => (imp.summary ? `${imp.summary.imported} imported` : "Optional — skip if already sorted") },
   { id: "library", t: "Your games", s: () => (library.systems.length ? `${selectedGames()} games · ${selectedSystems().length} systems` : "Choose your ROM folders") },
   { id: "launcher", t: "Launcher & theme", s: () => `${launcher().name.split(" (")[0]} · ${themeOf(launcher()).name}` },
   { id: "artwork", t: "Artwork", s: () => `${kindsFor(launcher()).length} types · ${catalog.sizePresets.find((p) => p[0] === prefs.size)?.[1].split(" —")[0]}` },
@@ -168,8 +176,10 @@ function renderNav() {
   const nav = document.getElementById("steps")!;
   nav.replaceChildren(
     ...STEPS.map((st, i) => {
-      const cur = view === "settings" || view === "import" ? STEPS.length : STEPS.findIndex((x) => x.id === view);
-      const done = (st.id === "library" && library.systems.length > 0 && view !== "library")
+      // Outside the guided steps (Home, device, tools) nothing counts as "visited".
+      const cur = STEPS.findIndex((x) => x.id === view);
+      const done = (st.id === "import" && !!imp.summary)
+        || (st.id === "library" && library.systems.length > 0 && view !== "library")
         || (st.id === "launcher" && folderReady() && i < cur)
         || (st.id === "artwork" && kindsFor(launcher()).length > 0 && i < cur)
         || (st.id === "scrape" && !!run.summary && !run.running);
@@ -189,8 +199,13 @@ function go(v: typeof view) {
 function render() {
   renderNav();
   const main = document.getElementById("main")!;
-  const views = { library: viewLibrary, launcher: viewLauncher, artwork: viewArtwork, scrape: viewScrape, settings: viewSettings, import: viewImport };
-  document.getElementById("nav-import")?.classList.toggle("active", view === "import");
+  const views = { home: viewHome, device: viewDevice, pegasus: viewPegasus, library: viewLibrary, launcher: viewLauncher, artwork: viewArtwork, scrape: viewScrape, settings: viewSettings, import: viewImport };
+  document.getElementById("nav-home")?.classList.toggle("active", view === "home");
+  document.getElementById("nav-pegasus")?.classList.toggle("active", view === "pegasus");
+  const d = currentDevice();
+  document.getElementById("nav-device")!.replaceChildren(
+    h("div", { class: "k" }, "Games are for"),
+    h("div", { class: "v" }, d ? d.name : prefs.device === "unsure" ? "Not sure — safe defaults" : "Choose your device…"));
   main.replaceChildren(...views[view]());
 }
 
@@ -198,6 +213,150 @@ function footer(back: typeof view | null, next: typeof view | null, nextLabel = 
   return h("div", { class: "footer-bar" },
     back ? h("button", { class: "btn", onclick: () => go(back) }, "← Back") : h("span"),
     next ? h("button", { class: "btn primary", disabled: nextDisabled, onclick: () => go(next) }, `${nextLabel} →`) : h("span"));
+}
+
+
+// ---------------------------------------------------------------- device & home
+
+/** Short console names for badges ("PS3", not "PlayStation"). */
+const SHORT_SYS: Record<string, string> = {
+  ps2: "PS2", ps3: "PS3", psx: "PS1", psp: "PSP", psvita: "Vita", gc: "GameCube", wii: "Wii", wiiu: "Wii U",
+  "3ds": "3DS", nds: "DS", n64: "N64", saturn: "Saturn", dreamcast: "Dreamcast",
+};
+function shortSys(id: string): string {
+  return SHORT_SYS[id] ?? catalog.systems.find((s) => s.id === id)?.name ?? id;
+}
+
+function currentDevice(): DeviceInfo | undefined {
+  return catalog.devices.find((d) => d.id === prefs.device);
+}
+
+/** Warn about consoles the chosen device can't realistically run. */
+function fitBadge(systemId: string): Node | null {
+  const d = currentDevice();
+  if (!d) return null;
+  if (d.too_demanding.includes(systemId)) return h("span", { class: "badge attention", style: "margin-top:6px;display:inline-block" }, `Too demanding for ${d.name.split(" (")[0]}`);
+  if (d.limited.includes(systemId)) return h("span", { class: "badge likely", style: "margin-top:6px;display:inline-block" }, "Some games only on this device");
+  return null;
+}
+
+function applyDevice(id: string) {
+  prefs.device = id;
+  const d = currentDevice();
+  if (d) {
+    if (catalog.launchers.some((l) => l.id === d.launcher)) prefs.launcher = d.launcher as LauncherId;
+    prefs.size = d.sizePreset;
+    prefs.pegasusOn = d.launchPlatform === "android" ? "android" : "none";
+  } else {
+    prefs.size = "standard";
+  }
+  savePrefs();
+  go("home");
+  toast(d ? `Set up for ${d.name}. You can still change any setting.` : "Using safe defaults. You can pick a device any time.");
+}
+
+function viewDevice(): Node[] {
+  const card = (d: DeviceInfo) => h("button", { class: `device ${prefs.device === d.id ? "on" : ""}`, onclick: () => applyDevice(d.id) },
+    h("div", { class: "n" }, d.name),
+    h("div", { class: "f" }, d.family),
+    h("div", { class: "spec" }, `${d.screen.inches ? `${d.screen.inches}" ` : ""}${d.screen.width}×${d.screen.height}${d.chipset ? ` · ${d.chipset}` : ""}`),
+    h("div", { class: "row" },
+      d.tested ? h("span", { class: "badge sure" }, "Tested on this device") : null,
+      d.too_demanding.length ? h("span", { class: "badge attention", title: `Too demanding: ${d.too_demanding.map(shortSys).join(", ")}` }, `Not for ${d.too_demanding.slice(0, 3).map(shortSys).join(", ")}${d.too_demanding.length > 3 ? "…" : ""}`) : null));
+  return [
+    h("h1", {}, "What will you play on?"),
+    h("p", { class: "lead" }, "RomCrate sets things up to suit your device — the frontend it uses, how games are launched, and artwork sized for its screen. You can still change every setting yourself."),
+    h("div", { class: "device-grid" },
+      ...catalog.devices.map(card),
+      h("button", { class: `device ${prefs.device === "unsure" ? "on" : ""}`, onclick: () => applyDevice("unsure") },
+        h("div", { class: "n" }, "Not sure / something else"),
+        h("div", { class: "f" }, "Use safe defaults"),
+        h("div", { class: "spec" }, "Works for most setups. Pick a device later for better defaults."))),
+    h("div", { class: "note", style: "margin-top:16px" }, "Only devices marked “Tested on this device” have been checked on a real unit. Specs for the others come from the makers and reviews."),
+  ];
+}
+
+function viewHome(): Node[] {
+  const d = currentDevice();
+  const tasks: [string, string, string, (() => void) | null][] = [
+    ["🩺 Check my files", "Find broken downloads, damaged files and disc copy protection.", "check", () => { go("import"); }],
+    ["📥 Import & sort", "Put games from a messy folder into console folders.", "import", () => go("import")],
+    ["🖼️ Get artwork", "Covers and screenshots — e.g. for a game you just downloaded.", "art", () => go("library")],
+    ["🚀 Pegasus launch lines", "Make Pegasus start your games, without re-scraping.", "pegasus", () => go("pegasus")],
+    ["🗜️ Compress discs", "Shrink disc games to CHD. Coming in the next version.", "soon", null],
+    ["✅ Device setup checklist", "Recommended emulator settings for your device. Coming soon.", "soon", null],
+  ];
+  return [
+    h("h1", {}, "What would you like to do?"),
+    h("p", { class: "lead" }, d
+      ? `Your games are for the ${d.name}. `
+      : "Tell RomCrate which device your games are for and it will choose the best settings. ",
+      h("button", { class: "link", style: "text-decoration:underline", onclick: () => go("device") }, d ? "Change device" : "Choose your device")),
+    h("div", { class: "mode-grid" },
+      h("div", { class: "mode primary" },
+        h("span", { class: "pill" }, "Recommended"),
+        h("div", { class: "mode-title" }, "Set up everything"),
+        h("div", { class: "desc" }, "RomCrate walks you through it, one step at a time:"),
+        h("ol", {},
+          h("li", {}, "Sort new games into console folders (skip if they already are)"),
+          h("li", {}, "Choose your games folders"),
+          h("li", {}, d?.launchPlatform === "android" ? "Pick your frontend and emulators" : "Pick your frontend and theme"),
+          h("li", {}, "Choose the artwork you want"),
+          h("li", {}, "Get the artwork and launcher files")),
+        h("div", { class: "row" },
+          h("button", { class: "btn primary big", onclick: () => go("import") }, "Start →"),
+          h("button", { class: "btn big", onclick: () => go("library") }, "My games are already sorted →")),
+        h("div", { class: "hint" }, "Already set up? The second button skips sorting and goes straight to artwork and launcher files for your device.")),
+      h("div", { class: "mode" },
+        h("div", { class: "mode-title" }, "Custom — pick what to do"),
+        h("div", { class: "desc" }, "Already set up? Run just the task you need."),
+        h("div", { class: "task-grid" }, tasks.map(([t, desc, , fn]) =>
+          h("button", { class: "task", disabled: !fn, onclick: () => fn?.() }, h("div", { class: "t" }, t), h("div", { class: "d" }, desc)))))),
+    h("div", { class: "note", style: "margin-top:18px" },
+      "Every task explains anything it couldn't do, and everything is also saved to the ",
+      h("button", { class: "link", style: "text-decoration:underline", onclick: () => invoke("open_log_folder").catch((e) => toast(String(e))) }, "activity log"), "."),
+  ];
+}
+
+// ---------------------------------------------------------------- view: Pegasus launch lines only
+
+let launchNotes: string[] | null = null;
+let launchBusy = false;
+
+async function writeLaunchLinesOnly() {
+  launchBusy = true; launchNotes = null; render();
+  try {
+    launchNotes = await invoke<string[]>("write_launch_lines", {
+      roots: prefs.roots,
+      launch: { platform: "android", perSystem: prefs.emulators, fixExisting: prefs.fixLaunch },
+    });
+  } catch (e) {
+    toast(String(e));
+  }
+  launchBusy = false; render();
+}
+
+function viewPegasus(): Node[] {
+  const out: (Node | null)[] = [
+    h("h1", {}, "Pegasus launch lines"),
+    h("p", { class: "lead" }, "Pegasus needs a launch line in each console folder to start your games. This writes just those — no artwork is downloaded."),
+  ];
+  if (!prefs.roots.length) {
+    out.push(h("div", { class: "banner warn" }, "Add your ROM folders first."), h("button", { class: "btn primary", onclick: () => go("library") }, "Choose ROM folders →"));
+    return out.filter((x): x is Node => !!x);
+  }
+  out.push(h("div", { class: "chips" }, prefs.roots.map((r) => h("span", { class: "chip" }, h("span", { class: "path" }, `‎${r}‎`)))));
+  const prevOn = prefs.pegasusOn;
+  prefs.pegasusOn = "android";
+  out.push(...launchSection().slice(3)); // emulator picker + fix toggle (Android only here)
+  prefs.pegasusOn = prevOn;
+  out.push(h("div", { class: "row", style: "margin-top:16px" },
+    h("button", { class: "btn primary", disabled: launchBusy, onclick: writeLaunchLinesOnly }, launchBusy ? "Writing…" : "Write launch lines")));
+  if (launchNotes) {
+    out.push(h("h2", {}, "What changed"),
+      h("div", { class: "log" }, launchNotes.length ? launchNotes.map((n) => h("div", { style: "white-space:pre-wrap" }, n)) : [h("div", {}, "Nothing to do.")]));
+  }
+  return out.filter((x): x is Node => !!x);
 }
 
 // ---------------------------------------------------------------- view: library
@@ -293,7 +452,8 @@ function viewLibrary(): Node[] {
             onclick: () => { prefs.deselected = on ? [...prefs.deselected, s.path] : prefs.deselected.filter((p) => p !== s.path); savePrefs(); render(); },
           }, h("div", { class: "check" }),
             h("div", {}, h("div", { class: "name" }, s.system_name),
-              h("div", { class: "meta" }, `${s.games.length} game${s.games.length === 1 ? "" : "s"} · ${s.folder_name}/${prefs.roots.length > 1 ? ` in ${rootLabel(s.path)}` : ""}`)));
+              h("div", { class: "meta" }, `${s.games.length} game${s.games.length === 1 ? "" : "s"} · ${s.folder_name}/${prefs.roots.length > 1 ? ` in ${rootLabel(s.path)}` : ""}`),
+              fitBadge(s.system_id)));
         })),
     );
   }
@@ -655,7 +815,10 @@ async function exportMissing() {
 
 let cacheBytes: number | null = null;
 
+let logDir = "";
+
 function viewSettings(): Node[] {
+  if (!logDir) invoke<{ dir: string }>("log_info").then((i) => { logDir = i.dir; if (view === "settings") render(); });
   if (cacheBytes === null) invoke<number>("cache_size").then((b) => { cacheBytes = b; if (view === "settings") render(); });
   const mb = cacheBytes === null ? "…" : `${(cacheBytes / 1048576).toFixed(1)} MB`;
   return [
@@ -667,6 +830,12 @@ function viewSettings(): Node[] {
       h("li", {}, h("strong", {}, "Only known sites. "), "RomCrate connects over HTTPS to GitHub and libretro (free artwork and game databases), the LaunchBox games database and, if enabled, screenscraper.fr — nothing else, even if a server tries to redirect it."),
       h("li", {}, h("strong", {}, "Clean files only. "), "Every image is fully decoded and re-saved as a fresh PNG, so nothing hidden in a download reaches your drive. Videos and manuals are checked to be real MP4/PDF files."),
       h("li", {}, h("strong", {}, "Your files are safe. "), "RomCrate never deletes games, never writes outside the folders you pick, and backs up gamelist.xml before changing it."))),
+    h("h2", {}, "Activity log"),
+    h("div", { class: "card" },
+      h("div", { class: "desc" }, "Everything RomCrate does — games found or not found and why, files skipped, errors — is written to a daily log on this computer (kept for 30 days). Handy for checking what happened, or for sharing when asking for help. It stays on your computer."),
+      logDir ? h("div", { class: "to", style: "margin-top:8px" }, `\u200E${logDir}\u200E`) : null,
+      h("div", { class: "row", style: "margin-top:10px" },
+        h("button", { class: "btn", onclick: () => invoke("open_log_folder").catch((e) => toast(String(e))) }, "Open log folder"))),
     h("h2", {}, "ScreenScraper login (optional)"),
     h("div", { class: "card" },
       h("div", { style: "color:var(--muted);margin-bottom:12px;line-height:1.5" },
@@ -883,7 +1052,12 @@ function viewImport(): Node[] {
   out.push(...checkPanel());
 
   const p = imp.plan;
-  if (!p) return out.filter((x): x is Node => !!x);
+  if (!p) {
+    out.push(h("div", { class: "footer-bar" },
+      h("button", { class: "btn", onclick: () => go("home") }, "← Home"),
+      h("button", { class: "btn", onclick: () => go("library") }, "Skip — my games are already sorted →")));
+    return out.filter((x): x is Node => !!x);
+  }
 
   // 2. Preview
   const todo = p.items.filter(willImport);
@@ -968,6 +1142,12 @@ async function boot() {
   document.getElementById("version")!.textContent = `v${catalog.version}`;
   document.getElementById("nav-settings")!.addEventListener("click", () => go("settings"));
   document.getElementById("nav-import")!.addEventListener("click", () => go("import"));
+  document.getElementById("nav-check")!.addEventListener("click", () => go("import"));
+  document.getElementById("nav-art")!.addEventListener("click", () => go("library"));
+  document.getElementById("nav-pegasus")!.addEventListener("click", () => go("pegasus"));
+  document.getElementById("nav-home")!.addEventListener("click", () => go("home"));
+  document.getElementById("nav-device")!.addEventListener("click", () => go("device"));
+  view = prefs.device ? "home" : "device";
   await listen("import-event", (ev) => handleImportEvent(ev.payload));
   if (!catalog.launchers.some((l) => l.id === prefs.launcher)) prefs.launcher = "pegasus";
   await listen("scrape-event", (ev) => handleEvent(ev.payload));

@@ -214,3 +214,32 @@ select.input { padding: 6px 10px; }
 .emu-row:last-child { border-bottom: 0; }
 .emu-row select.input { width: 100%; }
 @media (max-width: 820px) { .emu-row { grid-template-columns: 1fr auto; } .emu-row select.input { grid-column: 1 / -1; } }
+
+/* ---------- device + home ---------- */
+.device-chip { display: block; width: 100%; text-align: left; margin: 4px 0 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font: inherit; cursor: pointer; }
+.device-chip:hover { border-color: var(--accent); }
+.device-chip .k { color: var(--faint); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.device-chip .v { font-weight: 600; margin-top: 2px; }
+.tool.soon { opacity: .45; cursor: default; }
+.tool.soon em { font-style: normal; font-size: 11px; margin-left: auto; color: var(--faint); }
+.mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+@media (max-width: 900px) { .mode-grid { grid-template-columns: 1fr; } }
+.mode { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+.mode.primary { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.mode h2 { margin: 0; }
+.mode .pill { align-self: flex-start; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: rgba(60, 207, 142, 0.14); color: var(--ok); text-transform: uppercase; letter-spacing: .05em; }
+.mode ol { margin: 4px 0 6px; padding-left: 20px; color: var(--muted); line-height: 1.7; }
+.task-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.task { text-align: left; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font: inherit; cursor: pointer; }
+.task:hover:not(:disabled) { border-color: var(--accent); }
+.task:disabled { opacity: .45; cursor: default; }
+.task .t { font-weight: 600; }
+.task .d { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+.device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 16px; }
+.device { text-align: left; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.device:hover { border-color: var(--accent); }
+.device.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.device .n { font-weight: 700; }
+.device .f, .device .spec { color: var(--muted); font-size: 12.5px; }
+.device .row { gap: 6px; margin-top: 4px; }
+.mode .mode-title { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }

@@ -1,0 +1,112 @@
+{
+  "_readme": "Devices the games are being prepared for. Picking one sets sensible defaults (frontend layout, Android launch lines, artwork size) and warns about consoles the device can't realistically run. 'too_demanding' = don't expect it to work; 'limited' = some games only. 'tested' is true only when the settings were checked on a real unit by the project owner. Every entry lists its sources.",
+  "devices": [
+    {
+      "id": "odin2-portal",
+      "name": "AYN Odin 2 Portal",
+      "family": "Android handheld",
+      "platform": "android",
+      "screen": { "width": 1920, "height": 1080, "inches": 7.0 },
+      "chipset": "Snapdragon 8 Gen 2",
+      "launcher": "pegasus",
+      "too_demanding": [],
+      "limited": ["ps3", "wiiu"],
+      "tested": true,
+      "tested_note": "Owner's own device: Pegasus + ARMSX2 (PS2), RetroArch (SNES, N64), melonDS (DS).",
+      "sources": ["Owner's device", "https://liliputing.com/ayn-odin-2-portal-handheld-game-console-with-7-inch-120-hz-oled-display-coming-soon/"]
+    },
+    {
+      "id": "odin2",
+      "name": "AYN Odin 2",
+      "family": "Android handheld",
+      "platform": "android",
+      "screen": { "width": 1920, "height": 1080, "inches": 6.0 },
+      "chipset": "Snapdragon 8 Gen 2",
+      "launcher": "pegasus",
+      "too_demanding": [],
+      "limited": ["ps3", "wiiu"],
+      "tested": false,
+      "sources": ["https://liliputing.com/ayn-odin-2-portal-handheld-game-console-with-7-inch-120-hz-oled-display-coming-soon/"]
+    },
+    {
+      "id": "odin2-mini",
+      "name": "AYN Odin 2 Mini",
+      "family": "Android handheld",
+      "platform": "android",
+      "screen": { "width": 1920, "height": 1080, "inches": 5.0 },
+      "chipset": "Snapdragon 8 Gen 2",
+      "launcher": "pegasus",
+      "too_demanding": [],
+      "limited": ["ps3", "wiiu"],
+      "tested": false,
+      "sources": ["https://www.notebookcheck.net/AYN-Odin2-Mini-Launch-pricing-and-specs-officially-confirmed-for-mini-Snapdragon-8-Gen-2-gaming-handheld.838410.0.html"]
+    },
+    {
+      "id": "retroid-pocket-5",
+      "name": "Retroid Pocket 5",
+      "family": "Android handheld",
+      "platform": "android",
+      "screen": { "width": 1920, "height": 1080, "inches": 5.5 },
+      "chipset": "Snapdragon 865",
+      "launcher": "pegasus",
+      "too_demanding": ["ps3"],
+      "limited": ["wiiu"],
+      "tested": false,
+      "sources": ["https://handhelds.wiki/Retroid_Pocket_5", "https://retrohandheldhq.com/posts/retroid-pocket-5-review/"]
+    },
+    {
+      "id": "anbernic-rg556",
+      "name": "Anbernic RG556 (and similar Android Anbernics)",
+      "family": "Android handheld",
+      "platform": "android",
+      "screen": { "width": 1920, "height": 1080, "inches": 5.48 },
+      "chipset": "Unisoc T820",
+      "launcher": "pegasus",
+      "too_demanding": ["ps3", "wiiu"],
+      "limited": ["3ds"],
+      "tested": false,
+      "sources": ["https://retrocatalog.com/retro-handhelds/rg-556"]
+    },
+    {
+      "id": "anbernic-h700",
+      "name": "Anbernic RG35XX / RG40XX family (Linux)",
+      "family": "Linux handheld (Knulli, ROCKNIX, muOS…)",
+      "platform": "linux",
+      "screen": { "width": 640, "height": 480, "inches": 3.5 },
+      "chipset": "Allwinner H700",
+      "launcher": "emulation-station",
+      "too_demanding": ["ps2", "gc", "wii", "wiiu", "ps3", "3ds", "psvita"],
+      "limited": ["saturn", "nds", "psp", "n64", "dreamcast"],
+      "tested": false,
+      "notes": "Knulli and ROCKNIX use EmulationStation-style gamelist.xml. muOS uses its own artwork folders.",
+      "sources": ["https://retrocatalog.com/retro-handhelds/rg-35xx-plus", "https://droix.net/product/anbernic-rg35xx-plus/"]
+    },
+    {
+      "id": "steam-deck",
+      "name": "Steam Deck",
+      "family": "PC handheld (SteamOS)",
+      "platform": "linux",
+      "screen": { "width": 1280, "height": 800, "inches": 7.4 },
+      "chipset": "AMD Van Gogh APU",
+      "launcher": "es-de",
+      "too_demanding": [],
+      "limited": ["ps3"],
+      "tested": false,
+      "notes": "ES-DE is the frontend set up by EmuDeck.",
+      "sources": ["https://www.steamdeck.com/en/tech"]
+    },
+    {
+      "id": "pc-tv",
+      "name": "PC or TV setup",
+      "family": "Windows / Mac / Linux PC",
+      "platform": "desktop",
+      "screen": { "width": 1920, "height": 1080, "inches": 0 },
+      "chipset": "",
+      "launcher": "es-de",
+      "too_demanding": [],
+      "limited": [],
+      "tested": false,
+      "sources": ["Defaults for a 1080p screen"]
+    }
+  ]
+}

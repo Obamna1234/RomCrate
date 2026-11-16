@@ -200,3 +200,31 @@ fn ps2_split_across_sd_card_and_internal_storage() {
     assert!(a.contains("Light Game") && !a.contains("Heavy Game"));
     assert!(b.contains("Heavy Game") && !b.contains("Light Game"));
 }
+
+#[test]
+fn launch_lines_only_task_writes_every_system() {
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("ROMs");
+    write(&root.join("ps2/A.chd"), b"x");
+    write(&root.join("snes/B.sfc"), b"x");
+    let mine = "collection: PS2\nextensions: chd\n\ngame: A\nfile: A.chd\n";
+    let lib = scan::scan_roots(std::slice::from_ref(&root));
+    // Existing PS2 file + opt-in → launch block added; SNES file created.
+    write(&root.join("ps2/metadata.pegasus.txt"), mine.as_bytes());
+    let notes = launchers::write_launch_lines(
+        &lib,
+        &LaunchChoice {
+            fix_existing: true,
+            ..android()
+        },
+    );
+    assert!(fs::read_to_string(root.join("ps2/metadata.pegasus.txt"))
+        .unwrap()
+        .contains(ARMSX2_BLOCK));
+    assert!(root.join("ps2/metadata.pegasus.txt.bak").exists());
+    assert!(root.join("snes/metadata.pegasus.txt").exists());
+    assert!(
+        notes.iter().any(|n| n.contains("Super Nintendo")),
+        "{notes:?}"
+    );
+}
