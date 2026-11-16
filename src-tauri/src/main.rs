@@ -14,7 +14,7 @@ use romcrate_core::{ArtKind, Event, Libretro, ScrapeConfig, Sources};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
@@ -570,11 +570,83 @@ fn open_folder(app: AppHandle, path: String, state: State<'_, AppState>) -> Resu
 /// Where the activity log lives (shown in Settings).
 #[tauri::command]
 fn log_info() -> serde_json::Value {
+    use romcrate_core::datadir;
     let dir = romcrate_core::activity::log_dir();
+    let loc = datadir::location();
     serde_json::json!({
         "dir": dir.to_string_lossy(),
         "today": romcrate_core::activity::today_file(&dir).to_string_lossy(),
+        "dataDir": loc.data_dir.as_ref().map(|d| d.to_string_lossy().to_string()),
+        "defaultLogDir": datadir::default_log_dir().to_string_lossy(),
+        "defaultCacheDir": datadir::default_cache_dir().to_string_lossy(),
+        "cacheDir": datadir::cache_dir().to_string_lossy(),
+        "logEnabled": loc.log_enabled,
     })
+}
+
+/// Use another folder for the log + downloads (`None` = back to the default).
+#[tauri::command]
+async fn set_data_dir(path: Option<String>) -> Result<Vec<String>, String> {
+    let notes = tokio::task::spawn_blocking(move || {
+        romcrate_core::datadir::set_data_dir(path.map(PathBuf::from))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    romcrate_core::activity::append(
+        &romcrate_core::activity::log_dir(),
+        "Settings",
+        &[
+            vec![format!(
+                "RomCrate's folder is now {}",
+                romcrate_core::datadir::log_dir()
+                    .parent()
+                    .unwrap_or(Path::new(""))
+                    .display()
+            )],
+            notes.clone(),
+        ]
+        .concat(),
+    );
+    Ok(notes)
+}
+
+#[tauri::command]
+fn set_log_enabled(on: bool) -> Result<(), String> {
+    romcrate_core::datadir::set_log_enabled(on).map_err(|e| e.to_string())
+}
+
+/// Open today's log as a text file (an empty one with a heading if nothing
+/// was logged yet today).
+#[tauri::command]
+fn open_log_file(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = romcrate_core::activity::log_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let f = romcrate_core::activity::today_file(&dir);
+    if !f.exists() {
+        std::fs::write(&f, "RomCrate activity log — nothing logged yet today.\n")
+            .map_err(|e| e.to_string())?;
+    }
+    app.opener()
+        .open_path(f.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+/// Write a problem report (problems from the last week, your user name taken
+/// out of paths) and open it.
+#[tauri::command]
+fn save_problem_report(app: AppHandle) -> Result<String, String> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = romcrate_core::activity::log_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let text = romcrate_core::activity::problem_report(&dir, env!("CARGO_PKG_VERSION"));
+    let f = romcrate_core::activity::report_file(&dir);
+    std::fs::write(&f, text).map_err(|e| e.to_string())?;
+    app.opener()
+        .open_path(f.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())?;
+    Ok(f.to_string_lossy().to_string())
 }
 
 /// Open the activity log folder in the file manager.
@@ -637,6 +709,10 @@ fn main() {
             write_launch_lines,
             log_info,
             open_log_folder,
+            open_log_file,
+            save_problem_report,
+            set_data_dir,
+            set_log_enabled,
             thumbnail,
             guess_folder,
             cache_size,

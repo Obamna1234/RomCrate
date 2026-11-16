@@ -178,12 +178,15 @@ pub struct Libretro {
 }
 
 pub fn default_cache_dir() -> PathBuf {
-    let base = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-    let dir = base.join("RomCrate");
+    let dir = crate::datadir::cache_dir();
     // Carry over downloads from when the app was called ShelfArt (saves re-downloading).
-    let old = base.join("ShelfArt");
-    if !dir.exists() && old.is_dir() {
-        let _ = std::fs::rename(&old, &dir);
+    if dir == crate::datadir::default_cache_dir() {
+        let old = dirs::cache_dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("ShelfArt");
+        if !dir.exists() && old.is_dir() {
+            let _ = std::fs::rename(&old, &dir);
+        }
     }
     dir
 }

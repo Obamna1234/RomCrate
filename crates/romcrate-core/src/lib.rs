@@ -7,6 +7,7 @@
 
 pub mod activity;
 pub mod archive;
+pub mod datadir;
 pub mod devices;
 pub mod identify;
 pub mod imaging;

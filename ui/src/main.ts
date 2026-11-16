@@ -1,3 +1,4 @@
+import { deviceArt } from "./deviceArt";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -192,6 +193,7 @@ function renderNav() {
 
 function go(v: typeof view) {
   view = v;
+  if (v === "settings") { logInfo = null; cacheBytes = null; }
   render();
   document.getElementById("main")!.scrollTop = 0;
 }
@@ -204,12 +206,21 @@ function render() {
   document.getElementById("nav-pegasus")?.classList.toggle("active", view === "pegasus");
   const d = currentDevice();
   document.getElementById("nav-device")!.replaceChildren(
+    prefs.device ? artOf(prefs.device, "chip-art") : "",
     h("div", { class: "k" }, "Games are for"),
     h("div", { class: "v" }, d ? d.name : prefs.device === "unsure" ? "Not sure — safe defaults" : "Choose your device…"));
-  const keep = main.dataset.view === view ? main.scrollTop : 0;
+  const sameView = main.dataset.view === view;
+  const keep = sameView ? main.scrollTop : 0;
+  // Activity panels follow the newest line, like a terminal — unless you've
+  // scrolled up to read something, then they stay where you are.
+  const logs = [...main.querySelectorAll<HTMLElement>(".log")].map((l) => ({ top: l.scrollTop, atEnd: l.scrollTop + l.clientHeight >= l.scrollHeight - 12 }));
   main.replaceChildren(...views[view]());
   main.dataset.view = view;
   main.scrollTop = keep;
+  main.querySelectorAll<HTMLElement>(".log").forEach((l, i) => {
+    const was = sameView ? logs[i] : undefined;
+    l.scrollTop = !was || was.atEnd ? l.scrollHeight : was.top;
+  });
 }
 
 function footer(back: typeof view | null, next: typeof view | null, nextLabel = "Continue", nextDisabled = false) {
@@ -258,8 +269,18 @@ function applyDevice(id: string) {
   toast(d ? `Set up for ${d.name}. You can still change any setting.` : "Using safe defaults. You can pick a device any time.");
 }
 
+/** Drawing of a device (our own line art; no photos or logos). */
+function artOf(id: string, cls = "art"): HTMLElement {
+  const d = document.createElement("div");
+  d.className = cls;
+  d.innerHTML = deviceArt(id);
+  return d;
+}
+
 function viewDevice(): Node[] {
+  if (!logInfo) loadLogInfo();
   const card = (d: DeviceInfo) => h("button", { class: `device ${prefs.device === d.id ? "on" : ""}`, onclick: () => applyDevice(d.id) },
+    artOf(d.id),
     h("div", { class: "n" }, d.name),
     h("div", { class: "f" }, d.family),
     h("div", { class: "spec" }, `${d.screen.inches ? `${d.screen.inches}" ` : ""}${d.screen.width}×${d.screen.height}${d.chipset ? ` · ${d.chipset}` : ""}`),
@@ -272,10 +293,14 @@ function viewDevice(): Node[] {
     h("div", { class: "device-grid" },
       ...catalog.devices.map(card),
       h("button", { class: `device ${prefs.device === "unsure" ? "on" : ""}`, onclick: () => applyDevice("unsure") },
+        artOf("unsure"),
         h("div", { class: "n" }, "Not sure / something else"),
         h("div", { class: "f" }, "Use safe defaults"),
         h("div", { class: "spec" }, "Works for most setups. Pick a device later for better defaults."))),
-    h("div", { class: "note", style: "margin-top:16px" }, "Only devices marked “Tested on this device” have been checked on a real unit. Specs for the others come from the makers and reviews."),
+    h("div", { class: "note", style: "margin-top:16px" }, "Only devices marked “Tested on this device” have been checked on a real unit. Specs for the others come from the makers and reviews. The pictures are simple drawings made for RomCrate."),
+    h("div", { class: "note", style: "margin-top:10px" },
+      "RomCrate keeps its log and downloads in ", logInfo ? h("span", { class: "path" }, `\u200E${dataFolderText(logInfo)}\u200E`) : "your app data folder", ". ",
+      h("button", { class: "link", style: "text-decoration:underline", onclick: chooseDataFolder }, "Change…")),
   ];
 }
 
@@ -770,7 +795,15 @@ function handleEvent(e: any) {
       if (r.preview) invoke<string>("thumbnail", { path: r.preview }).then((d) => { r.thumb = d; queueRender(); }).catch(() => {});
       break;
     }
-    case "log": if (e.level !== "debug") run.log.push({ level: e.level, message: e.message }); break;
+    case "log": {
+      if (e.level === "debug") break;
+      // "Downloading … 10 MB of 104 MB", "… 20 MB of 104 MB": one line that updates.
+      const last = run.log[run.log.length - 1];
+      const stem = (m: string) => m.split("…")[0];
+      if (last && / MB of /.test(e.message) && / MB of /.test(last.message) && stem(last.message) === stem(e.message)) run.log[run.log.length - 1] = { level: e.level, message: e.message };
+      else run.log.push({ level: e.level, message: e.message });
+      break;
+    }
     case "finished": run.running = false; run.summary = e.summary; toast(e.summary.cancelled ? "Scrape stopped" : "All done!"); break;
   }
   queueRender();
@@ -831,7 +864,7 @@ function viewScrape(): Node[] {
       h("div", { class: "m" }, r.status === "skipped" ? `${r.method === "hash" ? "✓ identified · " : ""}Already had art` : r.matched ? `${r.method === "hash" ? "✓ identified · " : ""}${r.saved.length} saved` : r.status === "missing" ? "Not in the collections" : r.message ?? ""))))));
 
   if (run.log.length) {
-    out.push(h("h2", {}, "Activity"), h("div", { class: "log" }, run.log.slice(-200).map((l) => h("div", { class: l.level }, l.message))));
+    out.push(h("h2", {}, "Activity"), h("div", { class: "log" }, run.log.slice(-2000).map((l) => h("div", { class: l.level }, l.message))), logButtons());
   }
   return out.filter((x): x is Node => !!x);
 }
@@ -852,10 +885,43 @@ async function exportMissing() {
 
 let cacheBytes: number | null = null;
 
-let logDir = "";
+interface LogInfo { dir: string; today: string; dataDir: string | null; defaultLogDir: string; defaultCacheDir: string; cacheDir: string; logEnabled: boolean }
+let logInfo: LogInfo | null = null;
+function loadLogInfo() {
+  invoke<LogInfo>("log_info").then((i) => { logInfo = i; if (view === "settings" || view === "device") render(); }).catch(() => {});
+}
+
+/** Where RomCrate keeps its own files, in words. */
+function dataFolderText(i: LogInfo): string {
+  return i.dataDir ?? `${i.defaultLogDir.replace(/[\\/]logs$/, "")} (log) and ${i.defaultCacheDir} (downloads)`;
+}
+
+async function chooseDataFolder() {
+  const picked = await open({ directory: true, multiple: false, title: "Where should RomCrate keep its log and downloads?" });
+  if (!picked || Array.isArray(picked)) return;
+  await setDataFolder(picked);
+}
+
+async function setDataFolder(path: string | null) {
+  try {
+    const notes = await invoke<string[]>("set_data_dir", { path });
+    cacheBytes = null;
+    toast(notes.length ? `Done — ${notes.join("; ")}` : "Done — RomCrate will keep its files there from now on.");
+  } catch (e) {
+    toast(`Couldn't use that folder: ${e}`);
+  }
+  loadLogInfo();
+}
+
+/** Buttons shown under every Activity panel. */
+function logButtons(): Node {
+  return h("div", { class: "row", style: "margin-top:8px" },
+    h("button", { class: "btn", onclick: () => invoke("open_log_file").catch((e) => toast(String(e))) }, "Open log (.txt)"),
+    h("button", { class: "btn", onclick: () => invoke<string>("save_problem_report").then(() => toast("Problem report saved and opened.")).catch((e) => toast(String(e))) }, "Save problem report"));
+}
 
 function viewSettings(): Node[] {
-  if (!logDir) invoke<{ dir: string }>("log_info").then((i) => { logDir = i.dir; if (view === "settings") render(); });
+  if (!logInfo) loadLogInfo();
   if (cacheBytes === null) invoke<number>("cache_size").then((b) => { cacheBytes = b; if (view === "settings") render(); });
   const mb = cacheBytes === null ? "…" : `${(cacheBytes / 1048576).toFixed(1)} MB`;
   return [
@@ -867,11 +933,21 @@ function viewSettings(): Node[] {
       h("li", {}, h("strong", {}, "Only known sites. "), "RomCrate connects over HTTPS to GitHub and libretro (free artwork and game databases), the LaunchBox games database and, if enabled, screenscraper.fr — nothing else, even if a server tries to redirect it."),
       h("li", {}, h("strong", {}, "Clean files only. "), "Every image is fully decoded and re-saved as a fresh PNG, so nothing hidden in a download reaches your drive. Videos and manuals are checked to be real MP4/PDF files."),
       h("li", {}, h("strong", {}, "Your files are safe. "), "RomCrate never deletes games, never writes outside the folders you pick, and backs up gamelist.xml before changing it."))),
+    h("h2", {}, "RomCrate's own files"),
+    h("div", { class: "card" },
+      h("div", { class: "desc" }, "RomCrate keeps two things of its own: the activity log, and downloaded databases and artwork indexes (so it doesn't re-download them every time). You choose where. Your games and artwork always go where you point RomCrate, never here."),
+      logInfo ? h("div", { class: "to", style: "margin-top:8px" }, `\u200E${dataFolderText(logInfo)}\u200E`) : null,
+      h("div", { class: "row", style: "margin-top:10px" },
+        h("button", { class: "btn", onclick: chooseDataFolder }, "Change folder…"),
+        logInfo?.dataDir ? h("button", { class: "btn", onclick: () => setDataFolder(null) }, "Use the default again") : null),
+      h("div", { class: "hint", style: "margin-top:6px" }, "Changing it moves the existing log and downloads to the new folder. The default is your system's usual place for app data — it always exists and is cleaned up when you uninstall.")),
     h("h2", {}, "Activity log"),
     h("div", { class: "card" },
-      h("div", { class: "desc" }, "Everything RomCrate does — games found or not found and why, files skipped, errors — is written to a daily log on this computer (kept for 30 days). Handy for checking what happened, or for sharing when asking for help. It stays on your computer."),
-      logDir ? h("div", { class: "to", style: "margin-top:8px" }, `\u200E${logDir}\u200E`) : null,
-      h("div", { class: "row", style: "margin-top:10px" },
+      logInfo ? toggle(logInfo.logEnabled, "Keep an activity log", "Everything RomCrate does — games found or not found and why, files skipped, errors — written to a daily .txt file (kept for 30 days). It stays on your computer.",
+        () => { const on = !logInfo!.logEnabled; invoke("set_log_enabled", { on }).then(() => { logInfo!.logEnabled = on; render(); }).catch((e) => toast(String(e))); }) : null,
+      h("div", { class: "desc", style: "margin-top:8px" }, "Something went wrong? “Save problem report” makes a short .txt with just the problems from the last week, your user name taken out of the paths — easy to share when asking for help."),
+      logButtons(),
+      h("div", { class: "row", style: "margin-top:8px" },
         h("button", { class: "btn", onclick: () => invoke("open_log_folder").catch((e) => toast(String(e))) }, "Open log folder"))),
     h("h2", {}, "ScreenScraper login (optional)"),
     h("div", { class: "card" },
@@ -891,7 +967,7 @@ function viewSettings(): Node[] {
     h("h2", {}, "Cache"),
     h("div", { class: "card" },
       h("div", { style: "color:var(--muted);margin-bottom:12px" }, `Downloaded artwork lists, databases and original images are cached so re-runs are fast and work offline. Currently ${mb}.`),
-      h("div", { class: "note", style: "margin:0 0 12px" }, catalog.cacheDir),
+      h("div", { class: "note", style: "margin:0 0 12px" }, logInfo?.cacheDir ?? catalog.cacheDir),
       h("button", { class: "btn", onclick: async () => { await invoke("clear_cache"); cacheBytes = null; toast("Cache cleared"); render(); } }, "Clear cache")),
     h("h2", {}, "About"),
     h("div", { class: "card", style: "color:var(--muted);line-height:1.55" },
@@ -1147,7 +1223,7 @@ function viewImport(): Node[] {
           h("button", { class: "btn primary big", onclick: scrapeImported }, "Get artwork for these games →"),
           h("button", { class: "btn", onclick: () => invoke("open_folder", { path: p.dest }).catch((e) => toast(String(e))) }, "Open ROMs folder")));
     }
-    if (imp.log.length) prog.push(h("h2", {}, "Activity"), h("div", { class: "log" }, imp.log.slice(-300).map((l) => h("div", { class: l.ok ? "" : "error" }, `${l.ok ? "✓" : "✗"} ${l.message}`))));
+    if (imp.log.length) prog.push(h("h2", {}, "Activity"), h("div", { class: "log" }, imp.log.slice(-2000).map((l) => h("div", { class: l.ok ? "" : "error" }, `${l.ok ? "✓" : "✗"} ${l.message}`))), logButtons());
   }
   if (!imp.running && !imp.summary) {
     out.push(h("div", { class: "footer-bar" }, h("span", {}),
