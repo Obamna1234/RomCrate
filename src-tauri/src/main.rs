@@ -938,6 +938,104 @@ async fn settings_undo(
     Ok(res)
 }
 
+// ---------------------------------------------------------------- per-game settings
+
+/// Every game on the handheld that can have its own resolution setting, with
+/// its current value and RomCrate's suggestion.
+#[tauri::command]
+async fn pergame_scan(serial: String, app: AppHandle) -> Result<Vec<romcrate_core::pergame::GameRow>, String> {
+    use romcrate_core::{launchbox::LaunchBox, matcher::MatchPrefs, systems};
+    let adb = find_adb()?;
+    let s2 = serial.clone();
+    let adb2 = adb.clone();
+    // Console folders on the handheld.
+    let dirs: Vec<(String, String)> = tokio::task::spawn_blocking(move || {
+        adb2.volumes(&s2)
+            .unwrap_or_default()
+            .iter()
+            .flat_map(|v| {
+                let roms = v.roms_dir.clone();
+                v.console_folders.iter().filter_map(move |f| {
+                    let sys = systems::detect_from_folder(f)?;
+                    Some((sys.id.to_string(), format!("{}/{}/{f}", v.path, roms.as_deref()?)))
+                })
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    // Genres for the per-game rules (PS2 shooters/racers), from the LaunchBox
+    // database RomCrate already uses for artwork.
+    let need_genres = dirs.iter().any(|(s, _)| s == "ps2");
+    let mut platform_db = None;
+    if need_genres {
+        let lb = LaunchBox::new(
+            romcrate_core::net::SafeClient::new().map_err(|e| e.to_string())?,
+            &romcrate_core::source::default_cache_dir(),
+        );
+        let app2 = app.clone();
+        if lb
+            .ensure_database(false, &move |d, t| {
+                let _ = app2.emit("pergame-progress", serde_json::json!({ "done": d, "total": t }));
+            })
+            .await
+            .is_ok()
+        {
+            let files = lb.dir_for_blocking();
+            let name = systems::by_id("ps2").map(|s| s.launchbox).unwrap_or_default();
+            platform_db = tokio::task::spawn_blocking(move || {
+                files.platforms(&[name]).ok().and_then(|mut m| m.remove(name)).map(|mut db| {
+                    db.prepare();
+                    db
+                })
+            })
+            .await
+            .ok()
+            .flatten();
+        }
+    }
+    tokio::task::spawn_blocking(move || {
+        let prefs = MatchPrefs::default();
+        let genre_of = |system: &str, name: &str| -> Option<String> {
+            if system != "ps2" {
+                return None;
+            }
+            let db = platform_db.as_ref()?;
+            let id = db.find(&[name], &prefs)?;
+            db.info(id)?.genre
+        };
+        let mut dev = romcrate_core::adb::AdbFs { adb: &adb, serial: &serial };
+        romcrate_core::pergame::scan(&mut dev, &dirs, &genre_of)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn pergame_apply(
+    serial: String,
+    choices: Vec<romcrate_core::pergame::Choice>,
+) -> Result<romcrate_core::gamesettings::ApplyResult, String> {
+    let adb = find_adb()?;
+    let res = tokio::task::spawn_blocking(move || {
+        let mut dev = romcrate_core::adb::AdbFs { adb: &adb, serial: &serial };
+        romcrate_core::pergame::apply(&mut dev, &choices)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    log_settings(
+        &[
+            vec![format!(
+                "Per-game: {} change(s), {} failed",
+                res.changed_files, res.failed
+            )],
+            res.lines.clone(),
+        ]
+        .concat(),
+    );
+    Ok(res)
+}
+
 /// Open the activity log folder in the file manager.
 #[tauri::command]
 fn open_log_folder(app: AppHandle) -> Result<(), String> {
@@ -1008,6 +1106,8 @@ fn main() {
             settings_plan,
             settings_apply,
             settings_undo,
+            pergame_scan,
+            pergame_apply,
             save_problem_report,
             set_data_dir,
             set_log_enabled,

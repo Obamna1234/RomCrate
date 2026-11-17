@@ -79,6 +79,8 @@ pub struct Profile {
     #[serde(default)]
     pub tested: bool,
     pub source: String,
+    #[serde(default)]
+    pub per_game: Option<crate::pergame::PerGame>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -206,6 +208,64 @@ pub trait DeviceFs {
     fn find_file(&mut self, name: &str) -> Option<String>;
     fn installed_packages(&mut self) -> HashSet<String>;
     fn stop_app(&mut self, package: &str);
+    /// `len` bytes from `offset` of a (possibly huge) file, without copying it all.
+    fn read_range(&mut self, path: &str, offset: u64, len: usize) -> anyhow::Result<Vec<u8>>;
+    /// Files (not folders) directly inside a folder, as full paths.
+    fn list_files(&mut self, dir: &str) -> Vec<String>;
+}
+
+/// Read+Seek over a file on the handheld, fetching 64 KB blocks as needed.
+pub struct DeviceReader<'a> {
+    pub fs: &'a mut dyn DeviceFs,
+    pub path: String,
+    pos: u64,
+    cache: std::collections::HashMap<u64, Vec<u8>>,
+}
+
+const BLOCK: u64 = 64 * 1024;
+
+impl<'a> DeviceReader<'a> {
+    pub fn new(fs: &'a mut dyn DeviceFs, path: &str) -> Self {
+        DeviceReader { fs, path: path.to_string(), pos: 0, cache: Default::default() }
+    }
+}
+
+impl std::io::Read for DeviceReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let b = self.pos / BLOCK;
+        if !self.cache.contains_key(&b) {
+            if self.cache.len() > 64 {
+                self.cache.clear();
+            }
+            let data = self
+                .fs
+                .read_range(&self.path, b * BLOCK, BLOCK as usize)
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
+            self.cache.insert(b, data);
+        }
+        let data = &self.cache[&b];
+        let off = (self.pos - b * BLOCK) as usize;
+        if off >= data.len() {
+            return Ok(0);
+        }
+        let n = buf.len().min(data.len() - off);
+        buf[..n].copy_from_slice(&data[off..off + n]);
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl std::io::Seek for DeviceReader<'_> {
+    fn seek(&mut self, to: std::io::SeekFrom) -> std::io::Result<u64> {
+        self.pos = match to {
+            std::io::SeekFrom::Start(p) => p,
+            std::io::SeekFrom::Current(d) => self.pos.saturating_add_signed(d),
+            std::io::SeekFrom::End(_) => {
+                return Err(std::io::Error::other("seeking from the end isn't supported"))
+            }
+        };
+        Ok(self.pos)
+    }
 }
 
 // ---------------------------------------------------------------- plan
@@ -257,7 +317,7 @@ pub struct SettingsPlan {
     pub consoles: Vec<ConsolePlan>,
 }
 
-const RETROARCH_PACKAGES: &[&str] = &[
+pub const RETROARCH_PACKAGES: &[&str] = &[
     "com.retroarch",
     "com.retroarch.aarch64",
     "com.retroarch.ra32",
@@ -327,6 +387,14 @@ fn find_retroarch(
         shader_dir: usable(cfg_get(&cfg, "video_shader_dir")),
         core_options_file,
     })
+}
+
+/// (config folder, shared core options file, video driver) of the RetroArch
+/// installed on the handheld, if found.
+pub fn retroarch_paths(fs: &mut dyn DeviceFs, installed: &HashSet<String>) -> Option<(String, String, String)> {
+    find_retroarch(fs, installed)
+        .ok()
+        .map(|r| (r.config_dir, r.core_options_file, r.driver))
 }
 
 fn change_from(
@@ -669,6 +737,10 @@ pub fn undo(fs: &mut dyn DeviceFs, systems: &[String]) -> ApplyResult {
         }
     }
     paths.dedup();
+    let pg = crate::pergame::undo_all(fs);
+    res.changed_files += pg.changed_files;
+    res.failed += pg.failed;
+    res.lines.extend(pg.lines);
     for (emu, path) in paths {
         let backup = format!("{path}{BACKUP_SUFFIX}");
         let r = (|| -> anyhow::Result<Option<&'static str>> {

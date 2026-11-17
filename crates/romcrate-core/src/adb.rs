@@ -289,6 +289,37 @@ impl crate::gamesettings::DeviceFs for AdbFs<'_> {
             .adb
             .shell(self.serial, &format!("am force-stop {}", q(package)));
     }
+    fn read_range(&mut self, path: &str, offset: u64, len: usize) -> anyhow::Result<Vec<u8>> {
+        use base64::Engine;
+        // dd in 4 KB blocks (offsets here are always 64 KB-aligned), base64 so
+        // the bytes survive the trip through the shell.
+        anyhow::ensure!(offset % 4096 == 0 && len % 4096 == 0, "unaligned read");
+        let out = self.adb.shell(
+            self.serial,
+            &format!(
+                "dd if={} bs=4096 skip={} count={} 2>/dev/null | base64",
+                q(path),
+                offset / 4096,
+                len / 4096
+            ),
+        )?;
+        let clean: String = out.chars().filter(|c| !c.is_whitespace()).collect();
+        Ok(base64::engine::general_purpose::STANDARD.decode(clean)?)
+    }
+    fn list_files(&mut self, dir: &str) -> Vec<String> {
+        self.adb
+            .shell(
+                self.serial,
+                &format!("find {} -maxdepth 1 -type f 2>/dev/null; true", q(dir)),
+            )
+            .map(|o| {
+                o.lines()
+                    .map(|l| l.trim().to_string())
+                    .filter(|l| !l.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 /// Quote for the handheld's shell.

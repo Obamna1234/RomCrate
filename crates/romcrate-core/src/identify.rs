@@ -494,7 +494,7 @@ fn zip_first_crc(path: &Path) -> Option<u32> {
     Some(u32::from_le_bytes(hdr[16..20].try_into().ok()?))
 }
 
-fn read_at(f: &mut File, off: u64, n: usize) -> Option<Vec<u8>> {
+fn read_at<R: Read + Seek>(f: &mut R, off: u64, n: usize) -> Option<Vec<u8>> {
     f.seek(SeekFrom::Start(off)).ok()?;
     let mut b = vec![0u8; n];
     f.read_exact(&mut b).ok()?;
@@ -533,6 +533,43 @@ fn read_serial(sys_id: &str, path: &Path, ext: &str) -> Option<String> {
                 return Some(s.to_string());
             }
             let cnf = iso.read_file(&mut f, "SYSTEM.CNF")?;
+            parse_system_cnf(&String::from_utf8_lossy(&cnf))
+        }
+        _ => None,
+    }
+}
+
+/// The ID an emulator names a game's own settings file after, read from the
+/// disc image (any seekable source, e.g. a game on a handheld read over USB):
+/// * GameCube/Wii: the 6-character game ID ("RMCE01") — Dolphin `GameSettings/<ID>.ini`
+/// * PSP: the disc ID without the dash ("ULUS10041") — PPSSPP `<ID>_ppsspp.ini`
+/// * PS1/PS2: the serial ("SLUS-20827")
+///
+/// Compressed images (.chd, .cso, .gcz) can't be read this way: `None`.
+pub fn disc_id<R: Read + Seek>(sys_id: &str, f: &mut R, ext: &str) -> Option<String> {
+    match sys_id {
+        "gc" | "wii" => {
+            let off = match ext {
+                "iso" | "gcm" => 0,
+                "wbfs" => 0x200,
+                "rvz" | "wia" => 0x58,
+                "ciso" => 0x8000,
+                _ => return None,
+            };
+            let head = read_at(f, off, 6)?;
+            let id = std::str::from_utf8(&head).ok()?;
+            id.chars().all(|c| c.is_ascii_alphanumeric()).then(|| id.to_string())
+        }
+        "psp" if ext == "iso" => {
+            let iso = IsoReader::detect(f)?;
+            let data = iso.read_file(f, "UMD_DATA.BIN")?;
+            let s = std::str::from_utf8(&data[..data.len().min(10)]).ok()?;
+            let id: String = s.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+            (id.len() == 9).then_some(id)
+        }
+        "psx" | "ps2" if matches!(ext, "iso" | "bin" | "img") => {
+            let iso = IsoReader::detect(f)?;
+            let cnf = iso.read_file(f, "SYSTEM.CNF")?;
             parse_system_cnf(&String::from_utf8_lossy(&cnf))
         }
         _ => None,
@@ -594,7 +631,7 @@ struct IsoReader {
 }
 
 impl IsoReader {
-    fn detect(f: &mut File) -> Option<IsoReader> {
+    fn detect<R: Read + Seek>(f: &mut R) -> Option<IsoReader> {
         for (sector, data_off) in [(2048u64, 0u64), (2352, 24), (2352, 16)] {
             let pvd = read_at(f, 16 * sector + data_off, 2048)?;
             if pvd[0] == 1 && &pvd[1..6] == b"CD001" {
@@ -612,7 +649,7 @@ impl IsoReader {
         None
     }
 
-    fn read_sectors(&self, f: &mut File, lba: u64, len: u64) -> Option<Vec<u8>> {
+    fn read_sectors<R: Read + Seek>(&self, f: &mut R, lba: u64, len: u64) -> Option<Vec<u8>> {
         let len = len.min(4 * 1024 * 1024);
         let mut out = Vec::with_capacity(len as usize);
         let mut i = 0;
@@ -625,7 +662,7 @@ impl IsoReader {
         Some(out)
     }
 
-    fn root_names(&self, f: &mut File) -> Vec<String> {
+    fn root_names<R: Read + Seek>(&self, f: &mut R) -> Vec<String> {
         let Some(dir) = self.read_sectors(f, self.root_lba, self.root_len) else {
             return vec![];
         };
@@ -651,7 +688,7 @@ impl IsoReader {
         out
     }
 
-    fn read_file(&self, f: &mut File, name: &str) -> Option<Vec<u8>> {
+    fn read_file<R: Read + Seek>(&self, f: &mut R, name: &str) -> Option<Vec<u8>> {
         let dir = self.read_sectors(f, self.root_lba, self.root_len)?;
         let mut i = 0usize;
         while i + 33 < dir.len() {

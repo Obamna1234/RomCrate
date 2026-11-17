@@ -18,6 +18,7 @@ pub mod launch;
 pub mod launchbox;
 pub mod launchers;
 pub mod matcher;
+pub mod pergame;
 pub mod net;
 pub mod paths;
 pub mod preflight;
