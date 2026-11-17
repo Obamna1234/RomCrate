@@ -222,6 +222,75 @@ impl Adb {
     }
 }
 
+/// The handheld's files, for Game settings.
+pub struct AdbFs<'a> {
+    pub adb: &'a Adb,
+    pub serial: &'a str,
+}
+
+impl crate::gamesettings::DeviceFs for AdbFs<'_> {
+    fn read(&mut self, path: &str) -> anyhow::Result<Option<String>> {
+        let out = self.adb.shell(
+            self.serial,
+            &format!(
+                "if [ -f {p} ]; then printf __RC_Y__; cat {p}; else printf __RC_N__; fi",
+                p = q(path)
+            ),
+        )?;
+        if let Some(t) = out.strip_prefix("__RC_Y__") {
+            Ok(Some(t.to_string()))
+        } else if out.starts_with("__RC_N__") {
+            Ok(None)
+        } else {
+            anyhow::bail!("unexpected answer from the handheld")
+        }
+    }
+    fn write(&mut self, path: &str, text: &str) -> anyhow::Result<()> {
+        let tmp = tempfile::NamedTempFile::new()?;
+        fs::write(tmp.path(), text)?;
+        self.adb.push(self.serial, tmp.path(), path)
+    }
+    fn copy(&mut self, from: &str, to: &str) -> anyhow::Result<()> {
+        self.adb
+            .shell(self.serial, &format!("cp {} {}", q(from), q(to)))
+            .map(|_| ())
+    }
+    fn remove(&mut self, path: &str) -> anyhow::Result<()> {
+        self.adb.remove(self.serial, path)
+    }
+    fn is_dir(&mut self, path: &str) -> bool {
+        self.adb
+            .shell(self.serial, &format!("[ -d {} ] && echo Y; true", q(path)))
+            .map(|o| o.trim() == "Y")
+            .unwrap_or(false)
+    }
+    fn find_file(&mut self, name: &str) -> Option<String> {
+        self.adb
+            .shell(
+                self.serial,
+                &format!("find /storage/emulated/0 -maxdepth 6 -type f -name {} 2>/dev/null | head -n 1; true", q(name)),
+            )
+            .ok()
+            .and_then(|o| o.lines().next().map(|l| l.trim().to_string()))
+            .filter(|l| !l.is_empty())
+    }
+    fn installed_packages(&mut self) -> std::collections::HashSet<String> {
+        self.adb
+            .shell(self.serial, "pm list packages")
+            .map(|o| {
+                o.lines()
+                    .filter_map(|l| l.trim().strip_prefix("package:").map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+    fn stop_app(&mut self, package: &str) {
+        let _ = self
+            .adb
+            .shell(self.serial, &format!("am force-stop {}", q(package)));
+    }
+}
+
 /// Quote for the handheld's shell.
 fn q(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))

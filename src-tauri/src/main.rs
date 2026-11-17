@@ -33,6 +33,7 @@ struct AppState {
     import_plan: Mutex<Option<ImportPlan>>,
     /// The last "send to handheld" plan (serial + files). Sending only acts on this.
     send_plan: Mutex<Option<(String, romcrate_core::adb::SendPlan)>>,
+    settings_plan: Mutex<Option<(String, romcrate_core::gamesettings::SettingsPlan)>>,
 }
 
 #[derive(Serialize)]
@@ -824,6 +825,119 @@ async fn start_send(app: AppHandle, state: State<'_, AppState>) -> Result<(), St
     Ok(())
 }
 
+// ---------------------------------------------------------------- game settings
+
+fn device_systems(adb: &romcrate_core::adb::Adb, serial: &str) -> Vec<String> {
+    adb.volumes(serial)
+        .unwrap_or_default()
+        .iter()
+        .flat_map(|v| v.console_folders.iter())
+        .filter_map(|f| romcrate_core::systems::detect_from_folder(f).map(|s| s.id.to_string()))
+        .collect()
+}
+
+/// What would change for the consoles in "Your games" plus the console folders
+/// found on the handheld.
+#[tauri::command]
+async fn settings_plan(
+    serial: String,
+    systems: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<romcrate_core::gamesettings::SettingsPlan, String> {
+    let adb = find_adb()?;
+    let s2 = serial.clone();
+    let plan = tokio::task::spawn_blocking(move || {
+        let mut all = systems;
+        all.extend(device_systems(&adb, &s2));
+        all.sort();
+        all.dedup();
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &s2,
+        };
+        romcrate_core::gamesettings::plan(&mut dev, &all)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    *state.settings_plan.lock().unwrap() = Some((serial, plan.clone()));
+    Ok(plan)
+}
+
+fn log_settings(task_lines: &[String]) {
+    romcrate_core::activity::append(
+        &romcrate_core::activity::log_dir(),
+        "Game settings",
+        task_lines,
+    );
+}
+
+#[tauri::command]
+async fn settings_apply(
+    ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<romcrate_core::gamesettings::ApplyResult, String> {
+    let (serial, plan) = state
+        .settings_plan
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or("Check your emulators first")?;
+    let adb = find_adb()?;
+    let res = tokio::task::spawn_blocking(move || {
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &serial,
+        };
+        romcrate_core::gamesettings::apply(&mut dev, &plan, &ids)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    log_settings(
+        &[
+            vec![format!(
+                "Applied: {} file(s) changed, {} failed",
+                res.changed_files, res.failed
+            )],
+            res.lines.clone(),
+        ]
+        .concat(),
+    );
+    *state.settings_plan.lock().unwrap() = None;
+    Ok(res)
+}
+
+#[tauri::command]
+async fn settings_undo(
+    serial: String,
+    systems: Vec<String>,
+) -> Result<romcrate_core::gamesettings::ApplyResult, String> {
+    let adb = find_adb()?;
+    let res = tokio::task::spawn_blocking(move || {
+        let mut all = systems;
+        all.extend(device_systems(&adb, &serial));
+        all.sort();
+        all.dedup();
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &serial,
+        };
+        romcrate_core::gamesettings::undo(&mut dev, &all)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    log_settings(
+        &[
+            vec![format!(
+                "Undo: {} file(s) put back, {} failed",
+                res.changed_files, res.failed
+            )],
+            res.lines.clone(),
+        ]
+        .concat(),
+    );
+    Ok(res)
+}
+
 /// Open the activity log folder in the file manager.
 #[tauri::command]
 fn open_log_folder(app: AppHandle) -> Result<(), String> {
@@ -891,6 +1005,9 @@ fn main() {
             adb_volumes,
             send_plan,
             start_send,
+            settings_plan,
+            settings_apply,
+            settings_undo,
             save_problem_report,
             set_data_dir,
             set_log_enabled,

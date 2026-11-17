@@ -10,6 +10,7 @@ pub mod adb;
 pub mod archive;
 pub mod datadir;
 pub mod devices;
+pub mod gamesettings;
 pub mod identify;
 pub mod imaging;
 pub mod import;

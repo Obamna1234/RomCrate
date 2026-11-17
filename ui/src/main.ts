@@ -70,6 +70,8 @@ interface Prefs {
   importSources: string[];
   /** Console folder on this PC → storage on the handheld. */
   sendTargets: Record<string, string>;
+  /** Ticked checklist steps in Game settings ("ps2:0" → true). */
+  tuneTicks: Record<string, boolean>;
   importMode: "copy" | "move";
   importRename: boolean;
 }
@@ -79,7 +81,7 @@ const DEFAULT_PREFS: Prefs = {
   size: "standard", upscale: "smart", aiBinary: "", regions: ["usa", "world", "europe", "australia", "uk", "japan"],
   identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto", launchbox: true, gameInfo: true,
   pegasusOn: "none", device: "", emulators: {}, fixLaunch: false,
-  importDest: "", importSources: [], importMode: "copy", importRename: false, sendTargets: {},
+  importDest: "", importSources: [], importMode: "copy", importRename: false, sendTargets: {}, tuneTicks: {},
 };
 
 function loadPrefs(): Prefs {
@@ -99,7 +101,7 @@ let library: Library = { systems: [] };
 let scanning = false;
 let unzip: { name: string; pct: number } | null = null;
 const scanNotes: string[] = [];
-let view: "home" | "device" | "pegasus" | "library" | "launcher" | "artwork" | "scrape" | "settings" | "import" | "send" = "home";
+let view: "home" | "device" | "pegasus" | "library" | "launcher" | "artwork" | "scrape" | "settings" | "import" | "send" | "tune" = "home";
 // Session-only ScreenScraper login — never stored.
 let ssUser = "";
 let ssPass = "";
@@ -205,7 +207,7 @@ function go(v: typeof view) {
 function render() {
   renderNav();
   const main = document.getElementById("main")!;
-  const views = { send: viewSend, home: viewHome, device: viewDevice, pegasus: viewPegasus, library: viewLibrary, launcher: viewLauncher, artwork: viewArtwork, scrape: viewScrape, settings: viewSettings, import: viewImport };
+  const views = { tune: viewTune, send: viewSend, home: viewHome, device: viewDevice, pegasus: viewPegasus, library: viewLibrary, launcher: viewLauncher, artwork: viewArtwork, scrape: viewScrape, settings: viewSettings, import: viewImport };
   document.getElementById("nav-home")?.classList.toggle("active", view === "home");
   document.getElementById("nav-pegasus")?.classList.toggle("active", view === "pegasus");
   const d = currentDevice();
@@ -316,6 +318,7 @@ function viewHome(): Node[] {
     ["🖼️ Get artwork", "Covers and screenshots — e.g. for a game you just downloaded.", "art", () => go("library")],
     ["🚀 Pegasus launch lines", "Make Pegasus start your games, without re-scraping.", "pegasus", () => go("pegasus")],
     ["📲 Send to handheld", "Copy games and artwork to your Android handheld over USB.", "send", () => go("send")],
+    ["🎛️ Game settings", "Graphics and performance settings for each console's emulator, on the handheld and the TV.", "tune", () => go("tune")],
     ["🗜️ Compress discs", "Shrink disc games to CHD. Coming in the next version.", "soon", null],
     ["✅ Device setup checklist", "Recommended emulator settings for your device. Coming soon.", "soon", null],
   ];
@@ -1267,6 +1270,114 @@ function viewImport(): Node[] {
 }
 
 
+
+// ---------------------------------------------------------------- game settings
+
+interface KeyChange { section: string | null; key: string; label: string; why: string; old: string | null; new: string; tested: boolean }
+interface FileChange { path: string; exists: boolean; keys: KeyChange[] }
+interface ConsoleTune { id: string; systems: string[]; emulator: string; status: string; message: string | null; changes: FileChange[]; steps: string[]; tested: boolean; source: string; packages: string[] }
+interface TunePlan { screens: string; consoles: ConsoleTune[] }
+interface ApplyResult { changedFiles: number; failed: number; lines: string[] }
+
+const tune = {
+  plan: null as TunePlan | null, checking: false, applying: false,
+  chosen: new Set<string>(), result: null as ApplyResult | null, resultKind: "" as "" | "apply" | "undo",
+};
+
+function tuneSystems(): string[] {
+  return [...new Set((library?.systems ?? []).map((s) => s.system_id))];
+}
+
+async function tuneCheck() {
+  tune.checking = true; tune.result = null; render();
+  try {
+    tune.plan = await invoke<TunePlan>("settings_plan", { serial: snd.serial, systems: tuneSystems() });
+    tune.chosen = new Set(tune.plan.consoles.filter((c) => c.status === "ready").map((c) => c.id));
+  } catch (e) { toast(String(e)); }
+  tune.checking = false; render();
+}
+
+async function tuneApply() {
+  const names = [...new Set(tune.plan!.consoles.filter((c) => tune.chosen.has(c.id)).map((c) => c.emulator.split(" · ")[0]))];
+  if (!confirm(`RomCrate will close ${names.join(", ")} on the handheld before changing settings, so they can't overwrite them.\n\nFinish and save any game that's running first. Continue?`)) return;
+  tune.applying = true; render();
+  try {
+    tune.result = await invoke<ApplyResult>("settings_apply", { ids: [...tune.chosen] }); tune.resultKind = "apply";
+    toast(tune.result.failed ? `${tune.result.failed} file(s) couldn't be changed — see below` : "Settings applied. Start a game to see the difference.");
+  } catch (e) { toast(String(e)); }
+  tune.applying = false; tune.plan = null; render();
+}
+
+async function tuneUndo() {
+  if (!confirm("Put back the emulator settings as they were before RomCrate changed them?\n\nRomCrate will close the emulators first.")) return;
+  tune.applying = true; render();
+  try {
+    tune.result = await invoke<ApplyResult>("settings_undo", { serial: snd.serial, systems: tuneSystems() }); tune.resultKind = "undo";
+    toast(tune.result.changedFiles ? "Original settings put back." : "Nothing to undo — RomCrate hadn't changed anything.");
+  } catch (e) { toast(String(e)); }
+  tune.applying = false; tune.plan = null; render();
+}
+
+const TUNE_BADGE: Record<string, [string, string]> = {
+  ready: ["ok", "Ready to apply"], already: ["ok", "Already set"], checklist: ["warn", "Set it in the app"],
+  "not-installed": ["muted", "Emulator not installed"], problem: ["bad", "Needs a step first"],
+};
+
+function viewTune(): Node[] {
+  const out: (Node | null)[] = [
+    h("h1", {}, "Game settings"),
+    h("p", { class: "lead" }, "Graphics and performance settings for each console's emulator on your handheld — sharp, full-speed, and right for both the handheld screen and the TV. RomCrate changes only these settings, keeps a backup of every file it touches, and can put everything back."),
+  ];
+  if (!handheldGate(out, "Changing settings on the handheld")) return out.filter((x): x is Node => !!x);
+  out.push(h("h2", {}, "2 · Your emulators"));
+  if (!tune.plan) {
+    out.push(h("div", { class: "card" },
+      h("div", { class: "desc" }, "RomCrate looks at the consoles in your game folders and on the handheld, and at the emulators installed there. Nothing is changed yet."),
+      h("div", { class: "row", style: "margin-top:10px" },
+        h("button", { class: "btn primary", disabled: tune.checking || tune.applying, onclick: tuneCheck }, tune.checking ? "Looking at the handheld…" : "Check my emulators"),
+        h("button", { class: "btn", disabled: tune.checking || tune.applying, onclick: tuneUndo }, "Undo RomCrate's changes"))));
+  } else {
+    const p = tune.plan;
+    out.push(h("div", { class: "banner info", style: "margin-bottom:12px" }, `${p.screens} If you later use a 4K TV, these still work — they just won't use the extra sharpness.`));
+    if (!p.consoles.length) out.push(h("div", { class: "card" }, "No consoles found that RomCrate has settings for yet."));
+    for (const c of p.consoles) {
+      const [cls, label] = TUNE_BADGE[c.status] ?? ["muted", c.status];
+      const names = c.systems.map((id) => SHORT_SYS[id] ?? id.toUpperCase()).join(" / ");
+      const keys = c.changes.flatMap((f) => f.keys);
+      const allTested = c.status === "checklist" ? c.tested : keys.length > 0 && keys.every((k) => k.tested);
+      const someTested = keys.some((k) => k.tested);
+      out.push(h("div", { class: "card tune" },
+        h("div", { class: "tune-head" },
+          c.status === "ready" ? h("input", { type: "checkbox", checked: tune.chosen.has(c.id), onchange: (e: Event) => { (e.target as HTMLInputElement).checked ? tune.chosen.add(c.id) : tune.chosen.delete(c.id); render(); } }) : null,
+          h("div", {}, h("div", { class: "t" }, `${names} · ${c.emulator}`),
+            h("div", { class: "desc" }, c.status === "ready" || c.status === "already" || c.status === "checklist" ? (allTested ? "✓ Tested on the AYN Odin 2 Portal" : someTested ? "Partly tested on the AYN Odin 2 Portal (marked ✓ below); the rest are suggestions" : "Not tested on a device yet — suggested from the emulator's own docs") : "")),
+          h("span", { class: `pill ${cls}` }, label)),
+        c.message ? h("div", { class: "hint", style: "margin-top:6px" }, c.message) : null,
+        c.changes.length ? h("table", { class: "tune-table" },
+          h("tr", {}, h("th", {}, "Setting"), h("th", {}, "Now"), h("th", {}, "Will be"), h("th", {}, "Why")),
+          c.changes.flatMap((f) => f.keys.map((k) => h("tr", {},
+            h("td", {}, k.label, k.tested ? h("span", { class: "tiny ok" }, " ✓ tested") : null),
+            h("td", { class: "mono" }, k.old ?? "—"), h("td", { class: "mono" }, k.new), h("td", { class: "desc" }, k.why))))) : null,
+        c.steps.length ? h("ul", { class: "steps-list" }, c.steps.map((st, i) => {
+          const key = `${c.id}:${i}`;
+          return h("li", {}, h("label", {}, h("input", { type: "checkbox", checked: !!prefs.tuneTicks[key], onchange: (e: Event) => { prefs.tuneTicks[key] = (e.target as HTMLInputElement).checked; savePrefs(); } }), " ", st));
+        })) : null));
+    }
+    const n = tune.chosen.size;
+    out.push(h("div", { class: "row", style: "margin-top:12px" },
+      h("button", { class: "btn primary big", disabled: !n || tune.applying, onclick: tuneApply }, tune.applying ? "Applying…" : `Apply to handheld (${n} console${n === 1 ? "" : "s"})`),
+      h("button", { class: "btn", disabled: tune.applying, onclick: tuneCheck }, "Check again"),
+      h("button", { class: "btn", disabled: tune.applying, onclick: tuneUndo }, "Undo RomCrate's changes")),
+      h("div", { class: "hint", style: "margin-top:6px" }, "Close the emulators first? RomCrate does it for you when you apply, so they can't overwrite the new settings. Save your game before applying."));
+  }
+  if (tune.result) {
+    out.push(h("h2", {}, tune.resultKind === "undo" ? "Undo" : "Applied"),
+      h("div", { class: "log" }, tune.result.lines.length ? tune.result.lines.map((l) => h("div", { class: l.startsWith("FAILED") ? "error" : "" }, l)) : h("div", {}, "Nothing needed changing.")),
+      logButtons());
+  }
+  return out.filter((x): x is Node => !!x);
+}
+
 // ---------------------------------------------------------------- send to handheld
 
 interface AdbDevice { serial: string; state: string; model: string | null }
@@ -1291,7 +1402,7 @@ async function sendRefresh() {
   const first = !snd.status;
   try {
     if (!snd.status) { const r = await invoke<{ status: typeof snd.status; termsUrl: string }>("adb_status"); snd.status = r.status; snd.terms = r.termsUrl; }
-    if (!snd.status?.found) { if (view === "send" && first) render(); return; }
+    if (!snd.status?.found) { if ((view === "send" || view === "tune") && first) render(); return; }
     const devs = await invoke<AdbDevice[]>("adb_devices");
     const changed = JSON.stringify(devs) !== JSON.stringify(snd.devices);
     snd.devices = devs; snd.error = "";
@@ -1301,17 +1412,17 @@ async function sendRefresh() {
     if (snd.serial && !snd.volumes.length) { snd.volumes = await invoke<Volume[]>("adb_volumes", { serial: snd.serial }); volsChanged = true; }
     // Only redraw when something actually changed — the check runs every few
     // seconds and a redraw would close a drop-down you have open.
-    if ((changed || volsChanged || first) && view === "send") render();
+    if ((changed || volsChanged || first) && (view === "send" || view === "tune")) render();
   } catch (e) {
     const was = snd.error;
     snd.error = String(e);
-    if (view === "send" && was !== snd.error) render();
+    if ((view === "send" || view === "tune") && was !== snd.error) render();
   }
 }
 
 function startSendPolling() {
   if (snd.poll) return;
-  snd.poll = window.setInterval(() => { if (view !== "send") { clearInterval(snd.poll); snd.poll = 0; return; } if (!snd.running && !snd.planning) void sendRefresh(); }, 3000);
+  snd.poll = window.setInterval(() => { if (view !== "send" && view !== "tune") { clearInterval(snd.poll); snd.poll = 0; return; } if (!snd.running && !snd.planning) void sendRefresh(); }, 3000);
 }
 
 async function installAdb() {
@@ -1356,48 +1467,54 @@ function handleSendEvent(e: any) {
   if (view === "send") queueRender(); else renderNav();
 }
 
-function viewSend(): Node[] {
+/** The "USB tool + handheld connected" part shared by Send and Game settings.
+ * Adds its cards to `out` and returns true when a handheld is ready. */
+function handheldGate(out: (Node | null)[], purpose: string): boolean {
   if (!snd.status && !snd.error) void sendRefresh();
   startSendPolling();
-  const out: (Node | null)[] = [
-    h("h1", {}, "Send to handheld"),
-    h("p", { class: "lead" }, "Copies your games, artwork and Pegasus files to your Android handheld over the USB cable — into internal storage or the SD card, into the console folders already there. Nothing on the handheld is overwritten or deleted, and every game is checked after copying."),
-  ];
   const st = snd.status;
-  // 1. The USB tool.
-  if (!st) out.push(h("div", { class: "card" }, "Checking…"));
-  else if (!st.found) {
+  if (!st) { out.push(h("div", { class: "card" }, "Checking…")); return false; }
+  if (!st.found) {
     out.push(h("h2", {}, "1 · Android's USB tool"),
       h("div", { class: "card" },
-        h("div", { class: "desc" }, "Sending needs “adb”, Android's own USB tool from Google (about 10 MB, part of “platform-tools”). RomCrate downloads it from dl.google.com, checks it against Google's published checksum, and keeps it in RomCrate's folder. It's never bundled with RomCrate."),
+        h("div", { class: "desc" }, `${purpose} needs “adb”, Android's own USB tool from Google (about 10 MB, part of “platform-tools”). RomCrate downloads it from dl.google.com, checks it against Google's published checksum, and keeps it in RomCrate's folder. It's never bundled with RomCrate.`),
         h("div", { class: "hint", style: "margin-top:6px" }, "By downloading you accept Google's terms for platform-tools: ", h("span", { class: "path" }, snd.terms)),
         h("div", { class: "row", style: "margin-top:10px" },
           h("button", { class: "btn primary", disabled: snd.installing, onclick: installAdb }, snd.installing ? `Downloading… ${snd.installPct}%` : "Download the USB tool from Google"))));
-    return out.filter((x): x is Node => !!x);
+    return false;
   }
-  // 2. The handheld.
   const ready = snd.devices.filter((d) => d.state === "device");
   const waiting = snd.devices.filter((d) => d.state !== "device");
   out.push(h("h2", {}, "1 · Your handheld"));
   if (ready.length) {
     out.push(h("div", { class: "card" },
-      ready.length > 1 ? h("select", { onchange: (e: Event) => { snd.serial = (e.target as HTMLSelectElement).value; snd.volumes = []; snd.plan = null; void sendRefresh(); } },
+      ready.length > 1 ? h("select", { onchange: (e: Event) => { snd.serial = (e.target as HTMLSelectElement).value; snd.volumes = []; snd.plan = null; tune.plan = null; void sendRefresh(); } },
         ready.map((d) => h("option", { value: d.serial, selected: d.serial === snd.serial }, d.model ?? d.serial))) :
         h("div", { class: "v" }, `✓ ${ready[0].model ?? ready[0].serial} connected`),
       snd.volumes.length ? h("div", { class: "desc", style: "margin-top:6px" }, snd.volumes.map((v) => `${v.label}: ${human(v.freeBytes)} free${v.romsDir ? ` · has ${v.romsDir}/` : ""}`).join("   ·   ")) : h("div", { class: "desc" }, "Reading storage…")));
-  } else {
-    out.push(h("div", { class: "card" },
-      waiting.some((d) => d.state === "unauthorized")
-        ? h("div", { class: "banner warn" }, h("div", {}, h("b", {}, "Almost there: "), "unlock the handheld and tap “Allow” on the “Allow USB debugging?” message. Tick “Always allow from this computer” so it doesn't ask again."))
-        : waiting.length ? h("div", { class: "banner warn" }, "The handheld is connected but not responding — unplug it and plug it back in.")
-        : h("div", {}, h("div", { class: "v" }, "No handheld found yet"),
-          h("ol", { class: "how" },
-            h("li", {}, "On the handheld: Settings → About (phone/device) → tap “Build number” 7 times until it says you're a developer."),
-            h("li", {}, "Settings → System → Developer options → turn on “USB debugging”."),
-            h("li", {}, "Plug it in with a USB cable that carries data, and tap “Allow” when asked."),
-            h("li", {}, "This screen notices it within a few seconds.")),
-          h("div", { class: "hint" }, "USB debugging only lets this computer copy files and run Android's own commands while you allow it. You can turn it off again afterwards.")),
-      snd.error ? h("div", { class: "hint", style: "color:var(--bad);margin-top:8px" }, snd.error) : null));
+    return true;
+  }
+  out.push(h("div", { class: "card" },
+    waiting.some((d) => d.state === "unauthorized")
+      ? h("div", { class: "banner warn" }, h("div", {}, h("b", {}, "Almost there: "), "unlock the handheld and tap “Allow” on the “Allow USB debugging?” message. Tick “Always allow from this computer” so it doesn't ask again."))
+      : waiting.length ? h("div", { class: "banner warn" }, "The handheld is connected but not responding — unplug it and plug it back in.")
+      : h("div", {}, h("div", { class: "v" }, "No handheld found yet"),
+        h("ol", { class: "how" },
+          h("li", {}, "On the handheld: Settings → About (phone/device) → tap “Build number” 7 times until it says you're a developer."),
+          h("li", {}, "Settings → System → Developer options → turn on “USB debugging”."),
+          h("li", {}, "Plug it in with a USB cable that carries data, and tap “Allow” when asked."),
+          h("li", {}, "This screen notices it within a few seconds.")),
+        h("div", { class: "hint" }, "USB debugging only lets this computer copy files and run Android's own commands while you allow it. You can turn it off again afterwards.")),
+    snd.error ? h("div", { class: "hint", style: "color:var(--bad);margin-top:8px" }, snd.error) : null));
+  return false;
+}
+
+function viewSend(): Node[] {
+  const out: (Node | null)[] = [
+    h("h1", {}, "Send to handheld"),
+    h("p", { class: "lead" }, "Copies your games, artwork and Pegasus files to your Android handheld over the USB cable — into internal storage or the SD card, into the console folders already there. Nothing on the handheld is overwritten or deleted, and every game is checked after copying."),
+  ];
+  if (!handheldGate(out, "Sending")) {
     out.push(logPanelSend());
     return out.filter((x): x is Node => !!x);
   }
@@ -1469,7 +1586,8 @@ async function boot() {
   view = prefs.device ? "home" : "device";
   await listen("import-event", (ev) => handleImportEvent(ev.payload));
   await listen("send-event", (ev) => handleSendEvent(ev.payload));
-  await listen<{ done: number; total: number | null }>("adb-install-progress", (ev) => { snd.installPct = ev.payload.total ? Math.round((ev.payload.done / ev.payload.total) * 100) : 0; if (view === "send") render(); });
+  await listen<{ done: number; total: number | null }>("adb-install-progress", (ev) => { snd.installPct = ev.payload.total ? Math.round((ev.payload.done / ev.payload.total) * 100) : 0; if (view === "send" || view === "tune") render(); });
+  document.getElementById("nav-tune")?.addEventListener("click", () => go("tune"));
   document.getElementById("nav-send")?.addEventListener("click", () => go("send"));
   if (!catalog.launchers.some((l) => l.id === prefs.launcher)) prefs.launcher = "pegasus";
   await listen("scrape-event", (ev) => handleEvent(ev.payload));
