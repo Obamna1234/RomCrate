@@ -1,4 +1,8 @@
-import { deviceArt } from "./deviceArt";
+import "@fontsource/atkinson-hyperlegible-next/400.css";
+import "@fontsource/atkinson-hyperlegible-next/700.css";
+import "@fontsource-variable/bricolage-grotesque/index.css";
+import { deviceArt, deviceSize } from "./deviceArt";
+import { icon } from "./icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -172,12 +176,12 @@ const REGION_NAMES: Record<string, string> = {
 // ---------------------------------------------------------------- navigation
 
 const STEPS = [
-  { id: "import", t: "Sort new games", s: () => (imp.summary ? `${imp.summary.imported} imported` : "Optional — skip if already sorted") },
-  { id: "library", t: "Your games", s: () => (library.systems.length ? `${selectedGames()} games · ${selectedSystems().length} systems` : "Choose your ROM folders") },
-  { id: "launcher", t: "Launcher & theme", s: () => `${launcher().name.split(" (")[0]} · ${themeOf(launcher()).name}` },
-  { id: "artwork", t: "Artwork", s: () => `${kindsFor(launcher()).length} types · ${catalog.sizePresets.find((p) => p[0] === prefs.size)?.[1].split(" —")[0]}` },
+  { id: "import", t: "Sort new games", s: () => (imp.summary ? `${imp.summary.imported} imported` : "Optional, skip if already sorted") },
+  { id: "library", t: "Your games", s: () => (library.systems.length ? `${selectedGames()} games in ${selectedSystems().length} systems` : "Choose your ROM folders") },
+  { id: "launcher", t: "Launcher & theme", s: () => `${launcher().name.split(" (")[0]}, ${themeOf(launcher()).name}` },
+  { id: "artwork", t: "Artwork", s: () => `${kindsFor(launcher()).length} kinds, ${catalog.sizePresets.find((p) => p[0] === prefs.size)?.[1].split(" —")[0]}` },
   { id: "scrape", t: "Scrape", s: () => (run.running ? `${run.processed}/${run.total}` : run.summary ? "Finished" : "Ready when you are") },
-  { id: "send", t: "Send to handheld", s: () => (snd.running ? `${snd.done}/${snd.total} files` : snd.summary ? `${snd.summary.copied} copied` : "Optional — over USB") },
+  { id: "send", t: "Send to handheld", s: () => (snd.running ? `${snd.done}/${snd.total} files` : snd.summary ? `${snd.summary.copied} copied` : "Optional, over USB") },
 ] as const;
 
 function renderNav() {
@@ -199,7 +203,9 @@ function renderNav() {
   );
 }
 
-function go(v: typeof view) {
+function go(v: typeof view, fromAfter = false) {
+  // Coming back from the next page lands on the last part; otherwise start at the first.
+  if (v !== view) subPage[v] = fromAfter ? Math.max(0, (subCount[v] ?? 1) - 1) : 0;
   view = v;
   if (v === "settings") { logInfo = null; cacheBytes = null; }
   render();
@@ -211,12 +217,12 @@ function render() {
   const main = document.getElementById("main")!;
   const views = { tune: viewTune, send: viewSend, home: viewHome, device: viewDevice, pegasus: viewPegasus, library: viewLibrary, launcher: viewLauncher, artwork: viewArtwork, scrape: viewScrape, settings: viewSettings, import: viewImport };
   document.getElementById("nav-home")?.classList.toggle("active", view === "home");
-  document.getElementById("nav-pegasus")?.classList.toggle("active", view === "pegasus");
+  for (const [id, v] of [["nav-pegasus", "pegasus"], ["nav-tune", "tune"], ["nav-settings", "settings"]]) document.getElementById(id)?.classList.toggle("active", view === v);
   const d = currentDevice();
   document.getElementById("nav-device")!.replaceChildren(
     prefs.device ? artOf(prefs.device, "chip-art") : "",
     h("div", { class: "k" }, "Games are for"),
-    h("div", { class: "v" }, d ? d.name : prefs.device === "unsure" ? "Not sure — safe defaults" : "Choose your device…"));
+    h("div", { class: "v" }, d ? d.name : prefs.device === "unsure" ? "Not sure, using safe defaults" : "Choose your device"));
   const sameView = main.dataset.view === view;
   const keep = sameView ? main.scrollTop : 0;
   // Activity panels follow the newest line, like a terminal — unless you've
@@ -231,10 +237,51 @@ function render() {
   });
 }
 
+/** A numbered heading for a page that runs in steps (1, 2, 3). */
+function stepH(n: number, title: string): HTMLElement {
+  return h("h2", {}, h("span", { class: "stepno" }, String(n)), title);
+}
+
+/** An inline SVG icon from icons.ts. */
+function ic(name: string): HTMLElement {
+  const s = document.createElement("span");
+  s.style.display = "contents";
+  s.innerHTML = icon(name);
+  return s;
+}
+
+// Long pages are split into short parts: one topic per screen, Back/Next in the footer.
+const subPage: Record<string, number> = {};
+const subCount: Record<string, number> = {};
+
+/** Show one part of a page at a time. "steps" parts are walked with Back/Next; "tabs" can be opened in any order. */
+function parts(id: string, list: [string, () => (Node | null)[]][], kind: "steps" | "tabs" = "steps"): (Node | null)[] {
+  subCount[id] = list.length;
+  const i = Math.min(subPage[id] ?? 0, list.length - 1);
+  subPage[id] = i;
+  const head = h("div", { class: `parts ${kind === "steps" ? "walk" : "tabs"}`, role: "tablist" },
+    list.map(([t], j) => h("button", {
+      class: `part ${j === i ? "on" : ""} ${kind === "steps" && j < i ? "done" : ""}`, role: "tab", "aria-selected": String(j === i),
+      onclick: () => { subPage[id] = j; render(); document.getElementById("main")!.scrollTop = 0; },
+    }, kind === "steps" ? h("span", { class: "pn" }, String(j + 1)) : null, t)));
+  return [head, ...list[i][1]()];
+}
+
+/** The intro paragraph is shown on the first part only, to keep later parts short. */
+function firstPart(id: string): boolean {
+  return (subPage[id] ?? 0) === 0;
+}
+
 function footer(back: typeof view | null, next: typeof view | null, nextLabel = "Continue", nextDisabled = false) {
+  const n = subCount[view] ?? 1, i = subPage[view] ?? 0;
+  const turn = (j: number) => { subPage[view] = j; render(); document.getElementById("main")!.scrollTop = 0; };
+  const canBack = i > 0 || !!back, lastPart = i >= n - 1;
   return h("div", { class: "footer-bar" },
-    back ? h("button", { class: "btn", onclick: () => go(back) }, "← Back") : h("span"),
-    next ? h("button", { class: "btn primary", disabled: nextDisabled, onclick: () => go(next) }, `${nextLabel} →`) : h("span"));
+    canBack ? h("button", { class: "btn", onclick: () => (i > 0 ? turn(i - 1) : go(back!, true)) }, "Back") : h("span"),
+    h("div", { class: "row" },
+      n > 1 ? h("span", { class: "hint" }, `Part ${i + 1} of ${n}`) : null,
+      !lastPart ? h("button", { class: "btn primary", onclick: () => turn(i + 1) }, "Next")
+        : next ? h("button", { class: "btn primary", disabled: nextDisabled, onclick: () => go(next) }, nextLabel) : null));
 }
 
 
@@ -291,7 +338,8 @@ function viewDevice(): Node[] {
     artOf(d.id),
     h("div", { class: "n" }, d.name),
     h("div", { class: "f" }, d.family),
-    h("div", { class: "spec" }, `${d.screen.inches ? `${d.screen.inches}" ` : ""}${d.screen.width}×${d.screen.height}${d.chipset ? ` · ${d.chipset}` : ""}`),
+    h("div", { class: "spec" }, [d.screen.inches ? `${d.screen.inches}" screen` : `${d.screen.width}×${d.screen.height}`, deviceSize(d.id)].filter(Boolean).join(", ")),
+    d.chipset ? h("div", { class: "spec" }, d.chipset) : null,
     h("div", { class: "row" },
       d.tested ? h("span", { class: "badge sure" }, "Tested on this device") : null,
       d.too_demanding.length ? h("span", { class: "badge attention", title: `Too demanding: ${d.too_demanding.map(shortSys).join(", ")}` }, `Not for ${d.too_demanding.slice(0, 3).map(shortSys).join(", ")}${d.too_demanding.length > 3 ? "…" : ""}`) : null));
@@ -314,15 +362,13 @@ function viewDevice(): Node[] {
 
 function viewHome(): Node[] {
   const d = currentDevice();
-  const tasks: [string, string, string, (() => void) | null][] = [
-    ["🩺 Check my files", "Find broken downloads, damaged files and disc copy protection.", "check", () => { go("import"); }],
-    ["📥 Import & sort", "Put games from a messy folder into console folders.", "import", () => go("import")],
-    ["🖼️ Get artwork", "Covers and screenshots — e.g. for a game you just downloaded.", "art", () => go("library")],
-    ["🚀 Pegasus launch lines", "Make Pegasus start your games, without re-scraping.", "pegasus", () => go("pegasus")],
-    ["📲 Send to handheld", "Copy games and artwork to your Android handheld over USB.", "send", () => go("send")],
-    ["🎛️ Game settings", "Graphics and performance settings for each console's emulator, on the handheld and the TV.", "tune", () => go("tune")],
-    ["🗜️ Compress discs", "Shrink disc games to CHD. Coming in the next version.", "soon", null],
-    ["✅ Device setup checklist", "Recommended emulator settings for your device. Coming soon.", "soon", null],
+  const tasks: [string, string, string, () => void][] = [
+    ["Check my files", "Find broken downloads, damaged files and disc copy protection.", "check", () => go("import")],
+    ["Import and sort", "Put games from a messy folder into console folders.", "import", () => go("import")],
+    ["Get artwork", "Covers and screenshots, for example for a game you just downloaded.", "art", () => go("library")],
+    ["Pegasus launch lines", "Make Pegasus start your games, without getting artwork again.", "pegasus", () => go("pegasus")],
+    ["Send to handheld", "Copy games and artwork to your Android handheld over USB.", "send", () => go("send")],
+    ["Game settings", "Graphics and speed settings for each console and each game.", "tune", () => go("tune")],
   ];
   return [
     h("h1", {}, "What would you like to do?"),
@@ -340,16 +386,17 @@ function viewHome(): Node[] {
           h("li", {}, "Choose your games folders"),
           h("li", {}, d?.launchPlatform === "android" ? "Pick your frontend and emulators" : "Pick your frontend and theme"),
           h("li", {}, "Choose the artwork you want"),
-          h("li", {}, "Get the artwork and launcher files")),
+          h("li", {}, "Get the artwork and launcher files"),
+          d?.launchPlatform === "android" ? h("li", {}, "Send everything to your handheld over USB (optional)") : null),
         h("div", { class: "row" },
-          h("button", { class: "btn primary big", onclick: () => go("import") }, "Start →"),
-          h("button", { class: "btn big", onclick: () => go("library") }, "My games are already sorted →")),
+          h("button", { class: "btn primary big", onclick: () => go("import") }, "Start"),
+          h("button", { class: "btn big", onclick: () => go("library") }, "My games are already sorted")),
         h("div", { class: "hint" }, "Already set up? The second button skips sorting and goes straight to artwork and launcher files for your device.")),
       h("div", { class: "mode" },
-        h("div", { class: "mode-title" }, "Custom — pick what to do"),
-        h("div", { class: "desc" }, "Already set up? Run just the task you need."),
-        h("div", { class: "task-grid" }, tasks.map(([t, desc, , fn]) =>
-          h("button", { class: "task", disabled: !fn, onclick: () => fn?.() }, h("div", { class: "t" }, t), h("div", { class: "d" }, desc)))))),
+        h("div", { class: "mode-title" }, "One task at a time"),
+        h("div", { class: "desc" }, "Run just the part you need."),
+        h("div", { class: "task-grid" }, tasks.map(([t, desc, i, fn]) =>
+          h("button", { class: "task", onclick: fn }, ic(i), h("div", {}, h("div", { class: "t" }, t), h("div", { class: "d" }, desc))))))),
     h("div", { class: "note", style: "margin-top:18px" },
       "Every task explains anything it couldn't do, and everything is also saved to the ",
       h("button", { class: "link", style: "text-decoration:underline", onclick: () => invoke("open_log_folder").catch((e) => toast(String(e))) }, "activity log"), "."),
@@ -380,7 +427,7 @@ function viewPegasus(): Node[] {
     h("p", { class: "lead" }, "Pegasus needs a launch line in each console folder to start your games. This writes just those — no artwork is downloaded."),
   ];
   if (!prefs.roots.length) {
-    out.push(h("div", { class: "banner warn" }, "Add your ROM folders first."), h("button", { class: "btn primary", onclick: () => go("library") }, "Choose ROM folders →"));
+    out.push(h("div", { class: "banner warn" }, "Add your ROM folders first."), h("button", { class: "btn primary", onclick: () => go("library") }, "Choose ROM folders"));
     return out.filter((x): x is Node => !!x);
   }
   out.push(h("div", { class: "chips" }, prefs.roots.map((r) => h("span", { class: "chip" }, h("span", { class: "path" }, `‎${r}‎`)))));
@@ -491,7 +538,7 @@ function viewLibrary(): Node[] {
   for (const n of scanNotes) out.push(h("div", { class: "banner warn", style: "margin-top:12px" }, n));
   if (!prefs.roots.length) {
     out.push(h("div", { class: "empty", style: "margin-top:24px" },
-      h("div", { class: "big-icon" }, "🗂️"),
+      h("div", { class: "big-icon" }, ic("import")),
       h("div", { style: "font-weight:600;color:var(--text);margin-bottom:6px" }, "No folders yet"),
       h("div", {}, "Add the folder that contains your system folders (for example ROMs/, Emulation/roms/ or a USB drive) — or a .zip of it.")));
   } else if (!library.systems.length && !scanning) {
@@ -565,7 +612,9 @@ function viewLauncher(): Node[] {
   const theme = themeOf(l);
   const out: Node[] = [
     h("h1", {}, "Launcher & theme"),
-    h("p", { class: "lead" }, "Where should the artwork go? RomCrate saves files with the exact names and folders your launcher expects, so they show up without any renaming."),
+    ...(firstPart("launcher") ? [h("p", { class: "lead" }, "Where should the artwork go? RomCrate saves files with the exact names and folders your launcher expects, so they show up without any renaming.")] : []),
+  ];
+  const pick = (): (Node | null)[] => [
     h("div", { class: "launchers" },
       catalog.launchers.map((x) => h("button", {
         class: `launcher ${x.id === l.id ? "on" : ""}`,
@@ -578,16 +627,18 @@ function viewLauncher(): Node[] {
           savePrefs(); render();
         },
       }, h("div", { class: "name" }, x.name), h("div", { class: "tag" }, x.tagline)))),
-    h("h2", {}, "Theme style"),
+    h("div", { class: "note" }, l.where_note)];
+  const themes = (): (Node | null)[] => [
+    h("p", { class: "desc", style: "margin:0 0 14px" }, "Pick the kind of theme you use, so RomCrate gets the artwork it shows."),
     h("div", { class: "themes" },
       l.themes.map((t) => h("button", {
         class: `theme ${t.id === theme.id ? "on" : ""}`,
         onclick: () => { prefs.theme[l.id] = t.id; delete prefs.kinds[l.id]; savePrefs(); render(); },
-      }, h("div", { class: "name" }, t.name), h("div", { class: "d" }, t.description)))),
-  ];
+      }, h("div", { class: "name" }, t.name), h("div", { class: "d" }, t.description))))];
+  const setup: (Node | null)[] = [];
   if (l.needs_folder) {
     const f = prefs.folders[l.id] ?? "";
-    out.push(
+    setup.push(
       h("h2", {}, l.folder_label),
       h("div", { class: "card" },
         h("div", { class: "row" },
@@ -597,7 +648,7 @@ function viewLauncher(): Node[] {
     );
   }
   if (l.id === "pegasus") {
-    out.push(
+    setup.push(
       h("h2", {}, "Media folder layout"),
       seg([["auto", "Match what's there"], ["skraper", "Skraper style"], ["per-game", "Folder per game"]], prefs.pegasusLayout, (v) => { prefs.pegasusLayout = v; savePrefs(); render(); }),
       h("div", { class: "desc" }, {
@@ -606,8 +657,10 @@ function viewLauncher(): Node[] {
         "per-game": "media/<game>/boxFront.png — Pegasus' own layout.",
       }[prefs.pegasusLayout]));
   }
-  if (l.id === "pegasus") out.push(...launchSection());
-  out.push(h("div", { class: "note" }, `→ ${l.where_note}`));
+  if (l.id === "pegasus") setup.push(...launchSection());
+  const list: [string, () => (Node | null)[]][] = [["Launcher", pick], ["Theme", themes]];
+  if (setup.length) list.push([l.needs_folder ? "Folder and layout" : "Layout and starting games", () => setup]);
+  out.push(...(parts("launcher", list).filter(Boolean) as Node[]));
   out.push(footer("library", "artwork", "Continue", !folderReady()));
   return out;
 }
@@ -667,13 +720,11 @@ function viewArtwork(): Node[] {
   const setKinds = (k: ArtKind[]) => { prefs.kinds[l.id] = k; savePrefs(); render(); };
   const out: Node[] = [
     h("h1", {}, "Artwork"),
-    h("p", { class: "lead" }, `Pick what to download for ${l.name.split(" (")[0]}. The “${themeOf(l).name}” style pre-selected what that kind of theme shows.`),
+    ...(firstPart("artwork") ? [h("p", { class: "lead" }, `Pick what to download for ${l.name.split(" (")[0]}. The “${themeOf(l).name}” style pre-selected what that kind of theme shows.`)] : []),
   ];
-  if (!catalog.screenscraperAvailable) {
-    out.push(h("div", { class: "banner" }, h("div", {},
-      "Videos and manuals come from the optional ScreenScraper extras source, which this build doesn't include yet. Everything else works with no account.")));
-  }
-  out.push(
+  const what = (): (Node | null)[] => [
+    !catalog.screenscraperAvailable ? h("div", { class: "banner" }, h("div", {},
+      "Videos and manuals come from the optional ScreenScraper extras source, which this build doesn't include yet. Everything else works with no account.")) : null,
     h("div", { class: "kinds" },
       catalog.kinds.map((k) => {
         const supported = l.supported.includes(k.id);
@@ -690,7 +741,8 @@ function viewArtwork(): Node[] {
           onclick: () => { if (avail) setKinds(on ? chosen.filter((x) => x !== k.id) : [...chosen, k.id]); },
         }, h("div", { class: `check ${on ? "on" : ""}` }),
           h("div", {}, h("div", { class: "label" }, k.label), h("span", { class: `badge ${src[0]}` }, supported ? src[1] : "Not used here")));
-      })),
+      }))];
+  const quality = (): (Node | null)[] => [
     h("h2", {}, "Image size"),
     seg(catalog.sizePresets.map((p) => [p[0], p[1].split(" —")[0]] as [string, string]), prefs.size, (v) => { prefs.size = v; savePrefs(); render(); }),
     h("div", { class: "desc" }, catalog.sizePresets.find((p) => p[0] === prefs.size)?.[1] ?? ""),
@@ -702,17 +754,15 @@ function viewArtwork(): Node[] {
       ai: "Uses Real-ESRGAN on your computer for box art — best detail, slower. Screenshots still use Smart.",
       off: "Never enlarge; only shrink images that are too big.",
     }[prefs.upscale]),
-  );
-  if (prefs.upscale === "ai") {
-    out.push(h("div", { class: "card", style: "margin-top:12px" },
+    prefs.upscale !== "ai" ? null : h("div", { class: "card", style: "margin-top:12px" },
       h("div", { class: "field", style: "margin-top:0" },
         h("label", {}, "realesrgan-ncnn-vulkan program"),
         h("div", { class: "row" },
           h("input", { class: "input", style: "flex:1", value: prefs.aiBinary, placeholder: "Path to realesrgan-ncnn-vulkan(.exe)", oninput: (e: Event) => { prefs.aiBinary = (e.target as HTMLInputElement).value; savePrefs(); } }),
           h("button", { class: "btn", onclick: async () => { const p = await open({ multiple: false, title: "Choose realesrgan-ncnn-vulkan" }); if (p && !Array.isArray(p)) { prefs.aiBinary = p; savePrefs(); render(); } } }, "Browse…")),
-        h("div", { class: "hint" }, "Free download from github.com/xinntao/Real-ESRGAN (releases → ncnn-vulkan). If it isn't set, RomCrate falls back to Smart."))));
-  }
-  out.push(
+        h("div", { class: "hint" }, "Free download from github.com/xinntao/Real-ESRGAN (releases → ncnn-vulkan). If it isn't set, RomCrate falls back to Smart."))),
+  ];
+  const regions = (): (Node | null)[] => [
     h("h2", {}, "Region preference"),
     h("div", { class: "regions" },
       prefs.regions.map((r, i) => h("span", { class: "region" }, `${i + 1}. ${REGION_NAMES[r] ?? r}`,
@@ -724,8 +774,8 @@ function viewArtwork(): Node[] {
         return h("select", { class: "input", style: "width:auto;padding:6px 10px", onchange: (e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) { prefs.regions.push(v); savePrefs(); render(); } } },
           h("option", { value: "" }, "+ Add region"), missing.map((r) => h("option", { value: r }, REGION_NAMES[r])));
       })()),
-    h("div", { class: "desc" }, "When a game has artwork from several regions, RomCrate picks the first one on this list that exists."),
-    h("h2", {}, "Options"),
+    h("div", { class: "desc" }, "When a game has artwork from several regions, RomCrate picks the first one on this list that exists.")];
+  const more = (): (Node | null)[] => [
     h("div", { class: "card toggles" },
       toggle(prefs.launchbox, "Use the free LaunchBox games database", "Adds 3D boxes, back covers, cartridges, logos, fan art and game info. No account; downloads about 200 MB once a week.", () => (prefs.launchbox = !prefs.launchbox)),
       toggle(prefs.gameInfo && prefs.launchbox, "Add game info", "Descriptions, genre, developer, release date, players and rating for your launcher. Your own edits are kept.", () => (prefs.gameInfo = !prefs.gameInfo), !prefs.launchbox),
@@ -735,8 +785,9 @@ function viewArtwork(): Node[] {
       toggle(prefs.metadata, "Update launcher files", "gamelist.xml (backed up first), Pegasus metadata if you don't have one, RetroArch playlists if missing.", () => (prefs.metadata = !prefs.metadata)),
       toggle(prefs.overwrite, "Replace artwork that already exists", "Off = only fill in what's missing.", () => (prefs.overwrite = !prefs.overwrite)),
     ),
-    footer("launcher", "scrape", "Continue", chosen.length === 0),
-  );
+  ];
+  out.push(...(parts("artwork", [["What to download", what], ["Size and sharpness", quality], ["Regions", regions], ["Options", more]]).filter(Boolean) as Node[]),
+    footer("launcher", "scrape", "Continue", chosen.length === 0));
   return out;
 }
 
@@ -855,7 +906,7 @@ function viewScrape(): Node[] {
       h("span", {}, s ? "" : `${pct}%`)),
     h("div", { class: "row" },
       run.running ? h("button", { class: "btn danger", onclick: () => invoke("cancel_scrape") }, "Stop") : null,
-      s && currentDevice()?.launchPlatform === "android" ? h("button", { class: "btn primary", onclick: () => go("send") }, "Send to handheld →") : null,
+      s && currentDevice()?.launchPlatform === "android" ? h("button", { class: "btn primary", onclick: () => go("send") }, "Send to handheld") : null,
       s ? h("button", { class: `btn ${currentDevice()?.launchPlatform === "android" ? "" : "primary"}`, onclick: () => { run.summary = null; run.results = []; render(); } }, "Scrape again") : null,
       s ? h("button", { class: "btn", onclick: () => openOutput() }, "Open artwork folder") : null,
       s && s.missingGames.length ? h("button", { class: "btn", onclick: exportMissing }, `Save list of ${s.missingGames.length} missing`) : null),
@@ -937,13 +988,14 @@ function viewSettings(): Node[] {
   const mb = cacheBytes === null ? "…" : `${(cacheBytes / 1048576).toFixed(1)} MB`;
   return [
     h("h1", {}, "Settings & privacy"),
-    h("p", { class: "lead" }, "RomCrate works without an account, collects nothing and only talks to the artwork sources listed here."),
-    h("h2", {}, "Privacy"),
+    ...(firstPart("settings") ? [h("p", { class: "lead" }, "RomCrate works without an account, collects nothing and only talks to the artwork sources listed here.")] : []),
+    ...(parts("settings", [["Privacy", () => [
     h("div", { class: "card" }, h("ul", { class: "privacy", style: "margin:0;padding-left:18px" },
       h("li", {}, h("strong", {}, "No account, no telemetry. "), "There is no sign-up, no analytics and no crash reporting."),
       h("li", {}, h("strong", {}, "Only known sites. "), "RomCrate connects over HTTPS to GitHub and libretro (free artwork and game databases), the LaunchBox games database and, if enabled, screenscraper.fr — nothing else, even if a server tries to redirect it."),
       h("li", {}, h("strong", {}, "Clean files only. "), "Every image is fully decoded and re-saved as a fresh PNG, so nothing hidden in a download reaches your drive. Videos and manuals are checked to be real MP4/PDF files."),
       h("li", {}, h("strong", {}, "Your files are safe. "), "RomCrate never deletes games, never writes outside the folders you pick, and backs up gamelist.xml before changing it."))),
+    ]], ["Files and log", () => [
     h("h2", {}, "RomCrate's own files"),
     h("div", { class: "card" },
       h("div", { class: "desc" }, "RomCrate keeps two things of its own: the activity log, and downloaded databases and artwork indexes (so it doesn't re-download them every time). You choose where. Your games and artwork always go where you point RomCrate, never here."),
@@ -960,6 +1012,7 @@ function viewSettings(): Node[] {
       logButtons(),
       h("div", { class: "row", style: "margin-top:8px" },
         h("button", { class: "btn", onclick: () => invoke("open_log_folder").catch((e) => toast(String(e))) }, "Open log folder"))),
+    ]], ["Speed and cache", () => [
     h("h2", {}, "ScreenScraper login (optional)"),
     h("div", { class: "card" },
       h("div", { style: "color:var(--muted);margin-bottom:12px;line-height:1.5" },
@@ -980,11 +1033,12 @@ function viewSettings(): Node[] {
       h("div", { style: "color:var(--muted);margin-bottom:12px" }, `Downloaded artwork lists, databases and original images are cached so re-runs are fast and work offline. Currently ${mb}.`),
       h("div", { class: "note", style: "margin:0 0 12px" }, logInfo?.cacheDir ?? catalog.cacheDir),
       h("button", { class: "btn", onclick: async () => { await invoke("clear_cache"); cacheBytes = null; toast("Cache cleared"); render(); } }, "Clear cache")),
-    h("h2", {}, "About"),
+    ]], ["About", () => [
     h("div", { class: "card", style: "color:var(--muted);line-height:1.55" },
       `RomCrate ${catalog.version} — free and open source (MIT). Artwork from the libretro-thumbnails project and the LaunchBox Games Database`,
       catalog.screenscraperAvailable ? " and ScreenScraper" : "",
       ". Game identification uses the No-Intro and Redump databases published by libretro. All artwork belongs to its respective owners."),
+    ]]], "tabs").filter(Boolean) as Node[]),
   ];
 }
 
@@ -1190,8 +1244,8 @@ function viewImport(): Node[] {
   const p = imp.plan;
   if (!p) {
     out.push(h("div", { class: "footer-bar" },
-      h("button", { class: "btn", onclick: () => go("home") }, "← Home"),
-      h("button", { class: "btn", onclick: () => go("library") }, "Skip — my games are already sorted →")));
+      h("button", { class: "btn", onclick: () => go("home") }, "Home"),
+      h("button", { class: "btn", onclick: () => go("library") }, "Skip, my games are already sorted")));
     return out.filter((x): x is Node => !!x);
   }
 
@@ -1231,7 +1285,7 @@ function viewImport(): Node[] {
         `${s.imported} game${s.imported === 1 ? "" : "s"} ${p.mode === "move" ? "moved" : "copied"} and checked (${bytes(s.bytes)}). ${s.alreadyThere} already there, ${s.skipped} left out${s.failed ? `, ${s.failed} failed` : ""}.`),
         ...s.errors.map((e) => h("div", { class: "banner warn" }, e)),
         h("div", { class: "row" },
-          h("button", { class: "btn primary big", onclick: scrapeImported }, "Get artwork for these games →"),
+          h("button", { class: "btn primary big", onclick: scrapeImported }, "Get artwork for these games"),
           h("button", { class: "btn", onclick: () => invoke("open_folder", { path: p.dest }).catch((e) => toast(String(e))) }, "Open ROMs folder")));
     }
     if (imp.log.length) prog.push(h("h2", {}, "Activity"), h("div", { class: "log" }, imp.log.slice(-2000).map((l) => h("div", { class: l.ok ? "" : "error" }, `${l.ok ? "✓" : "✗"} ${l.message}`))), logButtons());
@@ -1239,7 +1293,7 @@ function viewImport(): Node[] {
   if (!imp.running && !imp.summary) {
     out.push(h("div", { class: "footer-bar" }, h("span", {}),
       h("button", { class: "btn primary", disabled: !todo.length || !enough, onclick: startImport },
-        `${p.mode === "move" ? "Move" : "Copy"} ${todo.length} game${todo.length === 1 ? "" : "s"} →`)));
+        `${p.mode === "move" ? "Move" : "Copy"} ${todo.length} game${todo.length === 1 ? "" : "s"}`)));
   }
   out.push(...prog);
 
@@ -1450,12 +1504,12 @@ function viewTune(): Node[] {
     h("button", { class: tune.tab === "console" ? "on" : "", onclick: () => { tune.tab = "console"; render(); } }, "Each console"),
     h("button", { class: tune.tab === "game" ? "on" : "", onclick: () => { tune.tab = "game"; render(); } }, "Each game")));
   if (tune.tab === "game") {
-    out.push(h("h2", {}, "2 · Your games"));
+    out.push(stepH(2, "Your games"));
     viewGames(out);
     if (tune.result) out.push(h("h2", {}, "Applied"), h("div", { class: "log" }, tune.result.lines.map((l) => h("div", { class: l.startsWith("FAILED") ? "error" : "" }, l))), logButtons());
     return out.filter((x): x is Node => !!x);
   }
-  out.push(h("h2", {}, "2 · Your emulators"));
+  out.push(stepH(2, "Your emulators"));
   if (!tune.plan) {
     out.push(h("div", { class: "card" },
       h("div", { class: "desc" }, "RomCrate looks at the consoles in your game folders and on the handheld, and at the emulators installed there. Nothing is changed yet."),
@@ -1601,7 +1655,7 @@ function handheldGate(out: (Node | null)[], purpose: string): boolean {
   const st = snd.status;
   if (!st) { out.push(h("div", { class: "card" }, "Checking…")); return false; }
   if (!st.found) {
-    out.push(h("h2", {}, "1 · Android's USB tool"),
+    out.push(stepH(1, "Android's USB tool"),
       h("div", { class: "card" },
         h("div", { class: "desc" }, `${purpose} needs “adb”, Android's own USB tool from Google (about 10 MB, part of “platform-tools”). RomCrate downloads it from dl.google.com, checks it against Google's published checksum, and keeps it in RomCrate's folder. It's never bundled with RomCrate.`),
         h("div", { class: "hint", style: "margin-top:6px" }, "By downloading you accept Google's terms for platform-tools: ", h("span", { class: "path" }, snd.terms)),
@@ -1611,7 +1665,7 @@ function handheldGate(out: (Node | null)[], purpose: string): boolean {
   }
   const ready = snd.devices.filter((d) => d.state === "device");
   const waiting = snd.devices.filter((d) => d.state !== "device");
-  out.push(h("h2", {}, "1 · Your handheld"));
+  out.push(stepH(1, "Your handheld"));
   if (ready.length) {
     out.push(h("div", { class: "card" },
       ready.length > 1 ? h("select", { onchange: (e: Event) => { snd.serial = (e.target as HTMLSelectElement).value; snd.volumes = []; snd.plan = null; tune.plan = null; void sendRefresh(); } },
@@ -1646,9 +1700,9 @@ function viewSend(): Node[] {
   }
   // 3. What goes where.
   const systems = selectedSystems();
-  out.push(h("h2", {}, "2 · What goes where"));
+  out.push(stepH(2, "What goes where"));
   if (!systems.length) {
-    out.push(h("div", { class: "banner warn" }, "Choose your game folders first."), h("button", { class: "btn primary", onclick: () => go("library") }, "Choose game folders →"));
+    out.push(h("div", { class: "banner warn" }, "Choose your game folders first."), h("button", { class: "btn primary", onclick: () => go("library") }, "Choose game folders"));
     return out.filter((x): x is Node => !!x);
   }
   out.push(h("div", { class: "card emu-list" }, systems.map((s) => {
@@ -1666,7 +1720,7 @@ function viewSend(): Node[] {
   if (p && !snd.running) {
     const bytes = p.files.reduce((a, f) => a + f.bytes, 0);
     const full = p.perVolume.filter((v) => !v.fits);
-    out.push(h("h2", {}, "3 · Ready"),
+    out.push(stepH(3, "Ready"),
       h("div", { class: "card" },
         h("div", { class: "v" }, p.files.length ? `${p.files.length} files to copy (${human(bytes)})` : "Everything is already on the handheld"),
         h("div", { class: "desc", style: "margin-top:4px" }, `${p.alreadyThere} already there (skipped)${p.conflicts.length ? ` · ${p.conflicts.length} left alone because a different file with the same name is on the handheld` : ""}`),
@@ -1702,6 +1756,7 @@ function logPanelSend(): Node | null {
 async function boot() {
   catalog = await invoke<Catalog>("get_catalog");
   document.getElementById("version")!.textContent = `v${catalog.version}`;
+  document.querySelectorAll<HTMLElement>("[data-icon]").forEach((el) => el.insertAdjacentHTML("afterbegin", icon(el.dataset.icon!)));
   document.getElementById("nav-settings")!.addEventListener("click", () => go("settings"));
   document.getElementById("nav-import")!.addEventListener("click", () => go("import"));
   document.getElementById("nav-check")!.addEventListener("click", () => go("import"));

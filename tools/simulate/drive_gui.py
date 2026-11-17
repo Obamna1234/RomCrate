@@ -91,7 +91,7 @@ try:
         for k, want in [("device", "odin2-portal"), ("launcher", "pegasus"), ("pegasusOn", "android"), ("size", "standard")]:
             if got.get(k) != want:
                 problems.append(f"device defaults: {k} = {got.get(k)!r}, expected {want!r}")
-        for t in ["Set up everything", "Custom — pick what to do", "Pegasus launch lines", "Get artwork"]:
+        for t in ["Set up everything", "One task at a time", "Pegasus launch lines", "Get artwork"]:
             if t not in body():
                 problems.append(f"home: '{t}' missing")
 
@@ -162,7 +162,7 @@ try:
         d.find_element(By.ID, "nav-import").click()
         time.sleep(1)
         shot("import-start")
-        chk = [b for b in d.find_elements(By.TAG_NAME, "button") if b.text.strip() == "Check my files"]
+        chk = [b for b in d.find_elements(By.CSS_SELECTOR, "#main button") if b.text.strip() == "Check my files"]
         if not chk:
             problems.append("import: no 'Check my files' button")
         else:
