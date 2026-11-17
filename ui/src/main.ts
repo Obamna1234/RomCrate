@@ -1682,7 +1682,7 @@ function viewSend(): Node[] {
     out.push(h("h2", {}, snd.running ? "Sending…" : "Done"),
       h("div", { class: "progress" }, h("div", { style: `width:${snd.running ? pct : 100}%` })),
       h("div", { class: "desc" }, snd.running ? `${snd.done} of ${snd.total} files` :
-        `${snd.summary!.copied} copied (${snd.summary!.verified} games checked by checksum) · ${snd.summary!.alreadyThere} already there · ${snd.summary!.failed} failed${snd.summary!.cancelled ? " · stopped early" : ""}`),
+        `${snd.summary!.copied} copied (${snd.summary!.verified} large files checked by checksum, the rest by size) · ${snd.summary!.alreadyThere} already there · ${snd.summary!.failed} failed${snd.summary!.cancelled ? " · stopped early" : ""}`),
       snd.running ? h("button", { class: "btn", style: "margin-top:10px", onclick: () => invoke("cancel_scrape") }, "Stop after this file") :
         h("button", { class: "btn", style: "margin-top:10px", onclick: () => { snd.summary = null; render(); } }, "Send more"));
   }
