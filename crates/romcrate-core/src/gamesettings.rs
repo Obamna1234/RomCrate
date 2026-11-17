@@ -41,6 +41,61 @@ pub struct Shader {
     pub tested: bool,
 }
 
+/// One picture style for a RetroArch console: a shader preset per video driver.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShaderStyle {
+    pub id: String,
+    pub label: String,
+    /// Preset under `shaders_slang/` (Vulkan), without `.slangp`.
+    #[serde(default)]
+    pub slang: Option<String>,
+    /// Preset under `shaders_glsl/` (OpenGL), without `.glslp`.
+    #[serde(default)]
+    pub glsl: Option<String>,
+    pub why: String,
+    /// A short "great for …" line.
+    #[serde(default)]
+    pub hint: Option<String>,
+    /// May slow down weaker devices.
+    #[serde(default)]
+    pub heavy: bool,
+    #[serde(default)]
+    pub tested: bool,
+    #[serde(default)]
+    pub default: bool,
+}
+
+/// The built-in "no shader" style: RomCrate's preset is removed.
+pub const STYLE_NONE: &str = "none";
+/// Styles where RetroArch's own bilinear filter stays as it is.
+const STYLES_KEEP_FILTER: &[&str] = &["sharp", STYLE_NONE];
+
+impl ShaderStyle {
+    /// The preset for this video driver ("vulkan" → slang, anything else → glsl).
+    pub fn preset_for(&self, driver: &str) -> Option<(&'static str, &'static str, &str)> {
+        if driver == "vulkan" {
+            self.slang.as_deref().map(|p| ("shaders_slang", "slangp", p))
+        } else {
+            self.glsl.as_deref().map(|p| ("shaders_glsl", "glslp", p))
+        }
+    }
+}
+
+/// A style as offered for one console on one handheld.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StyleOption {
+    pub id: String,
+    pub label: String,
+    pub why: String,
+    pub hint: Option<String>,
+    pub heavy: bool,
+    pub tested: bool,
+    /// False when the handheld's video driver can't use it.
+    pub available: bool,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IniFile {
     pub find: Vec<String>,
@@ -64,8 +119,12 @@ pub struct Profile {
     pub options_if_driver: BTreeMap<String, Vec<Setting>>,
     #[serde(default)]
     pub note_if_other_driver: Option<String>,
+    /// Old single shader (read as the "sharp" style).
     #[serde(default)]
     pub shader: Option<Shader>,
+    /// Picture styles to choose from (RetroArch consoles).
+    #[serde(default)]
+    pub shader_styles: Vec<ShaderStyle>,
     #[serde(default)]
     pub packages: Vec<String>,
     #[serde(default)]
@@ -295,6 +354,9 @@ pub struct FileChange {
     pub path: String,
     /// False when RomCrate creates the file.
     pub exists: bool,
+    /// Remove RomCrate's own file instead of writing (e.g. "No shader").
+    #[serde(default)]
+    pub remove: bool,
     pub keys: Vec<KeyChange>,
     #[serde(skip)]
     pub new_text: String,
@@ -315,6 +377,10 @@ pub struct ConsolePlan {
     pub source: String,
     /// Apps to close before writing.
     pub packages: Vec<String>,
+    /// Picture styles you can pick for this console (RetroArch consoles).
+    pub styles: Vec<StyleOption>,
+    /// The style this plan is for.
+    pub style: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -398,6 +464,80 @@ fn find_retroarch(
 
 /// (config folder, shared core options file, video driver) of the RetroArch
 /// installed on the handheld, if found.
+impl Profile {
+    /// The picture styles for this console. Old data with a single `shader` is
+    /// read as one "sharp" style.
+    pub fn styles(&self) -> Vec<ShaderStyle> {
+        if !self.shader_styles.is_empty() {
+            return self.shader_styles.clone();
+        }
+        self.shader
+            .iter()
+            .map(|sh| ShaderStyle {
+                id: "sharp".into(),
+                label: sh.label.clone(),
+                slang: Some(sh.preset.clone()),
+                glsl: Some(sh.preset.clone()),
+                why: sh.why.clone(),
+                hint: None,
+                heavy: false,
+                tested: sh.tested,
+                default: true,
+            })
+            .collect()
+    }
+
+    pub fn default_style(&self) -> Option<String> {
+        let st = self.styles();
+        st.iter().find(|s| s.default).or(st.first()).map(|s| s.id.clone())
+    }
+}
+
+/// Which style a preset file RomCrate wrote points at (by its `#reference`).
+pub fn style_of_preset(p: &Profile, text: &str) -> Option<String> {
+    let r = text.lines().find_map(|l| l.trim().strip_prefix("#reference"))?;
+    let r = r.trim().trim_matches('"');
+    p.styles().into_iter().find_map(|s| {
+        [("shaders_slang", "slangp", &s.slang), ("shaders_glsl", "glslp", &s.glsl)]
+            .iter()
+            .any(|(f, e, pr)| pr.as_ref().is_some_and(|pr| r.ends_with(&format!("{f}/{pr}.{e}"))))
+            .then(|| s.id.clone())
+    })
+}
+
+/// Where the preset for `style` is on the handheld, or why it can't be used.
+pub enum PresetFound {
+    At(String),
+    NotForDriver,
+    Missing { updater: &'static str },
+}
+
+pub fn find_preset(fs: &mut dyn DeviceFs, driver: &str, shader_dir: Option<&str>, style: &ShaderStyle) -> PresetFound {
+    let Some((folder, ext, preset)) = style.preset_for(driver) else {
+        return PresetFound::NotForDriver;
+    };
+    let updater = if driver == "vulkan" { "Slang" } else { "GLSL" };
+    match shader_dir.and_then(|d| {
+        let f = format!("{d}/{folder}/{preset}.{ext}");
+        fs.read(&f).ok().flatten().map(|_| f)
+    }) {
+        Some(f) => PresetFound::At(f),
+        None => PresetFound::Missing { updater },
+    }
+}
+
+pub fn preset_text(found: &str) -> String {
+    format!("{MARKER}\n#reference \"{found}\"\n")
+}
+
+/// RetroArch's config folder, video driver and shader folder on the handheld.
+pub fn retroarch_shader_info(fs: &mut dyn DeviceFs) -> Option<(String, String, Option<String>)> {
+    let installed = fs.installed_packages();
+    find_retroarch(fs, &installed)
+        .ok()
+        .map(|r| (r.config_dir, r.driver, r.shader_dir))
+}
+
 pub fn retroarch_paths(
     fs: &mut dyn DeviceFs,
     installed: &HashSet<String>,
@@ -442,6 +582,7 @@ fn change_from(
         return Ok(None);
     }
     Ok(Some(FileChange {
+        remove: false,
         path: path.to_string(),
         exists,
         keys,
@@ -451,7 +592,13 @@ fn change_from(
 
 /// Work out what would change for the consoles in `systems`.
 pub fn plan(fs: &mut dyn DeviceFs, systems: &[String]) -> SettingsPlan {
-    plan_profiles(fs, systems, &db().profiles)
+    plan_profiles(fs, systems, &db().profiles, &BTreeMap::new())
+}
+
+/// Like `plan`, with a picture style chosen per console (profile id → style id;
+/// consoles not listed get their default style).
+pub fn plan_styled(fs: &mut dyn DeviceFs, systems: &[String], styles: &BTreeMap<String, String>) -> SettingsPlan {
+    plan_profiles(fs, systems, &db().profiles, styles)
 }
 
 /// Like `plan`, for any list of profiles (play modes build their own).
@@ -459,6 +606,7 @@ pub fn plan_profiles(
     fs: &mut dyn DeviceFs,
     systems: &[String],
     profiles: &[Profile],
+    chosen_styles: &BTreeMap<String, String>,
 ) -> SettingsPlan {
     let want: HashSet<&str> = systems.iter().map(String::as_str).collect();
     let installed = fs.installed_packages();
@@ -484,6 +632,8 @@ pub fn plan_profiles(
             tested: p.tested,
             source: p.source.clone(),
             packages: p.packages.clone(),
+            styles: vec![],
+            style: None,
         };
         let result: Result<(), (String, String)> = (|| {
             match p.kind.as_str() {
@@ -505,10 +655,58 @@ pub fn plan_profiles(
                             format!("Couldn't read the handheld: {e}"),
                         )
                     };
-                    if !p.r#override.is_empty() {
+                    // Picture style: which one, and what this handheld can use.
+                    let styles = p.styles();
+                    let style = (!styles.is_empty()).then(|| {
+                        chosen_styles
+                            .get(&p.id)
+                            .filter(|id| *id == STYLE_NONE || styles.iter().any(|s| &s.id == *id))
+                            .cloned()
+                            .or_else(|| p.default_style())
+                            .unwrap_or_else(|| STYLE_NONE.into())
+                    });
+                    c.styles = styles
+                        .iter()
+                        .map(|s| StyleOption {
+                            id: s.id.clone(),
+                            label: s.label.clone(),
+                            why: s.why.clone(),
+                            hint: s.hint.clone(),
+                            heavy: s.heavy,
+                            tested: s.tested,
+                            available: s.preset_for(&r.driver).is_some(),
+                        })
+                        .collect();
+                    if !c.styles.is_empty() {
+                        c.styles.push(StyleOption {
+                            id: STYLE_NONE.into(),
+                            label: "No shader".into(),
+                            why: "A plain picture, as RetroArch shows it by default.".into(),
+                            hint: None,
+                            heavy: false,
+                            tested: true,
+                            available: true,
+                        });
+                    }
+                    c.style = style.clone();
+                    let mut over = p.r#override.clone();
+                    if let Some(st) = style.as_deref().filter(|s| !STYLES_KEEP_FILTER.contains(s)) {
+                        let usable = styles.iter().find(|x| x.id == st).is_some_and(|x| x.preset_for(&r.driver).is_some());
+                        if usable {
+                            over.push(Setting {
+                                section: None,
+                                key: "video_smooth".into(),
+                                value: "false".into(),
+                                label: "RetroArch's own smoothing off".into(),
+                                why: "The picture style does the smoothing; RetroArch's blur on top would make it soft.".into(),
+                                tested: false,
+                            });
+                        }
+                    }
+                    if !over.is_empty() {
                         let path = format!("{dir}/{core}.cfg");
                         if let Some(ch) =
-                            change_from(fs, &path, &p.r#override, true, |_| format!("{MARKER}\n"))
+                            change_from(fs, &path, &over, true, |_| format!("{MARKER}\n"))
                                 .map_err(err)?
                         {
                             c.changes.push(ch);
@@ -550,42 +748,70 @@ pub fn plan_profiles(
                             c.changes.push(ch);
                         }
                     }
-                    if let Some(sh) = &p.shader {
-                        let (folder, ext) = if r.driver == "vulkan" {
-                            ("shaders_slang", "slangp")
-                        } else {
-                            ("shaders_glsl", "glslp")
+                    if let Some(style) = style.as_deref() {
+                        let ext = if r.driver == "vulkan" { "slangp" } else { "glslp" };
+                        let path = format!("{dir}/{core}.{ext}");
+                        let existing = fs.read(&path).map_err(err)?;
+                        let ours = existing.as_deref().is_none_or(|t| t.starts_with(MARKER));
+                        let old_label = |t: &str| {
+                            style_of_preset(p, t)
+                                .and_then(|id| styles.iter().find(|s| s.id == id).map(|s| s.label.clone()))
+                                .unwrap_or_else(|| "another shader".into())
                         };
-                        let found = r.shader_dir.as_ref().and_then(|d| {
-                            let f = format!("{d}/{folder}/{}.{ext}", sh.preset);
-                            fs.read(&f).ok().flatten().map(|_| f)
-                        });
-                        match found {
-                            Some(f) => {
-                                let path = format!("{dir}/{core}.{ext}");
-                                let want_text = format!("{MARKER}\n#reference \"{f}\"\n");
-                                let existing = fs.read(&path).map_err(err)?;
-                                if existing.as_deref() != Some(want_text.as_str()) {
-                                    c.changes.push(FileChange {
-                                        path,
-                                        exists: existing.is_some(),
-                                        keys: vec![KeyChange {
-                                            section: None,
-                                            key: "shader preset".into(),
-                                            label: sh.label.clone(),
-                                            why: sh.why.clone(),
-                                            old: existing.map(|_| "another shader".into()),
-                                            new: sh.preset.clone(),
-                                            tested: sh.tested,
-                                        }],
-                                        new_text: want_text,
-                                    });
-                                }
+                        if !ours {
+                            // A preset you made yourself is never replaced.
+                            c.steps.push(format!(
+                                "Your own shader preset is kept ({path}). To use a RomCrate picture style for this console, remove that preset in RetroArch (Quick Menu → Shaders → Remove Core Preset), then apply again."
+                            ));
+                        } else if style == STYLE_NONE {
+                            if let Some(t) = existing {
+                                c.changes.push(FileChange {
+                                    path,
+                                    exists: true,
+                                    remove: true,
+                                    keys: vec![KeyChange {
+                                        section: None,
+                                        key: "shader preset".into(),
+                                        label: "Picture style".into(),
+                                        why: "No shader: a plain picture.".into(),
+                                        old: Some(old_label(&t)),
+                                        new: "No shader".into(),
+                                        tested: true,
+                                    }],
+                                    new_text: String::new(),
+                                });
                             }
-                            None => c.steps.push(format!(
-                                "For the sharp look: in RetroArch, Main Menu → Online Updater → Update {} Shaders, then apply Game settings again.",
-                                if r.driver == "vulkan" { "Slang" } else { "GLSL" }
-                            )),
+                        } else if let Some(sh) = styles.iter().find(|s| s.id == style) {
+                            match find_preset(fs, &r.driver, r.shader_dir.as_deref(), sh) {
+                                PresetFound::At(f) => {
+                                    let want_text = preset_text(&f);
+                                    if existing.as_deref() != Some(want_text.as_str()) {
+                                        c.changes.push(FileChange {
+                                            path,
+                                            exists: existing.is_some(),
+                                            remove: false,
+                                            keys: vec![KeyChange {
+                                                section: None,
+                                                key: "shader preset".into(),
+                                                label: format!("Picture style: {}", sh.label),
+                                                why: sh.why.clone(),
+                                                old: existing.as_deref().map(old_label),
+                                                new: sh.label.clone(),
+                                                tested: sh.tested,
+                                            }],
+                                            new_text: want_text,
+                                        });
+                                    }
+                                }
+                                PresetFound::NotForDriver => c.steps.push(format!(
+                                    "“{}” needs RetroArch's Vulkan video driver, and this handheld uses {}. The picture style was left as it is.",
+                                    sh.label, r.driver
+                                )),
+                                PresetFound::Missing { updater } => c.steps.push(format!(
+                                    "For the “{}” look: in RetroArch, Main Menu → Online Updater → Update {updater} Shaders, then apply Game settings again.",
+                                    sh.label
+                                )),
+                            }
                         }
                     }
                 }
@@ -681,6 +907,13 @@ pub fn apply(fs: &mut dyn DeviceFs, plan: &SettingsPlan, ids: &[String]) -> Appl
                         fs.copy(&ch.path, &backup)?;
                     }
                 }
+                if ch.remove {
+                    // Only ever RomCrate's own file.
+                    anyhow::ensure!(ours, "it isn't RomCrate's file, so it was left alone");
+                    fs.remove(&ch.path)?;
+                    anyhow::ensure!(fs.read(&ch.path)?.is_none(), "the file is still there");
+                    return Ok(());
+                }
                 fs.write(&ch.path, &ch.new_text)?;
                 anyhow::ensure!(
                     fs.read(&ch.path)?.as_deref() == Some(ch.new_text.as_str()),
@@ -700,7 +933,7 @@ pub fn apply(fs: &mut dyn DeviceFs, plan: &SettingsPlan, ids: &[String]) -> Appl
                     res.lines.push(format!(
                         "OK {} — {}: {what} ({})",
                         c.emulator,
-                        if ch.exists { "changed" } else { "created" },
+                        if ch.remove { "removed" } else if ch.exists { "changed" } else { "created" },
                         ch.path
                     ));
                 }
@@ -804,6 +1037,17 @@ mod tests {
             assert!(!p.source.is_empty());
             for s in &p.systems {
                 assert!(crate::systems::by_id(s).is_some(), "unknown system {s}");
+            }
+            let styles = p.styles();
+            if !styles.is_empty() {
+                assert_eq!(p.kind, "retroarch-core", "{}: styles are RetroArch shaders", p.id);
+                assert_eq!(styles.iter().filter(|s| s.default).count(), 1, "{}: exactly one default style", p.id);
+                let mut sid = HashSet::new();
+                for s in &styles {
+                    assert!(sid.insert(s.id.clone()) && s.id != STYLE_NONE, "{}: style id {}", p.id, s.id);
+                    assert!(!s.label.is_empty() && !s.why.is_empty(), "{}: {} needs a label and a why", p.id, s.id);
+                    assert!(s.slang.is_some() || s.glsl.is_some(), "{}: {} has no preset", p.id, s.id);
+                }
             }
             match p.kind.as_str() {
                 "retroarch-core" => assert!(p.core.is_some()),

@@ -58,6 +58,8 @@ RomCrate is a free, open-source alternative to account-based scrapers. Point it 
   | LaunchBox / Big Box | `Images/<platform>/Box - Front`, `Box - 3D`, `Clear Logo`…, `Videos`, `Manuals` |
   | Anything else | Plain folders per system and type |
 
+- **Send to your Android handheld** over USB (internal storage or SD card, per console) — nothing on the handheld is overwritten, and every large file is checked after copying. It can also fetch artwork for games that are only on the handheld.
+- **Game settings for the handheld's emulators**: sharp, full-speed settings per console and per game, with a backup of every file and Undo. **Picture styles** per console or per game: Sharp pixels, Smooth HD, CRT TV, CRT TV (best quality) or no shader. **Play modes** switch input-delay settings for the handheld screen, a TV or a Bluetooth controller.
 - **Theme presets** pre-select what your style of theme shows (showcase, cover grid, 3D shelves, mix image…).
 - **Sharp at any size.** Pixel-art screenshots are scaled crisply; box art is enlarged smoothly with light sharpening. Optional AI upscaling with [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) if you have it installed.
 - **Region preference**, skip-existing or overwrite, compact → 4K size presets.
