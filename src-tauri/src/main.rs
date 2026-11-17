@@ -34,6 +34,12 @@ struct AppState {
     /// The last "send to handheld" plan (serial + files). Sending only acts on this.
     send_plan: Mutex<Option<(String, romcrate_core::adb::SendPlan)>>,
     settings_plan: Mutex<Option<(String, romcrate_core::gamesettings::SettingsPlan)>>,
+    /// The play mode the current settings plan is for (screen, controller).
+    pending_mode: Mutex<Option<(String, String)>>,
+    /// Pictures offered next to yours in the last artwork run ("ask me").
+    review: Arc<Mutex<Vec<romcrate_core::review::ReviewItem>>>,
+    /// Artwork for games on the handheld: the staged copy, its library, the serial.
+    handheld: Mutex<Option<(String, romcrate_core::handheld_art::Staging, Library)>>,
 }
 
 #[derive(Serialize)]
@@ -167,8 +173,22 @@ async fn start_scrape(
     config: ScrapeConfig,
     ss_user: Option<String>,
     ss_password: Option<String>,
+    handheld: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let handheld_lib = if handheld == Some(true) {
+        Some(
+            state
+                .handheld
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|h| h.2.clone())
+                .ok_or("Look at the handheld's games first")?,
+        )
+    } else {
+        None
+    };
     if state.running.swap(true, Ordering::SeqCst) {
         return Err("A scrape is already running".into());
     }
@@ -184,8 +204,22 @@ async fn start_scrape(
     if let Some(f) = &config.folder {
         state.openable.lock().unwrap().insert(f.clone());
     }
+    // "Ask me": RomCrate's versions of art you already have go to its own folder
+    // (never a folder the window names).
+    config.review_dir = None;
+    state.review.lock().unwrap().clear();
+    if config.ask_existing {
+        let dir = romcrate_core::review::review_dir(&romcrate_core::datadir::keep_dir());
+        let _ = std::fs::remove_dir_all(&dir);
+        config.review_dir = Some(dir);
+    }
+    if handheld_lib.is_some() {
+        // Stand-ins only: their contents mean nothing.
+        config.identify_by_contents = false;
+        config.folder = None;
+    }
 
-    let lib = state.library.lock().unwrap().clone();
+    let lib = handheld_lib.unwrap_or_else(|| state.library.lock().unwrap().clone());
     let client = match SafeClient::new() {
         Ok(c) => c,
         Err(e) => {
@@ -216,13 +250,24 @@ async fn start_scrape(
     });
 
     let previewable = state.previewable.clone();
+    let review = state.review.clone();
     let app2 = app.clone();
     let emit: romcrate_core::scrape::Emit = Arc::new(move |e: Event| {
         if let Event::GameDone {
-            preview: Some(p), ..
+            preview,
+            review: offered,
+            ..
         } = &e
         {
-            previewable.lock().unwrap().insert(p.clone());
+            let mut pv = previewable.lock().unwrap();
+            if let Some(p) = preview {
+                pv.insert(p.clone());
+            }
+            for it in offered {
+                pv.insert(it.existing.clone());
+                pv.insert(it.candidate.clone());
+            }
+            review.lock().unwrap().extend(offered.iter().cloned());
         }
         if let Some(line) = romcrate_core::activity::describe(&e) {
             romcrate_core::activity::append(
@@ -943,7 +988,10 @@ async fn settings_undo(
 /// Every game on the handheld that can have its own resolution setting, with
 /// its current value and RomCrate's suggestion.
 #[tauri::command]
-async fn pergame_scan(serial: String, app: AppHandle) -> Result<Vec<romcrate_core::pergame::GameRow>, String> {
+async fn pergame_scan(
+    serial: String,
+    app: AppHandle,
+) -> Result<Vec<romcrate_core::pergame::GameRow>, String> {
     use romcrate_core::{launchbox::LaunchBox, matcher::MatchPrefs, systems};
     let adb = find_adb()?;
     let s2 = serial.clone();
@@ -957,7 +1005,10 @@ async fn pergame_scan(serial: String, app: AppHandle) -> Result<Vec<romcrate_cor
                 let roms = v.roms_dir.clone();
                 v.console_folders.iter().filter_map(move |f| {
                     let sys = systems::detect_from_folder(f)?;
-                    Some((sys.id.to_string(), format!("{}/{}/{f}", v.path, roms.as_deref()?)))
+                    Some((
+                        sys.id.to_string(),
+                        format!("{}/{}/{f}", v.path, roms.as_deref()?),
+                    ))
                 })
             })
             .collect()
@@ -976,18 +1027,27 @@ async fn pergame_scan(serial: String, app: AppHandle) -> Result<Vec<romcrate_cor
         let app2 = app.clone();
         if lb
             .ensure_database(false, &move |d, t| {
-                let _ = app2.emit("pergame-progress", serde_json::json!({ "done": d, "total": t }));
+                let _ = app2.emit(
+                    "pergame-progress",
+                    serde_json::json!({ "done": d, "total": t }),
+                );
             })
             .await
             .is_ok()
         {
             let files = lb.dir_for_blocking();
-            let name = systems::by_id("ps2").map(|s| s.launchbox).unwrap_or_default();
+            let name = systems::by_id("ps2")
+                .map(|s| s.launchbox)
+                .unwrap_or_default();
             platform_db = tokio::task::spawn_blocking(move || {
-                files.platforms(&[name]).ok().and_then(|mut m| m.remove(name)).map(|mut db| {
-                    db.prepare();
-                    db
-                })
+                files
+                    .platforms(&[name])
+                    .ok()
+                    .and_then(|mut m| m.remove(name))
+                    .map(|mut db| {
+                        db.prepare();
+                        db
+                    })
             })
             .await
             .ok()
@@ -1004,7 +1064,10 @@ async fn pergame_scan(serial: String, app: AppHandle) -> Result<Vec<romcrate_cor
             let id = db.find(&[name], &prefs)?;
             db.info(id)?.genre
         };
-        let mut dev = romcrate_core::adb::AdbFs { adb: &adb, serial: &serial };
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &serial,
+        };
         romcrate_core::pergame::scan(&mut dev, &dirs, &genre_of)
     })
     .await
@@ -1018,7 +1081,10 @@ async fn pergame_apply(
 ) -> Result<romcrate_core::gamesettings::ApplyResult, String> {
     let adb = find_adb()?;
     let res = tokio::task::spawn_blocking(move || {
-        let mut dev = romcrate_core::adb::AdbFs { adb: &adb, serial: &serial };
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &serial,
+        };
         romcrate_core::pergame::apply(&mut dev, &choices)
     })
     .await
@@ -1037,6 +1103,410 @@ async fn pergame_apply(
 }
 
 /// Open the activity log folder in the file manager.
+// ---------------------------------------------------------------- device check
+
+/// Which device and system is plugged in.
+#[tauri::command]
+async fn device_identity(serial: String) -> Result<romcrate_core::detect::Identity, String> {
+    let adb = find_adb()?;
+    tokio::task::spawn_blocking(move || adb.identity(&serial))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------- play modes
+
+#[tauri::command]
+fn playmode_choices() -> &'static romcrate_core::playmode::Modes {
+    romcrate_core::playmode::modes()
+}
+
+/// The mode last applied with RomCrate (screen, controller), if any.
+#[tauri::command]
+async fn playmode_current(serial: String) -> Result<Option<(String, String)>, String> {
+    let adb = find_adb()?;
+    tokio::task::spawn_blocking(move || {
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &serial,
+        };
+        romcrate_core::playmode::current(&mut dev)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn playmode_plan(
+    serial: String,
+    systems: Vec<String>,
+    screen: String,
+    controller: String,
+    state: State<'_, AppState>,
+) -> Result<romcrate_core::gamesettings::SettingsPlan, String> {
+    let adb = find_adb()?;
+    let (s2, sc, co) = (serial.clone(), screen.clone(), controller.clone());
+    let plan = tokio::task::spawn_blocking(move || {
+        let mut all = systems;
+        all.extend(device_systems(&adb, &s2));
+        all.sort();
+        all.dedup();
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &s2,
+        };
+        romcrate_core::playmode::plan(&mut dev, &all, &sc, &co)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    *state.settings_plan.lock().unwrap() = Some((serial, plan.clone()));
+    *state.pending_mode.lock().unwrap() = Some((screen, controller));
+    Ok(plan)
+}
+
+#[tauri::command]
+async fn playmode_apply(
+    ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<romcrate_core::gamesettings::ApplyResult, String> {
+    let (serial, plan) = state
+        .settings_plan
+        .lock()
+        .unwrap()
+        .take()
+        .ok_or("Check the play mode first")?;
+    let (screen, controller) = state
+        .pending_mode
+        .lock()
+        .unwrap()
+        .take()
+        .ok_or("Check the play mode first")?;
+    let adb = find_adb()?;
+    let res = tokio::task::spawn_blocking(move || {
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &serial,
+        };
+        let mut res = romcrate_core::gamesettings::apply(&mut dev, &plan, &ids);
+        if res.failed == 0 {
+            match romcrate_core::playmode::record(&mut dev, &screen, &controller) {
+                Ok(()) => res
+                    .lines
+                    .push(format!("Play mode is now: {screen}, {controller}")),
+                Err(e) => res
+                    .lines
+                    .push(format!("Couldn't note the play mode on the handheld: {e}")),
+            }
+        }
+        res
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    romcrate_core::activity::append(
+        &romcrate_core::activity::log_dir(),
+        "Play mode",
+        &[
+            vec![format!(
+                "Applied: {} file(s) changed, {} failed",
+                res.changed_files, res.failed
+            )],
+            res.lines.clone(),
+        ]
+        .concat(),
+    );
+    Ok(res)
+}
+
+// ---------------------------------------------------------------- keep yours or use RomCrate's
+
+/// The pictures offered in the last run (with a copy of yours to look at).
+#[tauri::command]
+fn review_items(state: State<'_, AppState>) -> Vec<romcrate_core::review::ReviewItem> {
+    state.review.lock().unwrap().clone()
+}
+
+/// Use RomCrate's picture for the chosen items (by position in `review_items`).
+/// Yours are kept first; on the handheld too.
+#[tauri::command]
+async fn review_apply(
+    chosen: Vec<usize>,
+    state: State<'_, AppState>,
+) -> Result<romcrate_core::review::Batch, String> {
+    let all = state.review.lock().unwrap().clone();
+    let items: Vec<_> = chosen.iter().filter_map(|i| all.get(*i).cloned()).collect();
+    if items.is_empty() {
+        return Err("Nothing chosen".into());
+    }
+    let serial = state.handheld.lock().unwrap().as_ref().map(|h| h.0.clone());
+    let data = romcrate_core::datadir::keep_dir();
+    let on_handheld = items.iter().any(|i| !i.remote.is_empty());
+    let b = tokio::task::spawn_blocking(move || -> Result<_, String> {
+        if on_handheld {
+            let adb = find_adb()?;
+            let serial = serial.ok_or("The handheld isn't connected any more")?;
+            Ok(romcrate_core::handheld_art::replace_on_handheld(
+                &adb, &serial, &data, &items,
+            ))
+        } else {
+            Ok(romcrate_core::review::replace_on_pc(&data, &items))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let mut lines = vec![format!(
+        "Used RomCrate's picture for {} ({} failed); yours are kept in {}",
+        b.replaced,
+        b.failed.len(),
+        romcrate_core::review::replaced_dir(&romcrate_core::datadir::keep_dir())
+            .join(&b.id)
+            .display()
+    )];
+    lines.extend(b.kept.iter().map(|k| {
+        format!(
+            "Replaced {} (yours kept as {})",
+            k.place,
+            k.backup.display()
+        )
+    }));
+    lines.extend(b.failed.iter().map(|f| format!("FAILED {f}")));
+    romcrate_core::activity::append(&romcrate_core::activity::log_dir(), "Artwork", &lines);
+    // Chosen items are done; the rest stay offered.
+    let mut left = state.review.lock().unwrap();
+    let keep: Vec<_> = left
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !chosen.contains(i))
+        .map(|(_, x)| x.clone())
+        .collect();
+    *left = keep;
+    Ok(b)
+}
+
+/// Forget the offered pictures (keep all of yours).
+#[tauri::command]
+fn review_dismiss(state: State<'_, AppState>) {
+    state.review.lock().unwrap().clear();
+    let _ = std::fs::remove_dir_all(romcrate_core::review::review_dir(
+        &romcrate_core::datadir::keep_dir(),
+    ));
+}
+
+#[tauri::command]
+fn review_batches() -> Vec<romcrate_core::review::Batch> {
+    romcrate_core::review::batches(&romcrate_core::datadir::keep_dir())
+}
+
+/// Put back the pictures from an earlier replacement.
+#[tauri::command]
+async fn review_put_back(id: String, serial: Option<String>) -> Result<usize, String> {
+    let data = romcrate_core::datadir::keep_dir();
+    let r = tokio::task::spawn_blocking(move || -> anyhow::Result<usize> {
+        let b = romcrate_core::review::batches(&data)
+            .into_iter()
+            .find(|b| b.id == id)
+            .ok_or_else(|| anyhow::anyhow!("that set of pictures is gone"))?;
+        let mut n = 0;
+        if b.kept.iter().any(|k| k.on_handheld) {
+            let adb = find_adb().map_err(|e| anyhow::anyhow!(e))?;
+            let serial = serial
+                .ok_or_else(|| anyhow::anyhow!("connect the handheld to put its pictures back"))?;
+            n += romcrate_core::handheld_art::put_back_on_handheld(&adb, &serial, &data, &id)?;
+        }
+        if b.kept.iter().any(|k| !k.on_handheld) {
+            n += romcrate_core::review::put_back_on_pc(&data, &id)?;
+        }
+        Ok(n)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    romcrate_core::activity::append(
+        &romcrate_core::activity::log_dir(),
+        "Artwork",
+        &[format!(
+            "Put back {r} picture(s) from {}",
+            "an earlier replacement"
+        )],
+    );
+    Ok(r)
+}
+
+// ---------------------------------------------------------------- your own device photo
+
+fn photo_path(id: &str) -> PathBuf {
+    romcrate_core::datadir::keep_dir()
+        .join("device-photos")
+        .join(format!("{}.png", romcrate_core::review::safe_name(id)))
+}
+
+fn data_url(img: &image::DynamicImage) -> Result<String, String> {
+    let mut out = Vec::new();
+    img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
+        .map_err(|e| e.to_string())?;
+    Ok(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(out)
+    ))
+}
+
+/// Use a photo you took of your own device instead of the drawing. The picture
+/// is checked, shrunk and saved as a fresh PNG in RomCrate's own folder.
+#[tauri::command]
+async fn set_device_photo(app: AppHandle, id: String) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(picked) = app
+        .dialog()
+        .file()
+        .set_title("Choose a photo of your device")
+        .add_filter("Pictures", &["png", "jpg", "jpeg", "webp"])
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+    let src = picked.into_path().map_err(|e| e.to_string())?;
+    let dst = photo_path(&id);
+    tokio::task::spawn_blocking(move || -> Result<Option<String>, String> {
+        let bytes = std::fs::read(&src).map_err(|e| e.to_string())?;
+        let img = romcrate_core::imaging::decode_validated(&bytes)
+            .map_err(|e| format!("that picture can't be used: {e}"))?;
+        let small = img.thumbnail(900, 600);
+        romcrate_core::imaging::save_png(&small.to_rgba8(), &dst).map_err(|e| e.to_string())?;
+        Ok(Some(data_url(&small.thumbnail(480, 240))?))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Your photos, by device id.
+#[tauri::command]
+async fn device_photos() -> std::collections::BTreeMap<String, String> {
+    tokio::task::spawn_blocking(|| {
+        let dir = romcrate_core::datadir::keep_dir().join("device-photos");
+        std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| {
+                let p = e.path();
+                let id = p.file_stem()?.to_string_lossy().into_owned();
+                let img = image::open(&p).ok()?;
+                Some((id, data_url(&img.thumbnail(480, 240)).ok()?))
+            })
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
+}
+
+#[tauri::command]
+fn clear_device_photo(id: String) -> Result<(), String> {
+    let p = photo_path(&id);
+    if p.exists() {
+        std::fs::remove_file(p).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------- artwork for games on the handheld
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HandheldGames {
+    games: usize,
+    consoles: Vec<String>,
+    library: Library,
+}
+
+/// Look at the handheld's game folders and stage stand-ins for the artwork step.
+#[tauri::command]
+async fn handheld_stage(
+    serial: String,
+    state: State<'_, AppState>,
+) -> Result<HandheldGames, String> {
+    let adb = find_adb()?;
+    let s2 = serial.clone();
+    let (st, lib) = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let vols = adb.volumes(&s2)?;
+        let cache = romcrate_core::datadir::cache_dir();
+        let st = romcrate_core::handheld_art::stage(
+            &s2,
+            &vols,
+            &cache,
+            &mut |d| adb.list_files(&s2, d).unwrap_or_default(),
+            &mut |r, l| adb.pull(&s2, r, l),
+        )?;
+        let lib = romcrate_core::scan::scan_roots(&st.local_roots());
+        Ok((st, lib))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    romcrate_core::activity::append(
+        &romcrate_core::activity::log_dir(),
+        "Artwork on the handheld",
+        &[format!("Found {} game(s) in {} console folder(s) on the handheld; staged stand-ins in {} (no game is copied to this PC)", st.games, st.consoles.len(), st.root.display())],
+    );
+    let out = HandheldGames {
+        games: st.games,
+        consoles: st.consoles.clone(),
+        library: lib.clone(),
+    };
+    *state.handheld.lock().unwrap() = Some((serial, st, lib));
+    Ok(out)
+}
+
+/// After the artwork step: what goes back to the handheld (new pictures and
+/// launcher files only), ready for `start_send`. Also prepares the "ask me"
+/// pictures with a copy of the handheld's own picture.
+#[tauri::command]
+async fn handheld_plan_back(
+    state: State<'_, AppState>,
+) -> Result<romcrate_core::adb::SendPlan, String> {
+    let (serial, st, _) = state
+        .handheld
+        .lock()
+        .unwrap()
+        .clone()
+        .ok_or("Look at the handheld's games first")?;
+    let offered = state.review.lock().unwrap().clone();
+    let adb = find_adb()?;
+    let s2 = serial.clone();
+    let (plan, items) = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let vols = adb.volumes(&s2)?;
+        for v in st
+            .roots
+            .iter()
+            .map(|r| r.2.as_str())
+            .collect::<HashSet<_>>()
+        {
+            adb.can_write(&s2, v)?;
+        }
+        let plan = romcrate_core::handheld_art::plan_back(&st, &vols);
+        let items = romcrate_core::handheld_art::prepare_review(
+            &st,
+            &romcrate_core::datadir::keep_dir(),
+            offered,
+            &mut |r, l| adb.pull(&s2, r, l),
+        );
+        Ok((plan, items))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    {
+        let mut pv = state.previewable.lock().unwrap();
+        for it in &items {
+            pv.insert(it.existing.clone());
+            pv.insert(it.candidate.clone());
+        }
+    }
+    *state.review.lock().unwrap() = items;
+    *state.send_plan.lock().unwrap() = Some((serial, plan.clone()));
+    Ok(plan)
+}
+
 #[tauri::command]
 fn open_log_folder(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
@@ -1085,6 +1555,21 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            device_identity,
+            playmode_choices,
+            playmode_current,
+            playmode_plan,
+            playmode_apply,
+            review_items,
+            review_apply,
+            review_dismiss,
+            review_batches,
+            review_put_back,
+            handheld_stage,
+            handheld_plan_back,
+            set_device_photo,
+            device_photos,
+            clear_device_photo,
             get_catalog,
             scan_library,
             add_system_folder,

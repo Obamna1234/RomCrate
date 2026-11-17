@@ -236,6 +236,7 @@ mod tests {
             missing: vec![crate::source::ArtKind::Boxart],
             preview: None,
             message: Some("not in the official game lists".into()),
+            review: vec![],
         };
         let s = describe(&e).unwrap();
         assert!(s.starts_with("NOT FOUND: SONIC.SMC"), "{s}");

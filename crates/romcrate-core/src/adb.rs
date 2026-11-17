@@ -25,7 +25,7 @@ const REPO_BASE: &str = "https://dl.google.com/android/repository/";
 /// Platform-tools is ~7–15 MB; refuse anything absurd.
 const MAX_TOOLS_ZIP: usize = 200 * 1024 * 1024;
 /// Keep this much free on the handheld after copying.
-const SPACE_MARGIN: u64 = 200 * 1024 * 1024;
+pub const SPACE_MARGIN: u64 = 200 * 1024 * 1024;
 /// Files bigger than this are checked with MD5 after copying (games); smaller
 /// ones (artwork, text) by size.
 const HASH_FROM: u64 = 1024 * 1024;
@@ -159,6 +159,21 @@ impl Adb {
             }
         }
         Ok(vols)
+    }
+
+    /// Which device and system this is (from Android's build properties).
+    pub fn identity(&self, serial: &str) -> anyhow::Result<crate::detect::Identity> {
+        let out = self.shell(serial, "getprop")?;
+        Ok(crate::detect::identify(&crate::detect::parse_props(&out)))
+    }
+
+    /// Copy a file from the handheld to this computer.
+    pub fn pull(&self, serial: &str, remote: &str, local: &Path) -> anyhow::Result<()> {
+        if let Some(p) = local.parent() {
+            fs::create_dir_all(p)?;
+        }
+        let l = local.to_string_lossy();
+        self.run(&["-s", serial, "pull", remote, &l]).map(|_| ())
     }
 
     /// Every file under a folder on the handheld, with its size.

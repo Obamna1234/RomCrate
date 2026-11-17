@@ -226,7 +226,12 @@ const BLOCK: u64 = 64 * 1024;
 
 impl<'a> DeviceReader<'a> {
     pub fn new(fs: &'a mut dyn DeviceFs, path: &str) -> Self {
-        DeviceReader { fs, path: path.to_string(), pos: 0, cache: Default::default() }
+        DeviceReader {
+            fs,
+            path: path.to_string(),
+            pos: 0,
+            cache: Default::default(),
+        }
     }
 }
 
@@ -261,7 +266,9 @@ impl std::io::Seek for DeviceReader<'_> {
             std::io::SeekFrom::Start(p) => p,
             std::io::SeekFrom::Current(d) => self.pos.saturating_add_signed(d),
             std::io::SeekFrom::End(_) => {
-                return Err(std::io::Error::other("seeking from the end isn't supported"))
+                return Err(std::io::Error::other(
+                    "seeking from the end isn't supported",
+                ))
             }
         };
         Ok(self.pos)
@@ -391,7 +398,10 @@ fn find_retroarch(
 
 /// (config folder, shared core options file, video driver) of the RetroArch
 /// installed on the handheld, if found.
-pub fn retroarch_paths(fs: &mut dyn DeviceFs, installed: &HashSet<String>) -> Option<(String, String, String)> {
+pub fn retroarch_paths(
+    fs: &mut dyn DeviceFs,
+    installed: &HashSet<String>,
+) -> Option<(String, String, String)> {
     find_retroarch(fs, installed)
         .ok()
         .map(|r| (r.config_dir, r.core_options_file, r.driver))
@@ -441,12 +451,20 @@ fn change_from(
 
 /// Work out what would change for the consoles in `systems`.
 pub fn plan(fs: &mut dyn DeviceFs, systems: &[String]) -> SettingsPlan {
+    plan_profiles(fs, systems, &db().profiles)
+}
+
+/// Like `plan`, for any list of profiles (play modes build their own).
+pub fn plan_profiles(
+    fs: &mut dyn DeviceFs,
+    systems: &[String],
+    profiles: &[Profile],
+) -> SettingsPlan {
     let want: HashSet<&str> = systems.iter().map(String::as_str).collect();
     let installed = fs.installed_packages();
     let mut ra: Option<Result<RetroArch, (String, String)>> = None;
     let mut consoles = Vec::new();
-    for p in db()
-        .profiles
+    for p in profiles
         .iter()
         .filter(|p| p.systems.iter().any(|s| want.contains(s.as_str())))
     {
@@ -654,7 +672,10 @@ pub fn apply(fs: &mut dyn DeviceFs, plan: &SettingsPlan, ids: &[String]) -> Appl
     for c in chosen {
         for ch in &c.changes {
             let r = (|| -> anyhow::Result<()> {
-                if ch.exists {
+                // Back up the owner's original once. A file RomCrate created itself
+                // (it starts with MARKER) is never "backed up": Undo deletes it.
+                let ours = ch.exists && fs.read(&ch.path)?.is_some_and(|t| t.starts_with(MARKER));
+                if ch.exists && !ours {
                     let backup = format!("{}{BACKUP_SUFFIX}", ch.path);
                     if fs.read(&backup)?.is_none() {
                         fs.copy(&ch.path, &backup)?;

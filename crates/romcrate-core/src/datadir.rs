@@ -67,6 +67,18 @@ pub fn default_cache_dir() -> PathBuf {
         .join("RomCrate")
 }
 
+/// RomCrate's own kept files (pictures you replaced, pictures to compare):
+/// next to the log, never in the downloads cache that "Clear cache" empties.
+fn keep_dir_of(log: &Path) -> PathBuf {
+    log.parent()
+        .map(|p| p.join("kept"))
+        .unwrap_or_else(|| log.join("kept"))
+}
+
+pub fn keep_dir() -> PathBuf {
+    keep_dir_of(&log_dir())
+}
+
 fn dirs_for(loc: &Location) -> (PathBuf, PathBuf) {
     match &loc.data_dir {
         Some(d) => (d.join("logs"), d.join("downloads")),
@@ -110,9 +122,11 @@ fn set_data_dir_in(file: &Path, new: Option<PathBuf>) -> anyhow::Result<Vec<Stri
         let _ = fs::remove_file(probe);
     }
     let mut notes = Vec::new();
+    let (old_keep, new_keep) = (keep_dir_of(&old_log), keep_dir_of(&new_log));
     for (what, from, to) in [
         ("log", &old_log, &new_log),
         ("downloads", &old_cache, &new_cache),
+        ("kept picture", &old_keep, &new_keep),
     ] {
         if from == to || !from.exists() {
             continue;
@@ -196,16 +210,20 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         let file = t.path().join("cfg/location.json");
         let a = t.path().join("A");
-        // Start in A.
-        set_data_dir_in(&file, Some(a.clone())).unwrap();
+        // Start in A (saved directly: moving from the real default folder would
+        // pick up this computer's own RomCrate files).
+        save(&file, &Location { data_dir: Some(a.clone()), log_enabled: true }).unwrap();
         fs::create_dir_all(a.join("logs")).unwrap();
         fs::write(a.join("logs/romcrate-2026-11-16.log"), "hello").unwrap();
         fs::create_dir_all(a.join("downloads/libretro")).unwrap();
         fs::write(a.join("downloads/libretro/snes.json"), "{}").unwrap();
+        fs::create_dir_all(a.join("kept/replaced-artwork")).unwrap();
+        fs::write(a.join("kept/replaced-artwork/old.png"), "png").unwrap();
         // Move to B.
         let b = t.path().join("B");
         let notes = set_data_dir_in(&file, Some(b.clone())).unwrap();
-        assert_eq!(notes.len(), 2, "{notes:?}");
+        assert_eq!(notes.len(), 3, "{notes:?}");
+        assert!(b.join("kept/replaced-artwork/old.png").exists(), "kept pictures move too");
         assert_eq!(
             fs::read_to_string(b.join("logs/romcrate-2026-11-16.log")).unwrap(),
             "hello"

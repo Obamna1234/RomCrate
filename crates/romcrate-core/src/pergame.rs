@@ -101,7 +101,9 @@ fn rules() -> Vec<Rule> {
 }
 
 fn profile_for(system: &str) -> Option<&'static Profile> {
-    db().profiles.iter().find(|p| p.systems.iter().any(|s| s == system))
+    db().profiles
+        .iter()
+        .find(|p| p.systems.iter().any(|s| s == system))
 }
 
 pub fn per_game_of(p: &Profile) -> Option<PerGame> {
@@ -110,11 +112,16 @@ pub fn per_game_of(p: &Profile) -> Option<PerGame> {
 
 fn stem(path: &str) -> String {
     let name = path.rsplit('/').next().unwrap_or(path);
-    name.rsplit_once('.').map(|(s, _)| s).unwrap_or(name).to_string()
+    name.rsplit_once('.')
+        .map(|(s, _)| s)
+        .unwrap_or(name)
+        .to_string()
 }
 
 fn ext(path: &str) -> String {
-    path.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default()
+    path.rsplit_once('.')
+        .map(|(_, e)| e.to_lowercase())
+        .unwrap_or_default()
 }
 
 pub fn ini_get(text: &str, section: &str, key: &str) -> Option<String> {
@@ -150,12 +157,17 @@ pub fn places(fs: &mut dyn DeviceFs) -> Places {
     let retroarch = crate::gamesettings::retroarch_paths(fs, &installed);
     let ppsspp_dir = [
         "/storage/emulated/0/PSP/SYSTEM/ppsspp.ini".to_string(),
-        "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/PSP/SYSTEM/ppsspp.ini".to_string(),
+        "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/PSP/SYSTEM/ppsspp.ini"
+            .to_string(),
     ]
     .into_iter()
     .find(|p| fs.read(p).ok().flatten().is_some())
     .or_else(|| fs.find_file("ppsspp.ini"))
-    .map(|p| p.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default());
+    .map(|p| {
+        p.rsplit_once('/')
+            .map(|(d, _)| d.to_string())
+            .unwrap_or_default()
+    });
     Places {
         retroarch,
         dolphin_user: "/storage/emulated/0/Android/data/org.dolphinemu.dolphinemu/files".into(),
@@ -165,7 +177,9 @@ pub fn places(fs: &mut dyn DeviceFs) -> Places {
 
 /// Game files in a console folder, skipping the parts of multi-file games.
 fn games_in(fs: &mut dyn DeviceFs, system: &str, dir: &str) -> Vec<String> {
-    let Some(sys) = crate::systems::by_id(system) else { return vec![] };
+    let Some(sys) = crate::systems::by_id(system) else {
+        return vec![];
+    };
     let files = fs.list_files(dir);
     let names: HashSet<String> = files.iter().map(|f| f.to_lowercase()).collect();
     let mut out: Vec<String> = files
@@ -199,8 +213,12 @@ pub fn scan(
     let rules = rules();
     let mut rows = Vec::new();
     for (system, dir) in dirs {
-        let Some(prof) = profile_for(system) else { continue };
-        let Some(pg) = per_game_of(prof) else { continue };
+        let Some(prof) = profile_for(system) else {
+            continue;
+        };
+        let Some(pg) = per_game_of(prof) else {
+            continue;
+        };
         let driver_ok = match (&pg.only_if_driver, &pl.retroarch) {
             (Some(want), Some((_, _, drv))) => drv == want,
             (Some(_), None) => false,
@@ -228,7 +246,9 @@ pub fn scan(
             };
             match pg.kind.as_str() {
                 "retroarch-opt" => {
-                    if let (Some((cfg, shared, _)), Some(core), Some(key)) = (&pl.retroarch, &prof.core, &pg.key) {
+                    if let (Some((cfg, shared, _)), Some(core), Some(key)) =
+                        (&pl.retroarch, &prof.core, &pg.key)
+                    {
                         let core_opt = format!("{cfg}/{core}/{core}.opt");
                         let console = fs
                             .read(&core_opt)
@@ -240,10 +260,12 @@ pub fn scan(
                             row.console_value = v;
                         }
                         let path = format!("{cfg}/{core}/{name}.opt");
-                        row.own_value = fs.read(&path).ok().flatten().and_then(|t| cfg_get(&t, key));
+                        row.own_value =
+                            fs.read(&path).ok().flatten().and_then(|t| cfg_get(&t, key));
                         row.settings_file = Some(path);
                     } else {
-                        row.note = Some("RetroArch's settings weren't found on the handheld.".into());
+                        row.note =
+                            Some("RetroArch's settings weren't found on the handheld.".into());
                     }
                 }
                 "dolphin" | "ppsspp" => {
@@ -282,10 +304,15 @@ pub fn scan(
                 _ => {}
             }
             if let Some(genre) = genre_of(system, &name) {
-                let genres: Vec<String> = genre.split([',', ';']).map(|g| g.trim().to_lowercase()).collect();
+                let genres: Vec<String> = genre
+                    .split([',', ';'])
+                    .map(|g| g.trim().to_lowercase())
+                    .collect();
                 if let Some(r) = rules.iter().find(|r| {
                     r.systems.contains(system)
-                        && r.genres_any.iter().any(|g| genres.contains(&g.to_lowercase()))
+                        && r.genres_any
+                            .iter()
+                            .any(|g| genres.contains(&g.to_lowercase()))
                 }) {
                     row.suggestion = Some(Suggestion {
                         value: r.value.clone(),
@@ -335,7 +362,13 @@ pub struct Choice {
     pub value: Option<String>,
 }
 
-fn new_file_text(fs: &mut dyn DeviceFs, pl: &Places, prof: &Profile, pg: &PerGame, value: &str) -> String {
+fn new_file_text(
+    fs: &mut dyn DeviceFs,
+    pl: &Places,
+    prof: &Profile,
+    pg: &PerGame,
+    value: &str,
+) -> String {
     let key = pg.key.as_deref().unwrap_or_default();
     match pg.kind.as_str() {
         "retroarch-opt" => {
@@ -345,9 +378,17 @@ fn new_file_text(fs: &mut dyn DeviceFs, pl: &Places, prof: &Profile, pg: &PerGam
                 .read(&format!("{cfg}/{core}/{core}.opt"))
                 .ok()
                 .flatten()
-                .map(|t| t.lines().filter(|l| !l.starts_with('#')).map(|l| format!("{l}\n")).collect::<String>())
+                .map(|t| {
+                    t.lines()
+                        .filter(|l| !l.starts_with('#'))
+                        .map(|l| format!("{l}\n"))
+                        .collect::<String>()
+                })
                 .or_else(|| {
-                    let prefix = key.find(['-', '_']).map(|i| key[..=i].to_string()).unwrap_or_default();
+                    let prefix = key
+                        .find(['-', '_'])
+                        .map(|i| key[..=i].to_string())
+                        .unwrap_or_default();
                     fs.read(&shared).ok().flatten().map(|g| {
                         g.lines()
                             .filter(|l| l.trim_start().starts_with(prefix.as_str()))
@@ -356,9 +397,16 @@ fn new_file_text(fs: &mut dyn DeviceFs, pl: &Places, prof: &Profile, pg: &PerGam
                     })
                 })
                 .unwrap_or_default();
-            cfg_set(&format!("{}\n{base}", crate::gamesettings::MARKER), key, value).0
+            cfg_set(
+                &format!("{}\n{base}", crate::gamesettings::MARKER),
+                key,
+                value,
+            )
+            .0
         }
-        "dolphin" => format!("# Written by RomCrate (Game settings)\n[Video_Settings]\n{key} = {value}\n"),
+        "dolphin" => {
+            format!("# Written by RomCrate (Game settings)\n[Video_Settings]\n{key} = {value}\n")
+        }
         "ppsspp" => {
             let mut t = format!("[Graphics]\n{key} = {value}\n");
             // Keep this game's controls the same as everywhere else.
@@ -395,25 +443,43 @@ pub fn apply(fs: &mut dyn DeviceFs, choices: &[Choice]) -> ApplyResult {
     let mut created = manifest(fs);
     let mut stopped = HashSet::new();
     for c in choices {
-        let Some(prof) = profile_for(&c.system) else { continue };
-        let Some(pg) = per_game_of(prof) else { continue };
+        let Some(prof) = profile_for(&c.system) else {
+            continue;
+        };
+        let Some(pg) = per_game_of(prof) else {
+            continue;
+        };
         if pg.kind == "checklist" {
             continue;
         }
         // Only ever touch the file this game's settings belong in.
         let expected_dir_ok = match pg.kind.as_str() {
-            "retroarch-opt" => pl.retroarch.as_ref().is_some_and(|(cfg, _, _)| c.settings_file.starts_with(cfg.as_str())),
-            "dolphin" => c.settings_file.starts_with(&format!("{}/GameSettings/", pl.dolphin_user)),
-            "ppsspp" => pl.ppsspp_dir.as_ref().is_some_and(|d| c.settings_file.starts_with(d.as_str()) && c.settings_file.ends_with("_ppsspp.ini")),
+            "retroarch-opt" => pl
+                .retroarch
+                .as_ref()
+                .is_some_and(|(cfg, _, _)| c.settings_file.starts_with(cfg.as_str())),
+            "dolphin" => c
+                .settings_file
+                .starts_with(&format!("{}/GameSettings/", pl.dolphin_user)),
+            "ppsspp" => pl.ppsspp_dir.as_ref().is_some_and(|d| {
+                c.settings_file.starts_with(d.as_str()) && c.settings_file.ends_with("_ppsspp.ini")
+            }),
             _ => false,
         };
         if !expected_dir_ok || c.settings_file.contains("..") {
             res.failed += 1;
-            res.lines.push(format!("FAILED {}: not a settings file RomCrate manages ({})", stem(&c.file), c.settings_file));
+            res.lines.push(format!(
+                "FAILED {}: not a settings file RomCrate manages ({})",
+                stem(&c.file),
+                c.settings_file
+            ));
             continue;
         }
         let pkgs: Vec<String> = match pg.kind.as_str() {
-            "retroarch-opt" => crate::gamesettings::RETROARCH_PACKAGES.iter().map(|s| s.to_string()).collect(),
+            "retroarch-opt" => crate::gamesettings::RETROARCH_PACKAGES
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             _ => prof.packages.clone(),
         };
         for p in pkgs {
@@ -449,7 +515,11 @@ pub fn apply(fs: &mut dyn DeviceFs, choices: &[Choice]) -> ApplyResult {
                         // Their own file without a backup: just drop our key.
                         let kept: String = text
                             .lines()
-                            .filter(|l| l.split_once('=').map(|(k, _)| k.trim() != key).unwrap_or(true))
+                            .filter(|l| {
+                                l.split_once('=')
+                                    .map(|(k, _)| k.trim() != key)
+                                    .unwrap_or(true)
+                            })
                             .map(|l| format!("{l}\n"))
                             .collect();
                         fs.write(&path, &kept)?;
@@ -459,7 +529,10 @@ pub fn apply(fs: &mut dyn DeviceFs, choices: &[Choice]) -> ApplyResult {
                 (Some(v), None) => {
                     let text = new_file_text(fs, &pl, prof, &pg, v);
                     fs.write(&path, &text)?;
-                    anyhow::ensure!(fs.read(&path)?.as_deref() == Some(text.as_str()), "didn't read back the same");
+                    anyhow::ensure!(
+                        fs.read(&path)?.as_deref() == Some(text.as_str()),
+                        "didn't read back the same"
+                    );
                     created.push(("created".into(), path.clone()));
                     Ok(format!("set to {v}"))
                 }
@@ -475,7 +548,10 @@ pub fn apply(fs: &mut dyn DeviceFs, choices: &[Choice]) -> ApplyResult {
                         ini_set(&text, section, &key, v).0
                     };
                     fs.write(&path, &new)?;
-                    anyhow::ensure!(fs.read(&path)?.as_deref() == Some(new.as_str()), "didn't read back the same");
+                    anyhow::ensure!(
+                        fs.read(&path)?.as_deref() == Some(new.as_str()),
+                        "didn't read back the same"
+                    );
                     Ok(format!("set to {v}"))
                 }
             }
@@ -483,16 +559,23 @@ pub fn apply(fs: &mut dyn DeviceFs, choices: &[Choice]) -> ApplyResult {
         match r {
             Ok(what) => {
                 res.changed_files += 1;
-                res.lines.push(format!("OK {} ({}): {what} — {path}", stem(&c.file), c.system));
+                res.lines.push(format!(
+                    "OK {} ({}): {what} — {path}",
+                    stem(&c.file),
+                    c.system
+                ));
             }
             Err(e) => {
                 res.failed += 1;
-                res.lines.push(format!("FAILED {} ({}): {e}", stem(&c.file), c.system));
+                res.lines
+                    .push(format!("FAILED {} ({}): {e}", stem(&c.file), c.system));
             }
         }
     }
     if let Err(e) = save_manifest(fs, &created) {
-        res.lines.push(format!("Couldn't update RomCrate's list of created files: {e}"));
+        res.lines.push(format!(
+            "Couldn't update RomCrate's list of created files: {e}"
+        ));
     }
     res
 }
@@ -531,7 +614,9 @@ pub fn undo_all(fs: &mut dyn DeviceFs) -> ApplyResult {
         }
     }
     if let Err(e) = save_manifest(fs, &left) {
-        res.lines.push(format!("Couldn't update RomCrate's list of changed files: {e}"));
+        res.lines.push(format!(
+            "Couldn't update RomCrate's list of changed files: {e}"
+        ));
     }
     res
 }

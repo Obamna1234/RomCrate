@@ -584,3 +584,221 @@ fn missing_folder_is_refused() {
     assert_eq!(run.summary.files_saved, 0);
     assert_eq!(run.summary.failed, 5);
 }
+
+#[test]
+fn ask_mode_offers_romcrate_art_next_to_yours_and_changes_nothing() {
+    let fx = fixture();
+    let media = fx.root.parent().unwrap().join("downloaded_media");
+    let data = fx.root.parent().unwrap().join("romcrate-data");
+    // First run: RomCrate's covers everywhere.
+    let first = scrape(
+        &fx,
+        cfg(LauncherKind::EsDe, Some(media.clone()), &[ArtKind::Boxart]),
+    );
+    assert_eq!(first.summary.files_saved, 4);
+    // You swap in your own cover for one game.
+    let mine = media.join("snes/covers/game1.png");
+    let own = png(40, 56, [10, 200, 10, 255]);
+    fs::write(&mine, &own).unwrap();
+
+    let mut c = cfg(LauncherKind::EsDe, Some(media.clone()), &[ArtKind::Boxart]);
+    c.ask_existing = true;
+    c.review_dir = Some(romcrate_core::review::review_dir(&data));
+    let lib = scan::scan_roots(std::slice::from_ref(&fx.root));
+    let client = SafeClient::new().unwrap();
+    let sources = Arc::new(Sources {
+        launchbox: Some(LaunchBox::new(client.clone(), &fx.cache)),
+        libretro: Libretro::new(client.clone(), fx.cache.clone()),
+        identifier: Identifier::new(client, fx.cache.clone()),
+        screenscraper: None,
+    });
+    let items = Arc::new(Mutex::new(Vec::new()));
+    let i2 = items.clone();
+    let emit: Emit = Arc::new(move |e| {
+        if let Event::GameDone { review, .. } = e {
+            i2.lock().unwrap().extend(review);
+        }
+    });
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let summary = rt.block_on(romcrate_core::run_scrape(
+        lib,
+        vec![],
+        c,
+        sources,
+        Arc::new(AtomicBool::new(false)),
+        emit,
+    ));
+    let items = items.lock().unwrap().clone();
+    // Only the game whose cover differs is offered; identical covers aren't.
+    assert_eq!(items.len(), 1, "{items:?}");
+    assert_eq!(items[0].game, "game1");
+    assert_eq!(items[0].existing, mine);
+    assert_png(&items[0].candidate);
+    assert_eq!(
+        summary.files_saved, 0,
+        "nothing of yours changed during the run"
+    );
+    assert_eq!(fs::read(&mine).unwrap(), own);
+
+    // You choose RomCrate's: yours is kept aside, then put back on request.
+    let b = romcrate_core::review::replace_on_pc(&data, &items);
+    assert_eq!(b.replaced, 1);
+    assert_eq!(
+        fs::read(&mine).unwrap(),
+        fs::read(&items[0].candidate).unwrap()
+    );
+    romcrate_core::review::put_back_on_pc(&data, &b.id).unwrap();
+    assert_eq!(fs::read(&mine).unwrap(), own);
+}
+
+/// Artwork for games that are only on the handheld, over the stand-in handheld
+/// (tools/simulate/fake_adb.py): stand-ins are staged, only new pictures go back,
+/// your cover is offered next to RomCrate's and only replaced when you choose.
+#[cfg(unix)]
+#[test]
+fn artwork_for_games_on_the_handheld() {
+    use romcrate_core::adb::Adb;
+    use romcrate_core::handheld_art;
+    let fx = fixture();
+    let tmp = fx.root.parent().unwrap().to_path_buf();
+    let dev = tmp.join("device");
+    let sd = dev.join("storage/1A2B-3C4D/ROMs/snes");
+    fs::create_dir_all(dev.join("storage/emulated/0")).unwrap();
+    fs::create_dir_all(&sd).unwrap();
+    for e in fs::read_dir(fx.root.join("snes")).unwrap().flatten() {
+        fs::copy(e.path(), sd.join(e.file_name())).unwrap();
+    }
+    let own = png(30, 42, [250, 250, 0, 255]);
+    let cover = sd.join("media/Chrono Trigger (USA)/boxFront.png");
+    fs::create_dir_all(cover.parent().unwrap()).unwrap();
+    fs::write(&cover, &own).unwrap();
+    let games_before: Vec<(String, Vec<u8>)> = ["Chrono Trigger (USA).sfc", "game1.sfc"]
+        .iter()
+        .map(|n| (n.to_string(), fs::read(sd.join(n)).unwrap()))
+        .collect();
+
+    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/simulate/fake_adb.py");
+    let wrapper = tmp.join("adb");
+    fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\nFAKE_ADB_ROOT='{}' exec python3 '{}' \"$@\"\n",
+            dev.display(),
+            script.display()
+        ),
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
+    let adb = Adb { exe: wrapper };
+    let s = "FAKE0001";
+    let vols = adb.volumes(s).unwrap();
+    let stage_dir = tmp.join("pc-cache");
+    let st = handheld_art::stage(
+        s,
+        &vols,
+        &stage_dir,
+        &mut |d| adb.list_files(s, d).unwrap_or_default(),
+        &mut |r, l| adb.pull(s, r, l),
+    )
+    .unwrap();
+    assert_eq!(st.games, 4);
+    let staged_game = st.roots[0].0.join("snes/Chrono Trigger (USA).sfc");
+    assert_eq!(
+        fs::metadata(&staged_game).unwrap().len(),
+        1,
+        "only a stand-in is on the PC"
+    );
+
+    // The normal artwork step, on the staged folder, in "ask me" mode.
+    let data = tmp.join("romcrate-data");
+    let mut c = cfg(
+        LauncherKind::Pegasus,
+        None,
+        &[ArtKind::Boxart, ArtKind::Snap],
+    );
+    c.identify_by_contents = false;
+    c.ask_existing = true;
+    c.review_dir = Some(romcrate_core::review::review_dir(&data));
+    let lib = scan::scan_roots(&st.local_roots());
+    assert_eq!(lib.systems.len(), 1);
+    let client = SafeClient::new().unwrap();
+    let sources = Arc::new(Sources {
+        launchbox: Some(LaunchBox::new(client.clone(), &fx.cache)),
+        libretro: Libretro::new(client.clone(), fx.cache.clone()),
+        identifier: Identifier::new(client, fx.cache.clone()),
+        screenscraper: None,
+    });
+    let items = Arc::new(Mutex::new(Vec::new()));
+    let i2 = items.clone();
+    let emit: Emit = Arc::new(move |e| {
+        if let Event::GameDone { review, .. } = e {
+            i2.lock().unwrap().extend(review);
+        }
+    });
+    tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(romcrate_core::run_scrape(
+            lib,
+            vec![],
+            c,
+            sources,
+            Arc::new(AtomicBool::new(false)),
+            emit,
+        ));
+    assert_eq!(
+        fs::read(&cover).unwrap(),
+        own,
+        "nothing on the handheld changes during the run"
+    );
+
+    // Only new pictures and the new metadata file go back; never the games.
+    let plan = handheld_art::plan_back(&st, &vols);
+    assert!(!plan.files.is_empty());
+    assert!(
+        plan.files.iter().all(|f| !f.remote.ends_with(".sfc")),
+        "games are never sent"
+    );
+    assert!(plan.files.iter().any(|f| f
+        .remote
+        .ends_with("snes/media/Chrono Trigger (USA)/screenshot.png")));
+    assert!(
+        !plan
+            .files
+            .iter()
+            .any(|f| f.remote.ends_with("Chrono Trigger (USA)/boxFront.png")),
+        "your cover isn't in the copy"
+    );
+    let sum = romcrate_core::adb::send(&adb, s, &plan, &|_| {}, &|| false);
+    assert_eq!(sum.failed, 0);
+    assert_png(&sd.join("media/Chrono Trigger (USA)/screenshot.png"));
+    assert!(fs::read_to_string(sd.join("metadata.pegasus.txt"))
+        .unwrap()
+        .contains("Chrono Trigger"));
+    for (n, b) in &games_before {
+        assert_eq!(&fs::read(sd.join(n)).unwrap(), b, "{n} untouched");
+    }
+
+    // Your cover vs RomCrate's: offered with a real copy of yours to look at.
+    let items =
+        handheld_art::prepare_review(&st, &data, items.lock().unwrap().clone(), &mut |r, l| {
+            adb.pull(s, r, l)
+        });
+    assert_eq!(items.len(), 1, "{items:?}");
+    assert_eq!(fs::read(&items[0].existing).unwrap(), own);
+    assert_eq!(
+        items[0].remote,
+        vec!["/storage/1A2B-3C4D/ROMs/snes/media/Chrono Trigger (USA)/boxFront.png".to_string()]
+    );
+    let b = handheld_art::replace_on_handheld(&adb, s, &data, &items);
+    assert_eq!(b.replaced, 1, "{:?}", b.failed);
+    assert_eq!(
+        fs::read(&cover).unwrap(),
+        fs::read(&items[0].candidate).unwrap()
+    );
+    assert_eq!(
+        handheld_art::put_back_on_handheld(&adb, s, &data, &b.id).unwrap(),
+        1
+    );
+    assert_eq!(fs::read(&cover).unwrap(), own, "put back exactly");
+}

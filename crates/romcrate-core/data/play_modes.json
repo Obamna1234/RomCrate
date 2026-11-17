@@ -1,0 +1,27 @@
+{
+  "comment": "Play modes: where you watch (screen) and what you hold (controller). Setting names checked in RetroArch's source (configuration.c, v1.19.1): run_ahead_enabled, run_ahead_frames, run_ahead_hide_warnings, video_frame_delay_auto. Only cores that can run ahead cheaply on these handhelds get run-ahead.",
+  "screens": [
+    { "id": "handheld", "label": "Handheld", "desc": "Playing on the handheld's own screen." },
+    { "id": "tv-cable", "label": "TV by cable", "desc": "USB-C to HDMI cable or a dock." },
+    { "id": "tv-stream", "label": "TV streamed", "desc": "Screen mirroring, casting or a wireless display." }
+  ],
+  "controllers": [
+    { "id": "builtin", "label": "Built-in controls", "desc": "The handheld's own buttons." },
+    { "id": "wired", "label": "Wired controller", "desc": "A controller on a USB cable." },
+    { "id": "bluetooth", "label": "Bluetooth controller", "desc": "A wireless controller." }
+  ],
+  "runahead_profiles": ["snes", "nes", "gb", "gba"],
+  "heavy_note": "Run-ahead isn't used for {emulator}: it runs the game twice per frame, which is too heavy for this console and would cause slowdown.",
+  "steps": {
+    "tv-cable": [
+      "On the TV, choose Game mode (or PC mode) for this input. TVs add their own delay for picture processing, and Game mode switches most of it off."
+    ],
+    "tv-stream": [
+      "Streaming the picture to a TV adds delay that no setting on the handheld can remove. For action games, a USB-C to HDMI cable is much quicker.",
+      "On the TV, choose Game mode (or PC mode) for this input."
+    ],
+    "bluetooth": [
+      "Keep the controller close to the handheld with nothing in between; Bluetooth gets slower when the signal is weak."
+    ]
+  }
+}
