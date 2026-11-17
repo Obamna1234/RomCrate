@@ -91,7 +91,7 @@ try:
         for k, want in [("device", "odin2-portal"), ("launcher", "pegasus"), ("pegasusOn", "android"), ("size", "standard")]:
             if got.get(k) != want:
                 problems.append(f"device defaults: {k} = {got.get(k)!r}, expected {want!r}")
-        for t in ["Set up everything", "Custom — pick what to do", "Pegasus launch lines", "Get artwork"]:
+        for t in ["Set up everything", "One task at a time", "Pegasus launch lines", "Get artwork"]:
             if t not in body():
                 problems.append(f"home: '{t}' missing")
 

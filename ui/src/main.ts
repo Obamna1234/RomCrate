@@ -203,7 +203,9 @@ function renderNav() {
   );
 }
 
-function go(v: typeof view) {
+function go(v: typeof view, fromAfter = false) {
+  // Coming back from the next page lands on the last part; otherwise start at the first.
+  if (v !== view) subPage[v] = fromAfter ? Math.max(0, (subCount[v] ?? 1) - 1) : 0;
   view = v;
   if (v === "settings") { logInfo = null; cacheBytes = null; }
   render();
@@ -248,10 +250,38 @@ function ic(name: string): HTMLElement {
   return s;
 }
 
+// Long pages are split into short parts: one topic per screen, Back/Next in the footer.
+const subPage: Record<string, number> = {};
+const subCount: Record<string, number> = {};
+
+/** Show one part of a page at a time. "steps" parts are walked with Back/Next; "tabs" can be opened in any order. */
+function parts(id: string, list: [string, () => (Node | null)[]][], kind: "steps" | "tabs" = "steps"): (Node | null)[] {
+  subCount[id] = list.length;
+  const i = Math.min(subPage[id] ?? 0, list.length - 1);
+  subPage[id] = i;
+  const head = h("div", { class: `parts ${kind === "steps" ? "walk" : "tabs"}`, role: "tablist" },
+    list.map(([t], j) => h("button", {
+      class: `part ${j === i ? "on" : ""} ${kind === "steps" && j < i ? "done" : ""}`, role: "tab", "aria-selected": String(j === i),
+      onclick: () => { subPage[id] = j; render(); document.getElementById("main")!.scrollTop = 0; },
+    }, kind === "steps" ? h("span", { class: "pn" }, String(j + 1)) : null, t)));
+  return [head, ...list[i][1]()];
+}
+
+/** The intro paragraph is shown on the first part only, to keep later parts short. */
+function firstPart(id: string): boolean {
+  return (subPage[id] ?? 0) === 0;
+}
+
 function footer(back: typeof view | null, next: typeof view | null, nextLabel = "Continue", nextDisabled = false) {
+  const n = subCount[view] ?? 1, i = subPage[view] ?? 0;
+  const turn = (j: number) => { subPage[view] = j; render(); document.getElementById("main")!.scrollTop = 0; };
+  const canBack = i > 0 || !!back, lastPart = i >= n - 1;
   return h("div", { class: "footer-bar" },
-    back ? h("button", { class: "btn", onclick: () => go(back) }, "Back") : h("span"),
-    next ? h("button", { class: "btn primary", disabled: nextDisabled, onclick: () => go(next) }, nextLabel) : h("span"));
+    canBack ? h("button", { class: "btn", onclick: () => (i > 0 ? turn(i - 1) : go(back!, true)) }, "Back") : h("span"),
+    h("div", { class: "row" },
+      n > 1 ? h("span", { class: "hint" }, `Part ${i + 1} of ${n}`) : null,
+      !lastPart ? h("button", { class: "btn primary", onclick: () => turn(i + 1) }, "Next")
+        : next ? h("button", { class: "btn primary", disabled: nextDisabled, onclick: () => go(next) }, nextLabel) : null));
 }
 
 
@@ -582,7 +612,9 @@ function viewLauncher(): Node[] {
   const theme = themeOf(l);
   const out: Node[] = [
     h("h1", {}, "Launcher & theme"),
-    h("p", { class: "lead" }, "Where should the artwork go? RomCrate saves files with the exact names and folders your launcher expects, so they show up without any renaming."),
+    ...(firstPart("launcher") ? [h("p", { class: "lead" }, "Where should the artwork go? RomCrate saves files with the exact names and folders your launcher expects, so they show up without any renaming.")] : []),
+  ];
+  const pick = (): (Node | null)[] => [
     h("div", { class: "launchers" },
       catalog.launchers.map((x) => h("button", {
         class: `launcher ${x.id === l.id ? "on" : ""}`,
@@ -595,16 +627,18 @@ function viewLauncher(): Node[] {
           savePrefs(); render();
         },
       }, h("div", { class: "name" }, x.name), h("div", { class: "tag" }, x.tagline)))),
-    h("h2", {}, "Theme style"),
+    h("div", { class: "note" }, l.where_note)];
+  const themes = (): (Node | null)[] => [
+    h("p", { class: "desc", style: "margin:0 0 14px" }, "Pick the kind of theme you use, so RomCrate gets the artwork it shows."),
     h("div", { class: "themes" },
       l.themes.map((t) => h("button", {
         class: `theme ${t.id === theme.id ? "on" : ""}`,
         onclick: () => { prefs.theme[l.id] = t.id; delete prefs.kinds[l.id]; savePrefs(); render(); },
-      }, h("div", { class: "name" }, t.name), h("div", { class: "d" }, t.description)))),
-  ];
+      }, h("div", { class: "name" }, t.name), h("div", { class: "d" }, t.description))))];
+  const setup: (Node | null)[] = [];
   if (l.needs_folder) {
     const f = prefs.folders[l.id] ?? "";
-    out.push(
+    setup.push(
       h("h2", {}, l.folder_label),
       h("div", { class: "card" },
         h("div", { class: "row" },
@@ -614,7 +648,7 @@ function viewLauncher(): Node[] {
     );
   }
   if (l.id === "pegasus") {
-    out.push(
+    setup.push(
       h("h2", {}, "Media folder layout"),
       seg([["auto", "Match what's there"], ["skraper", "Skraper style"], ["per-game", "Folder per game"]], prefs.pegasusLayout, (v) => { prefs.pegasusLayout = v; savePrefs(); render(); }),
       h("div", { class: "desc" }, {
@@ -623,8 +657,10 @@ function viewLauncher(): Node[] {
         "per-game": "media/<game>/boxFront.png — Pegasus' own layout.",
       }[prefs.pegasusLayout]));
   }
-  if (l.id === "pegasus") out.push(...launchSection());
-  out.push(h("div", { class: "note" }, l.where_note));
+  if (l.id === "pegasus") setup.push(...launchSection());
+  const list: [string, () => (Node | null)[]][] = [["Launcher", pick], ["Theme", themes]];
+  if (setup.length) list.push([l.needs_folder ? "Folder and layout" : "Layout and starting games", () => setup]);
+  out.push(...(parts("launcher", list).filter(Boolean) as Node[]));
   out.push(footer("library", "artwork", "Continue", !folderReady()));
   return out;
 }
@@ -684,13 +720,11 @@ function viewArtwork(): Node[] {
   const setKinds = (k: ArtKind[]) => { prefs.kinds[l.id] = k; savePrefs(); render(); };
   const out: Node[] = [
     h("h1", {}, "Artwork"),
-    h("p", { class: "lead" }, `Pick what to download for ${l.name.split(" (")[0]}. The “${themeOf(l).name}” style pre-selected what that kind of theme shows.`),
+    ...(firstPart("artwork") ? [h("p", { class: "lead" }, `Pick what to download for ${l.name.split(" (")[0]}. The “${themeOf(l).name}” style pre-selected what that kind of theme shows.`)] : []),
   ];
-  if (!catalog.screenscraperAvailable) {
-    out.push(h("div", { class: "banner" }, h("div", {},
-      "Videos and manuals come from the optional ScreenScraper extras source, which this build doesn't include yet. Everything else works with no account.")));
-  }
-  out.push(
+  const what = (): (Node | null)[] => [
+    !catalog.screenscraperAvailable ? h("div", { class: "banner" }, h("div", {},
+      "Videos and manuals come from the optional ScreenScraper extras source, which this build doesn't include yet. Everything else works with no account.")) : null,
     h("div", { class: "kinds" },
       catalog.kinds.map((k) => {
         const supported = l.supported.includes(k.id);
@@ -707,7 +741,8 @@ function viewArtwork(): Node[] {
           onclick: () => { if (avail) setKinds(on ? chosen.filter((x) => x !== k.id) : [...chosen, k.id]); },
         }, h("div", { class: `check ${on ? "on" : ""}` }),
           h("div", {}, h("div", { class: "label" }, k.label), h("span", { class: `badge ${src[0]}` }, supported ? src[1] : "Not used here")));
-      })),
+      }))];
+  const quality = (): (Node | null)[] => [
     h("h2", {}, "Image size"),
     seg(catalog.sizePresets.map((p) => [p[0], p[1].split(" —")[0]] as [string, string]), prefs.size, (v) => { prefs.size = v; savePrefs(); render(); }),
     h("div", { class: "desc" }, catalog.sizePresets.find((p) => p[0] === prefs.size)?.[1] ?? ""),
@@ -719,17 +754,15 @@ function viewArtwork(): Node[] {
       ai: "Uses Real-ESRGAN on your computer for box art — best detail, slower. Screenshots still use Smart.",
       off: "Never enlarge; only shrink images that are too big.",
     }[prefs.upscale]),
-  );
-  if (prefs.upscale === "ai") {
-    out.push(h("div", { class: "card", style: "margin-top:12px" },
+    prefs.upscale !== "ai" ? null : h("div", { class: "card", style: "margin-top:12px" },
       h("div", { class: "field", style: "margin-top:0" },
         h("label", {}, "realesrgan-ncnn-vulkan program"),
         h("div", { class: "row" },
           h("input", { class: "input", style: "flex:1", value: prefs.aiBinary, placeholder: "Path to realesrgan-ncnn-vulkan(.exe)", oninput: (e: Event) => { prefs.aiBinary = (e.target as HTMLInputElement).value; savePrefs(); } }),
           h("button", { class: "btn", onclick: async () => { const p = await open({ multiple: false, title: "Choose realesrgan-ncnn-vulkan" }); if (p && !Array.isArray(p)) { prefs.aiBinary = p; savePrefs(); render(); } } }, "Browse…")),
-        h("div", { class: "hint" }, "Free download from github.com/xinntao/Real-ESRGAN (releases → ncnn-vulkan). If it isn't set, RomCrate falls back to Smart."))));
-  }
-  out.push(
+        h("div", { class: "hint" }, "Free download from github.com/xinntao/Real-ESRGAN (releases → ncnn-vulkan). If it isn't set, RomCrate falls back to Smart."))),
+  ];
+  const regions = (): (Node | null)[] => [
     h("h2", {}, "Region preference"),
     h("div", { class: "regions" },
       prefs.regions.map((r, i) => h("span", { class: "region" }, `${i + 1}. ${REGION_NAMES[r] ?? r}`,
@@ -741,8 +774,8 @@ function viewArtwork(): Node[] {
         return h("select", { class: "input", style: "width:auto;padding:6px 10px", onchange: (e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) { prefs.regions.push(v); savePrefs(); render(); } } },
           h("option", { value: "" }, "+ Add region"), missing.map((r) => h("option", { value: r }, REGION_NAMES[r])));
       })()),
-    h("div", { class: "desc" }, "When a game has artwork from several regions, RomCrate picks the first one on this list that exists."),
-    h("h2", {}, "Options"),
+    h("div", { class: "desc" }, "When a game has artwork from several regions, RomCrate picks the first one on this list that exists.")];
+  const more = (): (Node | null)[] => [
     h("div", { class: "card toggles" },
       toggle(prefs.launchbox, "Use the free LaunchBox games database", "Adds 3D boxes, back covers, cartridges, logos, fan art and game info. No account; downloads about 200 MB once a week.", () => (prefs.launchbox = !prefs.launchbox)),
       toggle(prefs.gameInfo && prefs.launchbox, "Add game info", "Descriptions, genre, developer, release date, players and rating for your launcher. Your own edits are kept.", () => (prefs.gameInfo = !prefs.gameInfo), !prefs.launchbox),
@@ -752,8 +785,9 @@ function viewArtwork(): Node[] {
       toggle(prefs.metadata, "Update launcher files", "gamelist.xml (backed up first), Pegasus metadata if you don't have one, RetroArch playlists if missing.", () => (prefs.metadata = !prefs.metadata)),
       toggle(prefs.overwrite, "Replace artwork that already exists", "Off = only fill in what's missing.", () => (prefs.overwrite = !prefs.overwrite)),
     ),
-    footer("launcher", "scrape", "Continue", chosen.length === 0),
-  );
+  ];
+  out.push(...(parts("artwork", [["What to download", what], ["Size and sharpness", quality], ["Regions", regions], ["Options", more]]).filter(Boolean) as Node[]),
+    footer("launcher", "scrape", "Continue", chosen.length === 0));
   return out;
 }
 
@@ -954,13 +988,14 @@ function viewSettings(): Node[] {
   const mb = cacheBytes === null ? "…" : `${(cacheBytes / 1048576).toFixed(1)} MB`;
   return [
     h("h1", {}, "Settings & privacy"),
-    h("p", { class: "lead" }, "RomCrate works without an account, collects nothing and only talks to the artwork sources listed here."),
-    h("h2", {}, "Privacy"),
+    ...(firstPart("settings") ? [h("p", { class: "lead" }, "RomCrate works without an account, collects nothing and only talks to the artwork sources listed here.")] : []),
+    ...(parts("settings", [["Privacy", () => [
     h("div", { class: "card" }, h("ul", { class: "privacy", style: "margin:0;padding-left:18px" },
       h("li", {}, h("strong", {}, "No account, no telemetry. "), "There is no sign-up, no analytics and no crash reporting."),
       h("li", {}, h("strong", {}, "Only known sites. "), "RomCrate connects over HTTPS to GitHub and libretro (free artwork and game databases), the LaunchBox games database and, if enabled, screenscraper.fr — nothing else, even if a server tries to redirect it."),
       h("li", {}, h("strong", {}, "Clean files only. "), "Every image is fully decoded and re-saved as a fresh PNG, so nothing hidden in a download reaches your drive. Videos and manuals are checked to be real MP4/PDF files."),
       h("li", {}, h("strong", {}, "Your files are safe. "), "RomCrate never deletes games, never writes outside the folders you pick, and backs up gamelist.xml before changing it."))),
+    ]], ["Files and log", () => [
     h("h2", {}, "RomCrate's own files"),
     h("div", { class: "card" },
       h("div", { class: "desc" }, "RomCrate keeps two things of its own: the activity log, and downloaded databases and artwork indexes (so it doesn't re-download them every time). You choose where. Your games and artwork always go where you point RomCrate, never here."),
@@ -977,6 +1012,7 @@ function viewSettings(): Node[] {
       logButtons(),
       h("div", { class: "row", style: "margin-top:8px" },
         h("button", { class: "btn", onclick: () => invoke("open_log_folder").catch((e) => toast(String(e))) }, "Open log folder"))),
+    ]], ["Speed and cache", () => [
     h("h2", {}, "ScreenScraper login (optional)"),
     h("div", { class: "card" },
       h("div", { style: "color:var(--muted);margin-bottom:12px;line-height:1.5" },
@@ -997,11 +1033,12 @@ function viewSettings(): Node[] {
       h("div", { style: "color:var(--muted);margin-bottom:12px" }, `Downloaded artwork lists, databases and original images are cached so re-runs are fast and work offline. Currently ${mb}.`),
       h("div", { class: "note", style: "margin:0 0 12px" }, logInfo?.cacheDir ?? catalog.cacheDir),
       h("button", { class: "btn", onclick: async () => { await invoke("clear_cache"); cacheBytes = null; toast("Cache cleared"); render(); } }, "Clear cache")),
-    h("h2", {}, "About"),
+    ]], ["About", () => [
     h("div", { class: "card", style: "color:var(--muted);line-height:1.55" },
       `RomCrate ${catalog.version} — free and open source (MIT). Artwork from the libretro-thumbnails project and the LaunchBox Games Database`,
       catalog.screenscraperAvailable ? " and ScreenScraper" : "",
       ". Game identification uses the No-Intro and Redump databases published by libretro. All artwork belongs to its respective owners."),
+    ]]], "tabs").filter(Boolean) as Node[]),
   ];
 }
 

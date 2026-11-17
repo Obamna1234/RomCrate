@@ -363,3 +363,36 @@ input.game-search { min-width: 280px; padding: 10px 13px; border-radius: 10px; b
 .empty .big-icon { color: var(--sel); display: flex; justify-content: center; }
 .empty .big-icon .ic { width: 34px; height: 34px; }
 .chip-art { height: 58px; }
+
+/* ---------- parts of a long page ---------- */
+.parts { display: flex; gap: 6px; margin: 0 0 22px; flex-wrap: wrap; }
+.parts .part { display: inline-flex; align-items: center; gap: 9px; border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 999px; padding: 7px 15px 7px 8px; font-weight: 700; font-size: 14.5px; cursor: pointer; }
+.parts.tabs .part { padding: 7px 16px; }
+.parts .part:hover { color: var(--text); border-color: var(--line-2); }
+.parts .part.on { color: var(--text); background: var(--panel); border-color: var(--line-2); box-shadow: var(--lift); }
+.parts .pn { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; border: 1.5px solid var(--line-2); }
+.parts .part.on .pn { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.parts .part.done .pn { border-color: var(--ok); color: var(--ok); }
+.parts + h2 { margin-top: 4px; }
+
+/* ---------- compact sidebar: fits a laptop screen without scrolling ---------- */
+.step { padding: 7px 10px; align-items: center; }
+.step .t { margin-top: 0; font-size: 14.5px; }
+.step .s { display: none; }
+.step.active .s { display: block; }
+.step:not(:last-child)::before { top: 32px; bottom: -6px; }
+.tool { padding: 7px 10px; font-size: 14.5px; }
+.tools-label { padding: 14px 10px 4px; }
+.brand { padding-bottom: 14px; }
+.device-chip { display: grid; grid-template-columns: 82px 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; padding: 8px 12px 8px 6px; }
+.device-chip > :not(.chip-art) { grid-column: 2; }
+.device-chip:not(:has(.chip-art)) { grid-template-columns: 1fr; padding-left: 12px; }
+.device-chip:not(:has(.chip-art)) > * { grid-column: 1; }
+.chip-art { grid-row: 1 / span 2; height: 40px; margin: 0; }
+.device-chip .k { align-self: end; }
+.device-chip .v { align-self: start; }
+select.input { padding-right: 34px !important; }
+.parts + h2, .parts + .banner, .parts + .card { margin-top: 0; }
+h1 + .parts { margin-top: 16px; }
+.brand { padding-bottom: 12px; }
+.device-chip .v { font-size: 14.5px; }
