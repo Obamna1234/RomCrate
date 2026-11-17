@@ -887,8 +887,10 @@ fn device_systems(adb: &romcrate_core::adb::Adb, serial: &str) -> Vec<String> {
 async fn settings_plan(
     serial: String,
     systems: Vec<String>,
+    styles: Option<std::collections::BTreeMap<String, String>>,
     state: State<'_, AppState>,
 ) -> Result<romcrate_core::gamesettings::SettingsPlan, String> {
+    let styles = styles.unwrap_or_default();
     let adb = find_adb()?;
     let s2 = serial.clone();
     let plan = tokio::task::spawn_blocking(move || {
@@ -900,12 +902,62 @@ async fn settings_plan(
             adb: &adb,
             serial: &s2,
         };
-        romcrate_core::gamesettings::plan(&mut dev, &all)
+        romcrate_core::gamesettings::plan_styled(&mut dev, &all, &styles)
     })
     .await
     .map_err(|e| e.to_string())?;
     *state.settings_plan.lock().unwrap() = Some((serial, plan.clone()));
     Ok(plan)
+}
+
+/// Console folders on the handheld: (system id, folder).
+fn device_console_dirs(adb: &romcrate_core::adb::Adb, serial: &str) -> Vec<(String, String)> {
+    adb.volumes(serial)
+        .unwrap_or_default()
+        .iter()
+        .flat_map(|v| {
+            let roms = v.roms_dir.clone();
+            v.console_folders.iter().filter_map(move |f| {
+                let sys = romcrate_core::systems::detect_from_folder(f)?;
+                Some((sys.id.to_string(), format!("{}/{}/{f}", v.path, roms.as_deref()?)))
+            })
+        })
+        .collect()
+}
+
+/// Games on the handheld that can have a picture style of their own.
+#[tauri::command]
+async fn style_games(serial: String) -> Result<Vec<romcrate_core::picstyle::StyleGame>, String> {
+    let adb = find_adb()?;
+    tokio::task::spawn_blocking(move || {
+        let dirs = device_console_dirs(&adb, &serial);
+        let mut dev = romcrate_core::adb::AdbFs { adb: &adb, serial: &serial };
+        romcrate_core::picstyle::games(&mut dev, &dirs)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Give games their own picture style (or follow the console again).
+#[tauri::command]
+async fn style_apply(
+    serial: String,
+    picks: Vec<romcrate_core::picstyle::Pick>,
+) -> Result<romcrate_core::gamesettings::ApplyResult, String> {
+    let adb = find_adb()?;
+    let res = tokio::task::spawn_blocking(move || {
+        // Only games that are really on the handheld.
+        let dirs = device_console_dirs(&adb, &serial);
+        let mut dev = romcrate_core::adb::AdbFs { adb: &adb, serial: &serial };
+        let known: std::collections::HashSet<String> =
+            romcrate_core::picstyle::games(&mut dev, &dirs).into_iter().map(|g| g.file).collect();
+        let picks: Vec<_> = picks.into_iter().filter(|p| known.contains(&p.file)).collect();
+        romcrate_core::picstyle::apply(&mut dev, &picks)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    log_settings(&[vec![format!("Picture style for single games: {} changed, {} failed", res.changed_files, res.failed)], res.lines.clone()].concat());
+    Ok(res)
 }
 
 fn log_settings(task_lines: &[String]) {
@@ -1556,6 +1608,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             device_identity,
+            style_games,
+            style_apply,
             playmode_choices,
             playmode_current,
             playmode_plan,

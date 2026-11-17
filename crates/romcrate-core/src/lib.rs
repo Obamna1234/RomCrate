@@ -23,6 +23,7 @@ pub mod matcher;
 pub mod net;
 pub mod paths;
 pub mod pergame;
+pub mod picstyle;
 pub mod playmode;
 pub mod preflight;
 pub mod ps3bios;

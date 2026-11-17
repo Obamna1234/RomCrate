@@ -85,6 +85,7 @@ pub fn profiles(screen: &str, controller: &str) -> anyhow::Result<Vec<Profile>> 
         q.options_if_driver.clear();
         q.note_if_other_driver = None;
         q.shader = None;
+        q.shader_styles.clear();
         q.per_game = None;
         q.files.clear();
         q.note = None;
@@ -133,6 +134,7 @@ pub fn plan(
         fs,
         systems,
         &profiles(screen, controller)?,
+        &Default::default(),
     ))
 }
 

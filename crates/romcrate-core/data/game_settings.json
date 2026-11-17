@@ -40,13 +40,46 @@
           "tested": true
         }
       ],
-      "shader": {
-        "preset": "interpolation/quilez",
-        "label": "Sharp scaling shader (quilez)",
-        "why": "Keeps pixels sharp without the uneven look of plain scaling.",
-        "tested": true
-      },
-      "source": "Owner's setup session on the Odin 2 Portal (handheld spec §3.1); keys from RetroArch configuration.c / retroarch.cfg"
+      "source": "Owner's setup session on the Odin 2 Portal (handheld spec §3.1); keys from RetroArch configuration.c / retroarch.cfg",
+      "shader_styles": [
+        {
+          "id": "sharp",
+          "label": "Sharp pixels",
+          "slang": "interpolation/quilez",
+          "glsl": "interpolation/quilez",
+          "why": "Crisp, faithful pixels without the uneven look of plain scaling.",
+          "tested": true,
+          "default": true
+        },
+        {
+          "id": "smooth",
+          "label": "Smooth HD",
+          "slang": "edge-smoothing/scalefx/scalefx+rAA",
+          "glsl": "scalefx/scalefx+rAA",
+          "why": "Smooths pixel edges into clean outlines, so it looks like an HD remaster.",
+          "hint": "Great for Donkey Kong Country, Yoshi's Island and other cartoon-style games.",
+          "tested": false
+        },
+        {
+          "id": "crt",
+          "label": "CRT TV",
+          "slang": "crt/crt-easymode",
+          "glsl": "crt/crt-easymode",
+          "why": "The look the games were drawn for: blends dithering and gives richer colour. Light enough for handhelds.",
+          "hint": "Great on a big TV.",
+          "tested": false
+        },
+        {
+          "id": "crt-best",
+          "label": "CRT TV (best quality)",
+          "slang": "crt/crt-guest-advanced",
+          "glsl": null,
+          "why": "The most realistic CRT look. Heavier than CRT TV.",
+          "hint": "May slow down weaker devices. Needs RetroArch's Vulkan video driver.",
+          "heavy": true,
+          "tested": false
+        }
+      ]
     },
     {
       "id": "nes",
@@ -76,12 +109,46 @@
           "why": "No tearing."
         }
       ],
-      "shader": {
-        "preset": "interpolation/quilez",
-        "label": "Sharp scaling shader (quilez)",
-        "why": "Same clean look as the tested SNES setup."
-      },
-      "source": "Same approach as the tested SNES settings"
+      "source": "Same approach as the tested SNES settings",
+      "shader_styles": [
+        {
+          "id": "sharp",
+          "label": "Sharp pixels",
+          "slang": "interpolation/quilez",
+          "glsl": "interpolation/quilez",
+          "why": "Crisp, faithful pixels without the uneven look of plain scaling.",
+          "tested": false,
+          "default": true
+        },
+        {
+          "id": "smooth",
+          "label": "Smooth HD",
+          "slang": "edge-smoothing/scalefx/scalefx+rAA",
+          "glsl": "scalefx/scalefx+rAA",
+          "why": "Smooths pixel edges into clean outlines, so it looks like an HD remaster.",
+          "hint": "Great for Donkey Kong Country, Yoshi's Island and other cartoon-style games.",
+          "tested": false
+        },
+        {
+          "id": "crt",
+          "label": "CRT TV",
+          "slang": "crt/crt-easymode",
+          "glsl": "crt/crt-easymode",
+          "why": "The look the games were drawn for: blends dithering and gives richer colour. Light enough for handhelds.",
+          "hint": "Great on a big TV.",
+          "tested": false
+        },
+        {
+          "id": "crt-best",
+          "label": "CRT TV (best quality)",
+          "slang": "crt/crt-guest-advanced",
+          "glsl": null,
+          "why": "The most realistic CRT look. Heavier than CRT TV.",
+          "hint": "May slow down weaker devices. Needs RetroArch's Vulkan video driver.",
+          "heavy": true,
+          "tested": false
+        }
+      ]
     },
     {
       "id": "gb",

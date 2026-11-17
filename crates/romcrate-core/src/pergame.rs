@@ -100,7 +100,7 @@ fn rules() -> Vec<Rule> {
         .unwrap_or_default()
 }
 
-fn profile_for(system: &str) -> Option<&'static Profile> {
+pub(crate) fn profile_for(system: &str) -> Option<&'static Profile> {
     db().profiles
         .iter()
         .find(|p| p.systems.iter().any(|s| s == system))
@@ -110,7 +110,7 @@ pub fn per_game_of(p: &Profile) -> Option<PerGame> {
     p.per_game.clone()
 }
 
-fn stem(path: &str) -> String {
+pub(crate) fn stem(path: &str) -> String {
     let name = path.rsplit('/').next().unwrap_or(path);
     name.rsplit_once('.')
         .map(|(s, _)| s)
@@ -176,7 +176,7 @@ pub fn places(fs: &mut dyn DeviceFs) -> Places {
 }
 
 /// Game files in a console folder, skipping the parts of multi-file games.
-fn games_in(fs: &mut dyn DeviceFs, system: &str, dir: &str) -> Vec<String> {
+pub(crate) fn games_in(fs: &mut dyn DeviceFs, system: &str, dir: &str) -> Vec<String> {
     let Some(sys) = crate::systems::by_id(system) else {
         return vec![];
     };
@@ -330,7 +330,7 @@ pub fn scan(
 // ---------------------------------------------------------------- writing
 
 /// RomCrate's list on the handheld: ("created" | "changed", path).
-fn manifest(fs: &mut dyn DeviceFs) -> Vec<(String, String)> {
+pub(crate) fn manifest(fs: &mut dyn DeviceFs) -> Vec<(String, String)> {
     fs.read(MANIFEST)
         .ok()
         .flatten()
@@ -344,7 +344,7 @@ fn manifest(fs: &mut dyn DeviceFs) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
-fn save_manifest(fs: &mut dyn DeviceFs, list: &[(String, String)]) -> anyhow::Result<()> {
+pub(crate) fn save_manifest(fs: &mut dyn DeviceFs, list: &[(String, String)]) -> anyhow::Result<()> {
     let mut t = String::from("# Per-game settings files RomCrate created or changed. \"Undo RomCrate's changes\" in RomCrate puts them back.\n");
     for (k, p) in list {
         t.push_str(&format!("{k} {p}\n"));

@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.7.0 — Picture styles
+
+- **Choose how each console looks** (Game settings → Each console, SNES and NES): **Sharp pixels** (the default, as before), **Smooth HD** (ScaleFX: clean outlines, like an HD remaster — great for Donkey Kong Country and Yoshi's Island), **CRT TV** (crt-easymode — great on a big TV), **CRT TV (best quality)** (crt-guest-advanced, heavier, Vulkan only) or **No shader**. Shader paths checked against libretro's slang-shaders and glsl-shaders. Only Sharp is marked tested on a real device so far.
+- With Smooth HD or a CRT style, RetroArch's own smoothing (`video_smooth`) is turned off for that console, so the shader isn't blurred twice.
+- **A different style for one game**: "Different style for one game…" under the console lists its games on the handheld. RomCrate writes `<Core>/<game>.slangp|.glslp` (and `.cfg`) with its marker, and "Undo RomCrate's changes" removes them.
+- **Your own shader presets are never replaced** — for a console or a single game. (Before, RomCrate replaced a console preset of yours after backing it up.)
+- If RetroArch's shaders aren't downloaded yet, RomCrate says how (Online Updater → Update Shaders) instead of writing a broken preset. On the OpenGL driver, the Vulkan-only style is shown but can't be picked.
+
+## 0.6.0 — Play modes, device check, keep yours or use RomCrate's
+
+- **Play modes** (Game settings → Play mode): Handheld / TV by cable / TV streamed × built-in / wired / Bluetooth controls. Sets RetroArch run-ahead (1 frame, 2 for streaming or Bluetooth) and automatic frame delay for SNES, NES, Game Boy and GBA; steps for what no setting can fix (TV Game mode, streaming delay).
+- **Device check:** shows which system the handheld runs (e.g. "Stock Android 13", "LineageOS"), and asks "use what RomCrate found, or keep yours" if it looks like a different device. On a system RomCrate doesn't know, settings can't be written until you tick "I understand". Linux handhelds (no USB debugging) are explained.
+- **Artwork you already have:** new "Ask me" default — RomCrate shows your picture next to the one it found and you choose per picture; replaced pictures are kept and can be put back. On your PC and on the handheld.
+- **Artwork for games that are only on the handheld:** names read over the cable, artwork fetched on the PC, only the new pictures and Pegasus files copied back.
+- Use a photo of your own device instead of the drawing.
+- Fixed: applying Game settings twice made Undo restore RomCrate's own file instead of removing it.
+
+## 0.5.0 — New look
+
+- Calmer, clearer design: one amber colour for "do this next", larger readable text, line icons, numbered setup steps; the sidebar fits on a laptop screen.
+- Long pages split into short parts with Back / Next (Artwork, Launcher); Settings in tabs.
+- Device drawings redrawn from each device's real size and control layout, all to the same scale, with sizes in mm.
+
+## 0.4.1 – 0.4.5
+
+- **Send to handheld** over USB debugging: Google's platform-tools downloaded on request and checked; choose internal storage or SD card per console; nothing on the handheld is overwritten; every large file is checked after copying.
+- **Game settings** for each console's emulator (RetroArch, Dolphin, PPSSPP; checklists for ARMSX2 and melonDS) with a backup of every file and Undo; **Each game** settings for games that need something different.
+- Choose where RomCrate keeps its log and downloads; a live activity log and a "Save problem report" button.
+- The owner's tested Pegasus launch lines (N64, DS, Wii, PS2); Check my files false alarms fixed.
+
 ## 0.4.0 — Your device, Home, and an activity log
 
 - **"What will you play on?"** On first start you pick your device (AYN Odin 2 Portal / Odin 2 / Odin 2 Mini, Retroid Pocket 5, Anbernic RG556, Anbernic RG35XX/RG40XX family, Steam Deck, PC/TV, or "Not sure — safe defaults"). RomCrate then picks the frontend layout, Android launch lines and artwork size for that screen, and marks consoles the device can't realistically run. Change it any time from the sidebar. Specs and sources are in `data/devices.json`; only the Odin 2 Portal is marked as tested on a real unit.

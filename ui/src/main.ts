@@ -88,6 +88,8 @@ interface Prefs {
   osOk: Record<string, boolean>;
   playScreen: string;
   playController: string;
+  /** Picture style per console (profile id → style id). */
+  picStyles: Record<string, string>;
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -96,7 +98,7 @@ const DEFAULT_PREFS: Prefs = {
   identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto", launchbox: true, gameInfo: true,
   pegasusOn: "none", device: "", emulators: {}, fixLaunch: false,
   importDest: "", importSources: [], importMode: "copy", importRename: false, sendTargets: {}, tuneTicks: {}, ps2Picks: {},
-  existingArt: "ask", deviceAnswered: {}, osOk: {}, playScreen: "handheld", playController: "builtin",
+  existingArt: "ask", deviceAnswered: {}, osOk: {}, playScreen: "handheld", playController: "builtin", picStyles: {},
 };
 
 function loadPrefs(): Prefs {
@@ -1474,7 +1476,9 @@ function viewImport(): Node[] {
 
 interface KeyChange { section: string | null; key: string; label: string; why: string; old: string | null; new: string; tested: boolean }
 interface FileChange { path: string; exists: boolean; keys: KeyChange[] }
-interface ConsoleTune { id: string; systems: string[]; emulator: string; status: string; message: string | null; changes: FileChange[]; steps: string[]; tested: boolean; source: string; packages: string[] }
+interface ConsoleTune { id: string; systems: string[]; emulator: string; status: string; message: string | null; changes: FileChange[]; steps: string[]; tested: boolean; source: string; packages: string[]; styles?: StyleOption[]; style?: string | null }
+interface StyleOption { id: string; label: string; why: string; hint: string | null; heavy: boolean; tested: boolean; available: boolean }
+interface StyleGame { system: string; file: string; name: string; style: string | null; own: boolean }
 interface TunePlan { screens: string; consoles: ConsoleTune[] }
 interface ApplyResult { changedFiles: number; failed: number; lines: string[] }
 
@@ -1494,10 +1498,10 @@ function tuneSystems(): string[] {
   return [...new Set((library?.systems ?? []).map((s) => s.system_id))];
 }
 
-async function tuneCheck() {
-  tune.checking = true; tune.result = null; render();
+async function tuneCheck(keepResult = false) {
+  tune.checking = true; if (!keepResult) tune.result = null; render();
   try {
-    tune.plan = await invoke<TunePlan>("settings_plan", { serial: snd.serial, systems: tuneSystems() });
+    tune.plan = await invoke<TunePlan>("settings_plan", { serial: snd.serial, systems: tuneSystems(), styles: prefs.picStyles });
     tune.chosen = new Set(tune.plan.consoles.filter((c) => c.status === "ready").map((c) => c.id));
   } catch (e) { toast(String(e)); }
   tune.checking = false; render();
@@ -1512,6 +1516,8 @@ async function tuneApply() {
     toast(tune.result.failed ? `${tune.result.failed} file(s) couldn't be changed — see below` : "Settings applied. Start a game to see the difference.");
   } catch (e) { toast(String(e)); }
   tune.applying = false; tune.plan = null; render();
+  // Show the consoles again as they are now (styles, "Different style for one game…").
+  await tuneCheck(true);
 }
 
 async function tuneUndo() {
@@ -1662,17 +1668,17 @@ function viewTune(): Node[] {
     out.push(h("div", { class: "card" },
       h("div", { class: "desc" }, "RomCrate looks at the consoles in your game folders and on the handheld, and at the emulators installed there. Nothing is changed yet."),
       h("div", { class: "row", style: "margin-top:10px" },
-        h("button", { class: "btn primary", disabled: tune.checking || tune.applying, onclick: tuneCheck }, tune.checking ? "Looking at the handheld…" : "Check my emulators"),
+        h("button", { class: "btn primary", disabled: tune.checking || tune.applying, onclick: () => tuneCheck() }, tune.checking ? "Looking at the handheld…" : "Check my emulators"),
         h("button", { class: "btn", disabled: tune.checking || tune.applying, onclick: tuneUndo }, "Undo RomCrate's changes"))));
   } else {
     const p = tune.plan;
     out.push(h("div", { class: "banner info", style: "margin-bottom:12px" }, `${p.screens} If you later use a 4K TV, these still work — they just won't use the extra sharpness.`));
     if (!p.consoles.length) out.push(h("div", { class: "card" }, "No consoles found that RomCrate has settings for yet."));
-    planCards(out, p, tune.chosen);
+    planCards(out, p, tune.chosen, true);
     const n = tune.chosen.size;
     out.push(h("div", { class: "row", style: "margin-top:12px" },
       h("button", { class: "btn primary big", disabled: !n || tune.applying || !osAllowsSettings(), onclick: tuneApply }, tune.applying ? "Applying…" : `Apply to handheld (${n} console${n === 1 ? "" : "s"})`),
-      h("button", { class: "btn", disabled: tune.applying, onclick: tuneCheck }, "Check again"),
+      h("button", { class: "btn", disabled: tune.applying, onclick: () => tuneCheck() }, "Check again"),
       h("button", { class: "btn", disabled: tune.applying, onclick: tuneUndo }, "Undo RomCrate's changes")),
       h("div", { class: "hint", style: "margin-top:6px" }, "Close the emulators first? RomCrate does it for you when you apply, so they can't overwrite the new settings. Save your game before applying."));
   }
@@ -1685,7 +1691,7 @@ function viewTune(): Node[] {
 }
 
 /** One card per console: status, what changes (now → will be, why), steps. */
-function planCards(out: (Node | null)[], p: TunePlan, chosen: Set<string>) {
+function planCards(out: (Node | null)[], p: TunePlan, chosen: Set<string>, withStyles = false) {
     for (const c of p.consoles) {
       const [cls, label] = TUNE_BADGE[c.status] ?? ["muted", c.status];
       const names = c.systems.map((id) => SHORT_SYS[id] ?? id.toUpperCase()).join(" / ");
@@ -1699,6 +1705,7 @@ function planCards(out: (Node | null)[], p: TunePlan, chosen: Set<string>) {
             h("div", { class: "desc" }, c.status === "ready" || c.status === "already" || c.status === "checklist" ? (allTested ? "✓ Tested on the AYN Odin 2 Portal" : someTested ? "Partly tested on the AYN Odin 2 Portal (marked ✓ below); the rest are suggestions" : "Not tested on a device yet — suggested from the emulator's own docs") : "")),
           h("span", { class: `pill ${cls}` }, label)),
         c.message ? h("div", { class: "hint", style: "margin-top:6px" }, c.message) : null,
+        withStyles && c.styles?.length ? stylePicker(c) : null,
         c.changes.length ? h("table", { class: "tune-table" },
           h("tr", {}, h("th", {}, "Setting"), h("th", {}, "Now"), h("th", {}, "Will be"), h("th", {}, "Why")),
           c.changes.flatMap((f) => f.keys.map((k) => h("tr", {},
@@ -1707,8 +1714,79 @@ function planCards(out: (Node | null)[], p: TunePlan, chosen: Set<string>) {
         c.steps.length ? h("ul", { class: "steps-list" }, c.steps.map((st, i) => {
           const key = `${c.id}:${i}`;
           return h("li", {}, h("label", {}, h("input", { type: "checkbox", checked: !!prefs.tuneTicks[key], onchange: (e: Event) => { prefs.tuneTicks[key] = (e.target as HTMLInputElement).checked; savePrefs(); } }), " ", st));
-        })) : null));
+        })) : null,
+        withStyles && c.styles?.length ? gameStyles(c) : null));
     }
+}
+
+// ---------- picture styles
+
+/** Choose how this console's games look. Picking re-checks the plan. */
+function stylePicker(c: ConsoleTune): Node {
+  const cur = c.style ?? "sharp";
+  return h("div", { class: "styles" },
+    h("div", { class: "t", style: "margin:14px 0 8px" }, "Picture style"),
+    h("div", { class: "style-grid", role: "radiogroup" }, c.styles!.map((s) => h("button", {
+      class: `style ${s.id === cur ? "on" : ""}`, role: "radio", "aria-checked": String(s.id === cur), disabled: !s.available || tune.checking,
+      onclick: () => { prefs.picStyles[c.id] = s.id; savePrefs(); void tuneCheck(); },
+    },
+      h("div", { class: "row", style: "gap:8px" }, h("span", { class: "radio" }), h("span", { class: "name" }, s.label)),
+      h("div", { class: "d" }, s.why),
+      s.hint ? h("div", { class: `d hint-line ${s.heavy ? "warnline" : ""}` }, s.hint) : null,
+      !s.available ? h("div", { class: "d warnline" }, "Needs RetroArch's Vulkan video driver") : !s.tested ? h("div", { class: "d faint" }, "Not tested on a device yet") : null))));
+}
+
+const gs = { open: "" as string, games: [] as StyleGame[], loading: false, pick: new Map<string, string | null>(), busy: false, result: null as ApplyResult | null };
+
+async function gsOpen(id: string) {
+  if (gs.open === id) { gs.open = ""; render(); return; }
+  gs.open = id; gs.loading = true; gs.pick = new Map(); gs.result = null; render();
+  gs.games = await invoke<StyleGame[]>("style_games", { serial: snd.serial }).catch((e) => { toast(String(e)); return []; });
+  gs.loading = false; render();
+}
+
+async function gsApply() {
+  const picks = [...gs.pick.entries()].map(([file, style]) => ({ system: gs.games.find((g) => g.file === file)!.system, file, style }));
+  if (!confirm(`Change the picture style for ${picks.length} game${picks.length === 1 ? "" : "s"}?\n\nRomCrate closes RetroArch first. Undo RomCrate's changes removes these files again.`)) return;
+  gs.busy = true; render();
+  try {
+    gs.result = await invoke<ApplyResult>("style_apply", { serial: snd.serial, picks });
+    toast(gs.result.failed ? `${gs.result.failed} couldn't be changed — see below` : "Saved.");
+    gs.pick = new Map();
+    gs.games = await invoke<StyleGame[]>("style_games", { serial: snd.serial }).catch(() => gs.games);
+  } catch (e) { toast(String(e)); }
+  gs.busy = false; render();
+}
+
+/** "Different style for one game…": a game list for this console. */
+function gameStyles(c: ConsoleTune): Node {
+  const open = gs.open === c.id;
+  const consoleLabel = c.styles!.find((s) => s.id === (c.style ?? "sharp"))?.label ?? "";
+  const games = gs.games.filter((g) => c.systems.includes(g.system));
+  const opts = c.styles!.filter((s) => s.available);
+  return h("div", { style: "margin-top:12px" },
+    h("button", { class: "btn small", onclick: () => gsOpen(c.id) }, open ? "Hide the game list" : "Different style for one game…"),
+    !open ? null : gs.loading ? h("div", { class: "hint", style: "margin-top:8px" }, "Reading the games on the handheld…") :
+      !games.length ? h("div", { class: "hint", style: "margin-top:8px" }, "No games for this console in a ROMs folder on the handheld.") :
+      h("div", { class: "games-card card", style: "margin-top:10px" }, games.map((g) => {
+        const val = gs.pick.has(g.file) ? gs.pick.get(g.file)! : g.style;
+        return h("div", { class: `game-row ${gs.pick.has(g.file) ? "changed" : ""}` },
+          h("div", {}, h("div", { class: "t" }, g.name),
+            h("div", { class: "hint" }, g.own ? "Has a shader preset of your own — RomCrate leaves this game alone" : val ? "Own style" : `Console style (${consoleLabel})`)),
+          g.own ? h("span", { class: "pill" }, "Yours") :
+            h("select", { class: "input", style: "min-width:220px", onchange: (e: Event) => {
+              const v = (e.target as HTMLSelectElement).value;
+              const want = v === "" ? null : v;
+              if (want === g.style) gs.pick.delete(g.file); else gs.pick.set(g.file, want);
+              render();
+            } },
+              h("option", { value: "", selected: !val }, `Console style (${consoleLabel})`),
+              opts.map((s) => h("option", { value: s.id, selected: val === s.id }, s.label))));
+      })),
+    open && gs.pick.size ? h("div", { class: "row", style: "margin-top:10px" },
+      h("button", { class: "btn primary", disabled: gs.busy || !osAllowsSettings(), onclick: gsApply }, gs.busy ? "Saving…" : `Save ${gs.pick.size} game style${gs.pick.size === 1 ? "" : "s"}`),
+      h("button", { class: "btn", onclick: () => { gs.pick = new Map(); render(); } }, "Cancel")) : null,
+    open && gs.result ? h("div", { class: "log", style: "margin-top:10px" }, gs.result.lines.map((l) => h("div", { class: l.startsWith("FAILED") ? "error" : "" }, l))) : null);
 }
 
 // ---------- play mode

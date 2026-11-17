@@ -420,3 +420,17 @@ h1 + .parts { margin-top: 16px; }
 .cmp-pic .radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--faint); flex: none; }
 .cmp-pic.on .radio { border: 5px solid var(--sel); }
 .field .seg { justify-self: start; }
+
+/* ---------- picture styles ---------- */
+.style-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.style { text-align: left; background: #181c27; border: 1.5px solid var(--line); border-radius: 10px; padding: 11px 13px; cursor: pointer; color: var(--text); display: flex; flex-direction: column; gap: 4px; }
+.style:hover:not(:disabled) { border-color: var(--line-2); }
+.style.on { border-color: var(--sel); background: var(--sel-bg); }
+.style:disabled { opacity: .55; cursor: not-allowed; }
+.style .name { font-weight: 700; }
+.style .d { color: var(--muted); font-size: 13.5px; line-height: 1.4; }
+.style .d.faint { color: var(--faint); }
+.style .d.warnline { color: var(--warn); }
+.style .hint-line { color: var(--accent-2); }
+.style .radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--faint); flex: none; }
+.style.on .radio { border: 5px solid var(--sel); }
