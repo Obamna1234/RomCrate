@@ -282,3 +282,15 @@ ol.how li::marker { color: var(--accent-2); font-weight: 700; }
 .steps-list { list-style: none; padding: 0; margin: 10px 0 0; }
 .steps-list li { padding: 5px 0; color: var(--muted); }
 .steps-list input { accent-color: var(--accent); margin-right: 4px; }
+
+/* ---------- per-game settings ---------- */
+h3.sys-h { margin: 18px 0 8px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.games-card { padding: 4px 14px; }
+.game-row { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+.game-row:last-child { border-bottom: 0; }
+.game-row.changed { background: linear-gradient(90deg, rgba(124,108,255,.10), transparent 70%); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+.game-row .hint.sugg { color: #ffd27a; }
+.gctl { display: flex; gap: 6px; align-items: center; }
+.gctl select { min-width: 210px; }
+.btn.small { padding: 6px 10px; font-size: 12px; }
+input.game-search { min-width: 260px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: inherit; }

@@ -72,6 +72,8 @@ interface Prefs {
   sendTargets: Record<string, string>;
   /** Ticked checklist steps in Game settings ("ps2:0" → true). */
   tuneTicks: Record<string, boolean>;
+  /** PS2 game file → chosen ARMSX2 resolution (set by hand in ARMSX2). */
+  ps2Picks: Record<string, string>;
   importMode: "copy" | "move";
   importRename: boolean;
 }
@@ -81,7 +83,7 @@ const DEFAULT_PREFS: Prefs = {
   size: "standard", upscale: "smart", aiBinary: "", regions: ["usa", "world", "europe", "australia", "uk", "japan"],
   identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto", launchbox: true, gameInfo: true,
   pegasusOn: "none", device: "", emulators: {}, fixLaunch: false,
-  importDest: "", importSources: [], importMode: "copy", importRename: false, sendTargets: {}, tuneTicks: {},
+  importDest: "", importSources: [], importMode: "copy", importRename: false, sendTargets: {}, tuneTicks: {}, ps2Picks: {},
 };
 
 function loadPrefs(): Prefs {
@@ -1279,7 +1281,14 @@ interface ConsoleTune { id: string; systems: string[]; emulator: string; status:
 interface TunePlan { screens: string; consoles: ConsoleTune[] }
 interface ApplyResult { changedFiles: number; failed: number; lines: string[] }
 
+interface LadderStep { value: string; label: string }
+interface GameRow { system: string; file: string; name: string; id: string | null; kind: string; label: string; ladder: LadderStep[]; consoleValue: string; ownValue: string | null; suggestion: { value: string; why: string; tested: boolean } | null; note: string | null; settingsFile: string | null; step: string | null }
+
 const tune = {
+  tab: "console" as "console" | "game",
+  games: null as GameRow[] | null, scanning: false, scanPct: 0, filter: "",
+  /** file → chosen value (null = console setting); missing = unchanged */
+  pick: new Map<string, string | null>(),
   plan: null as TunePlan | null, checking: false, applying: false,
   chosen: new Set<string>(), result: null as ApplyResult | null, resultKind: "" as "" | "apply" | "undo",
 };
@@ -1318,6 +1327,114 @@ async function tuneUndo() {
   tune.applying = false; tune.plan = null; render();
 }
 
+
+// ---------- each game
+
+async function gamesScan(keepResult = false) {
+  tune.scanning = true; tune.scanPct = 0; if (!keepResult) tune.result = null; render();
+  try {
+    tune.games = await invoke<GameRow[]>("pergame_scan", { serial: snd.serial });
+    tune.pick = new Map();
+  } catch (e) { toast(String(e)); }
+  tune.scanning = false; render();
+}
+
+/** What a game is set to now (own value, else console). */
+const gameNow = (g: GameRow) => g.kind === "checklist" ? (prefs.ps2Picks[g.file] ?? null) : g.ownValue;
+const gameChosen = (g: GameRow) => tune.pick.has(g.file) ? tune.pick.get(g.file)! : gameNow(g);
+const stepLabel = (g: GameRow, v: string | null) => v === null ? `Console setting: ${g.ladder.find((l) => l.value === g.consoleValue)?.label ?? g.consoleValue}` : g.ladder.find((l) => l.value === v)?.label ?? v;
+
+function gameStep(g: GameRow, dir: -1 | 1) {
+  const cur = gameChosen(g) ?? g.consoleValue;
+  const i = g.ladder.findIndex((l) => l.value === cur);
+  const j = Math.max(0, Math.min(g.ladder.length - 1, (i < 0 ? 0 : i) + dir));
+  setPick(g, g.ladder[j].value === g.consoleValue && gameNow(g) === null ? null : g.ladder[j].value);
+}
+
+function setPick(g: GameRow, v: string | null) {
+  if (v === gameNow(g)) tune.pick.delete(g.file); else tune.pick.set(g.file, v);
+  render();
+}
+
+async function gamesApply() {
+  const changes = [...tune.pick.entries()];
+  const rows = tune.games!.filter((g) => tune.pick.has(g.file));
+  // PS2 (ARMSX2) choices are remembered here and shown as checklist lines.
+  for (const g of rows.filter((g) => g.kind === "checklist")) {
+    const v = tune.pick.get(g.file)!;
+    if (v === null) delete prefs.ps2Picks[g.file]; else prefs.ps2Picks[g.file] = v;
+  }
+  savePrefs();
+  const choices = rows.filter((g) => g.kind !== "checklist" && g.settingsFile).map((g) => ({ system: g.system, file: g.file, settingsFile: g.settingsFile!, value: tune.pick.get(g.file)! }));
+  if (choices.length) {
+    if (!confirm(`RomCrate will close the emulators for these ${choices.length} game(s) on the handheld before changing their settings.\n\nFinish and save any game that's running first. Continue?`)) return;
+    tune.applying = true; render();
+    try {
+      tune.result = await invoke<ApplyResult>("pergame_apply", { serial: snd.serial, choices }); tune.resultKind = "apply";
+      toast(tune.result.failed ? `${tune.result.failed} game(s) couldn't be changed — see below` : `${choices.length} game(s) updated.`);
+    } catch (e) { toast(String(e)); }
+    tune.applying = false;
+    await gamesScan(true);
+  } else {
+    tune.pick = new Map(); render();
+    toast(`${changes.length} PS2 choice(s) saved — set them in ARMSX2 using the lines below.`);
+  }
+}
+
+function viewGames(out: (Node | null)[]) {
+  if (!tune.games) {
+    out.push(h("div", { class: "card" },
+      h("div", { class: "desc" }, "RomCrate lists every game on the handheld that can have its own setting (PS1, N64, Wii/GameCube, PSP, PS2), reads what each is set to now, and suggests changes where there's a reason. Nothing is changed until you apply."),
+      h("div", { class: "row", style: "margin-top:10px" },
+        h("button", { class: "btn primary", disabled: tune.scanning, onclick: () => gamesScan() }, tune.scanning ? (tune.scanPct ? `Getting the games database… ${tune.scanPct}%` : "Reading your games…") : "Check my games"))));
+    return;
+  }
+  const games = tune.games;
+  if (!games.length) { out.push(h("div", { class: "card" }, "No games found on the handheld that can have their own settings.")); return; }
+  const suggested = games.filter((g) => g.suggestion && gameChosen(g) !== g.suggestion.value);
+  out.push(h("div", { class: "banner info", style: "margin-bottom:12px" }, h("div", {},
+    "Each game uses its console's setting unless you give it its own. Played a game and it ", h("b", {}, "runs slow"), "? Step it down. Runs perfectly but ", h("b", {}, "could look sharper"), "? Step it up. RomCrate writes that game's own settings file and keeps everything else as it was.")));
+  out.push(h("div", { class: "row", style: "margin-bottom:10px" },
+    h("input", { type: "search", class: "game-search", placeholder: "Find a game…", value: tune.filter, oninput: (e: Event) => {
+      // Filter in place (a redraw would take the cursor out of the box).
+      tune.filter = (e.target as HTMLInputElement).value;
+      const q = tune.filter.toLowerCase();
+      document.querySelectorAll<HTMLElement>(".game-row").forEach((r) => { r.style.display = !q || (r.dataset.name ?? "").includes(q) ? "" : "none"; });
+    } }),
+    suggested.length ? h("button", { class: "btn", onclick: () => { suggested.forEach((g) => tune.pick.set(g.file, g.suggestion!.value)); render(); } }, `Use all ${suggested.length} suggestion${suggested.length === 1 ? "" : "s"}`) : null));
+  const f = tune.filter.toLowerCase();
+  const bySys = new Map<string, GameRow[]>();
+  for (const g of games) bySys.set(g.system, [...(bySys.get(g.system) ?? []), g]);
+  for (const [sys, list] of bySys) {
+    out.push(h("h3", { class: "sys-h" }, `${SHORT_SYS[sys] ?? sys.toUpperCase()} · ${list[0].label}`),
+      h("div", { class: "card games-card" }, list.map((g) => {
+        const chosen = gameChosen(g);
+        const changed = tune.pick.has(g.file);
+        return h("div", { class: `game-row ${changed ? "changed" : ""}`, "data-name": g.name.toLowerCase(), style: f && !g.name.toLowerCase().includes(f) ? "display:none" : "" },
+          h("div", { class: "gname" }, h("div", { class: "t" }, g.name),
+            g.note ? h("div", { class: "hint" }, g.note) :
+            g.suggestion ? h("div", { class: "hint sugg" }, `Suggested: ${stepLabel(g, g.suggestion.value)} — ${g.suggestion.why}${g.suggestion.tested ? " ✓ tested" : ""}`) : null,
+            g.kind === "checklist" && chosen !== null ? h("div", { class: "hint" }, (g.step ?? "").replace("{label}", stepLabel(g, chosen))) : null),
+          g.note ? h("span", {}) : h("div", { class: "gctl" },
+            h("button", { class: "btn small", title: "Runs slow: one step lower", disabled: tune.applying, onclick: () => gameStep(g, -1) }, "Runs slow"),
+            h("select", { disabled: tune.applying, onchange: (e: Event) => { const v = (e.target as HTMLSelectElement).value; setPick(g, v === "" ? null : v); } },
+              h("option", { value: "", selected: chosen === null }, stepLabel(g, null)),
+              g.ladder.map((l) => h("option", { value: l.value, selected: chosen === l.value }, l.label))),
+            h("button", { class: "btn small", title: "Could look sharper: one step higher", disabled: tune.applying, onclick: () => gameStep(g, 1) }, "Could look sharper")));
+      })));
+  }
+  const n = tune.pick.size;
+  out.push(h("div", { class: "row", style: "margin-top:12px" },
+    h("button", { class: "btn primary big", disabled: !n || tune.applying, onclick: gamesApply }, tune.applying ? "Applying…" : `Apply ${n} change${n === 1 ? "" : "s"}`),
+    n ? h("button", { class: "btn", disabled: tune.applying, onclick: () => { tune.pick = new Map(); render(); } }, "Forget changes") : null,
+    h("button", { class: "btn", disabled: tune.applying || tune.scanning, onclick: () => gamesScan() }, "Check again")));
+  const ps2 = games.filter((g) => g.kind === "checklist" && prefs.ps2Picks[g.file]);
+  if (ps2.length) out.push(h("h3", { class: "sys-h" }, "PS2 games to set in ARMSX2"), h("ul", { class: "steps-list" }, ps2.map((g) => {
+    const key = `ps2game:${g.file}:${prefs.ps2Picks[g.file]}`;
+    return h("li", {}, h("label", {}, h("input", { type: "checkbox", checked: !!prefs.tuneTicks[key], onchange: (e: Event) => { prefs.tuneTicks[key] = (e.target as HTMLInputElement).checked; savePrefs(); } }), " ", h("b", {}, g.name), " — ", (g.step ?? "").replace("{label}", stepLabel(g, prefs.ps2Picks[g.file]))));
+  })));
+}
+
 const TUNE_BADGE: Record<string, [string, string]> = {
   ready: ["ok", "Ready to apply"], already: ["ok", "Already set"], checklist: ["warn", "Set it in the app"],
   "not-installed": ["muted", "Emulator not installed"], problem: ["bad", "Needs a step first"],
@@ -1329,6 +1446,15 @@ function viewTune(): Node[] {
     h("p", { class: "lead" }, "Graphics and performance settings for each console's emulator on your handheld — sharp, full-speed, and right for both the handheld screen and the TV. RomCrate changes only these settings, keeps a backup of every file it touches, and can put everything back."),
   ];
   if (!handheldGate(out, "Changing settings on the handheld")) return out.filter((x): x is Node => !!x);
+  out.push(h("div", { class: "seg", style: "margin:18px 0 6px" },
+    h("button", { class: tune.tab === "console" ? "on" : "", onclick: () => { tune.tab = "console"; render(); } }, "Each console"),
+    h("button", { class: tune.tab === "game" ? "on" : "", onclick: () => { tune.tab = "game"; render(); } }, "Each game")));
+  if (tune.tab === "game") {
+    out.push(h("h2", {}, "2 · Your games"));
+    viewGames(out);
+    if (tune.result) out.push(h("h2", {}, "Applied"), h("div", { class: "log" }, tune.result.lines.map((l) => h("div", { class: l.startsWith("FAILED") ? "error" : "" }, l))), logButtons());
+    return out.filter((x): x is Node => !!x);
+  }
   out.push(h("h2", {}, "2 · Your emulators"));
   if (!tune.plan) {
     out.push(h("div", { class: "card" },
@@ -1588,6 +1714,7 @@ async function boot() {
   await listen("send-event", (ev) => handleSendEvent(ev.payload));
   await listen<{ done: number; total: number | null }>("adb-install-progress", (ev) => { snd.installPct = ev.payload.total ? Math.round((ev.payload.done / ev.payload.total) * 100) : 0; if (view === "send" || view === "tune") render(); });
   document.getElementById("nav-tune")?.addEventListener("click", () => go("tune"));
+  await listen<{ done: number; total: number | null }>("pergame-progress", (ev) => { tune.scanPct = ev.payload.total ? Math.round((ev.payload.done / ev.payload.total) * 100) : 0; if (view === "tune") queueRender(); });
   document.getElementById("nav-send")?.addEventListener("click", () => go("send"));
   if (!catalog.launchers.some((l) => l.id === prefs.launcher)) prefs.launcher = "pegasus";
   await listen("scrape-event", (ev) => handleEvent(ev.payload));

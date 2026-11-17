@@ -3263,7 +3263,7 @@ dependencies = [
 
 [[package]]
 name = "romcrate"
-version = "0.4.1"
+version = "0.4.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3281,7 +3281,7 @@ dependencies = [
 
 [[package]]
 name = "romcrate-cli"
-version = "0.4.1"
+version = "0.4.3"
 dependencies = [
  "anyhow",
  "romcrate-core",
@@ -3291,9 +3291,10 @@ dependencies = [
 
 [[package]]
 name = "romcrate-core"
-version = "0.4.1"
+version = "0.4.3"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "crc32fast",
  "deunicode",
