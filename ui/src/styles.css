@@ -263,3 +263,22 @@ select.input { padding: 6px 10px; }
 
 ol.how { margin: 10px 0; padding-left: 20px; color: var(--muted); line-height: 1.7; }
 ol.how li::marker { color: var(--accent-2); font-weight: 700; }
+
+/* ---------- game settings ---------- */
+.card.tune { margin-bottom: 12px; }
+.tune-head { display: flex; align-items: center; gap: 12px; }
+.tune-head > div { flex: 1; }
+.tune-head input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+.pill { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap; border: 1px solid var(--line); color: var(--muted); }
+.pill.ok { color: #7ee2a8; border-color: rgba(126, 226, 168, .35); background: rgba(126, 226, 168, .08); }
+.pill.warn { color: #ffd27a; border-color: rgba(255, 210, 122, .35); background: rgba(255, 210, 122, .08); }
+.pill.bad { color: #ff8f8f; border-color: rgba(255, 143, 143, .35); background: rgba(255, 143, 143, .08); }
+.tune-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+.tune-table th { text-align: left; color: var(--faint); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.tune-table td { padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: top; }
+.tune-table .mono { font-family: ui-monospace, Menlo, Consolas, monospace; white-space: nowrap; }
+.tiny { font-size: 11px; }
+.tiny.ok { color: #7ee2a8; }
+.steps-list { list-style: none; padding: 0; margin: 10px 0 0; }
+.steps-list li { padding: 5px 0; color: var(--muted); }
+.steps-list input { accent-color: var(--accent); margin-right: 4px; }

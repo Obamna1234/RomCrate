@@ -31,6 +31,14 @@ if args[:1] == ["-s"]:
     ro = os.environ.get("FAKE_ADB_READONLY")  # a storage this "handheld" won't let us write to
     if ro and cmd == "shell" and "touch" in rest[0] and ro in rest[0]:
         print(f"touch: '{ro}/.romcrate-write-test': Permission denied"); sys.exit(0)
+    if cmd == "shell" and rest[0].startswith("pm list packages"):
+        for p in filter(None, os.environ.get("FAKE_ADB_PACKAGES", "").split(",")):
+            print("package:" + p)
+        sys.exit(0)
+    if cmd == "shell" and rest[0].startswith("am force-stop"):
+        with open(os.path.join(root, "force-stopped.log"), "a") as f:
+            f.write(rest[0].split()[-1].strip("'") + "\n")
+        sys.exit(0)
     if cmd == "shell":
         p = subprocess.run(["sh", "-c", to_fake(rest[0])], capture_output=True, text=True)
         sys.stdout.write(from_fake(p.stdout)); sys.stderr.write(from_fake(p.stderr)); sys.exit(p.returncode)

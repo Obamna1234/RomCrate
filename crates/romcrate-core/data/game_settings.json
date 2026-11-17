@@ -1,0 +1,161 @@
+{
+  "_readme": "Graphics and performance settings RomCrate can apply per console. 'tested: true' = checked on a real device by the project owner; everything else is a suggestion based on the emulator's own documentation and source code, and is shown as 'not tested yet'. Setting names come from each emulator's source code (see 'source'). RomCrate only changes the keys listed here, backs up any file it changes, and never touches saves, BIOS files or controls.",
+  "screens": "The AYN Odin 2 Portal's screen is 1920x1080, the same as a 1080p TV, so one set of settings suits both.",
+  "profiles": [
+    {
+      "id": "snes",
+      "systems": ["snes"],
+      "emulator": "RetroArch · Snes9x",
+      "kind": "retroarch-core",
+      "core": "Snes9x",
+      "override": [
+        { "key": "aspect_ratio_index", "value": "0", "label": "Aspect ratio: 4:3", "why": "The shape a SNES picture had on a TV.", "tested": true },
+        { "key": "video_scale_integer", "value": "false", "label": "Integer scaling: off", "why": "Fills the screen height instead of leaving black borders.", "tested": true },
+        { "key": "video_vsync", "value": "true", "label": "VSync: on", "why": "No tearing.", "tested": true },
+        { "key": "video_threaded", "value": "false", "label": "Threaded video: off", "why": "Smoother frame pacing with VSync.", "tested": true }
+      ],
+      "shader": { "preset": "interpolation/quilez", "label": "Sharp scaling shader (quilez)", "why": "Keeps pixels sharp without the uneven look of plain scaling.", "tested": true },
+      "source": "Owner's setup session on the Odin 2 Portal (handheld spec §3.1); keys from RetroArch configuration.c / retroarch.cfg"
+    },
+    {
+      "id": "nes",
+      "systems": ["nes"],
+      "emulator": "RetroArch · Nestopia",
+      "kind": "retroarch-core",
+      "core": "Nestopia",
+      "override": [
+        { "key": "aspect_ratio_index", "value": "0", "label": "Aspect ratio: 4:3", "why": "The shape a NES picture had on a TV." },
+        { "key": "video_scale_integer", "value": "false", "label": "Integer scaling: off", "why": "Fills the screen height." },
+        { "key": "video_vsync", "value": "true", "label": "VSync: on", "why": "No tearing." }
+      ],
+      "shader": { "preset": "interpolation/quilez", "label": "Sharp scaling shader (quilez)", "why": "Same clean look as the tested SNES setup." },
+      "source": "Same approach as the tested SNES settings"
+    },
+    {
+      "id": "gb",
+      "systems": ["gb", "gbc"],
+      "emulator": "RetroArch · Gambatte",
+      "kind": "retroarch-core",
+      "core": "Gambatte",
+      "override": [
+        { "key": "aspect_ratio_index", "value": "22", "label": "Aspect ratio: as the core says (Game Boy shape)", "why": "Keeps the square-ish Game Boy screen shape." },
+        { "key": "video_scale_integer", "value": "true", "label": "Integer scaling: on", "why": "Every pixel the same size (7× on a 1080p screen) — perfectly sharp." },
+        { "key": "video_smooth", "value": "false", "label": "Bilinear filtering: off", "why": "No blur." }
+      ],
+      "source": "RetroArch aspect ratio index from gfx/video_defines.h (ASPECT_RATIO_CORE = 22)"
+    },
+    {
+      "id": "gba",
+      "systems": ["gba"],
+      "emulator": "RetroArch · mGBA",
+      "kind": "retroarch-core",
+      "core": "mGBA",
+      "override": [
+        { "key": "aspect_ratio_index", "value": "22", "label": "Aspect ratio: as the core says (GBA shape)", "why": "Keeps the wide GBA screen shape." },
+        { "key": "video_scale_integer", "value": "true", "label": "Integer scaling: on", "why": "Every pixel the same size (6× on a 1080p screen) — perfectly sharp." },
+        { "key": "video_smooth", "value": "false", "label": "Bilinear filtering: off", "why": "No blur." }
+      ],
+      "source": "RetroArch aspect ratio index from gfx/video_defines.h (ASPECT_RATIO_CORE = 22)"
+    },
+    {
+      "id": "n64",
+      "systems": ["n64"],
+      "emulator": "RetroArch · Mupen64Plus-Next",
+      "kind": "retroarch-core",
+      "core": "Mupen64Plus-Next",
+      "options_if_driver": {
+        "vulkan": [
+          { "key": "mupen64plus-rdp-plugin", "value": "parallel", "label": "Graphics plugin: ParaLLEl-RDP", "why": "Fixes the black screen you get with RetroArch's Vulkan driver.", "tested": true },
+          { "key": "mupen64plus-rsp-plugin", "value": "parallel", "label": "RSP plugin: ParaLLEl", "why": "Goes with ParaLLEl-RDP.", "tested": true },
+          { "key": "mupen64plus-parallel-rdp-upscaling", "value": "2x", "label": "Upscaling: 2×", "why": "Sharper 3D; light enough for the Snapdragon 8 Gen 2." }
+        ]
+      },
+      "note_if_other_driver": "RetroArch uses the OpenGL driver here, which works with the N64 core's default graphics plugin — nothing to change.",
+      "source": "Owner's setup session (N64 black screen fix); option names from mupen64plus-libretro-nx libretro_core_options.h"
+    },
+    {
+      "id": "psx",
+      "systems": ["psx"],
+      "emulator": "RetroArch · SwanStation",
+      "kind": "retroarch-core",
+      "core": "SwanStation",
+      "options": [
+        { "key": "swanstation_GPU_ResolutionScale", "value": "5", "label": "Internal resolution: 5× (1080p)", "why": "SwanStation's own setting for a 1080p screen — much sharper 3D." }
+      ],
+      "source": "swanstation libretro_core_options.h ('5x (for 1080p)')"
+    },
+    {
+      "id": "wii",
+      "systems": ["wii", "gc"],
+      "emulator": "Dolphin",
+      "kind": "ini",
+      "packages": ["org.dolphinemu.dolphinemu"],
+      "files": [
+        {
+          "find": ["/storage/emulated/0/Android/data/org.dolphinemu.dolphinemu/files/Config/Dolphin.ini"],
+          "set": [ { "section": "Core", "key": "GFXBackend", "value": "Vulkan", "label": "Graphics backend: Vulkan", "why": "Dolphin's fastest backend on Snapdragon." } ]
+        },
+        {
+          "find": ["/storage/emulated/0/Android/data/org.dolphinemu.dolphinemu/files/Config/GFX.ini"],
+          "set": [ { "section": "Settings", "key": "InternalResolution", "value": "2", "label": "Internal resolution: 2× (about 1080p)", "why": "Matches a 1080p screen; Wii/GameCube games run at full speed at 2× on the Snapdragon 8 Gen 2." } ]
+        }
+      ],
+      "note": "Wii and GameCube share these settings.",
+      "source": "Dolphin Source/Core/Core/Config/GraphicsSettings.cpp and MainSettings.cpp; user folder from dolphin-emu.org 'controlling the global user directory'"
+    },
+    {
+      "id": "psp",
+      "systems": ["psp"],
+      "emulator": "PPSSPP",
+      "kind": "ini",
+      "packages": ["org.ppsspp.ppsspp"],
+      "files": [
+        {
+          "find": [
+            "/storage/emulated/0/PSP/SYSTEM/ppsspp.ini",
+            "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/PSP/SYSTEM/ppsspp.ini",
+            "search:ppsspp.ini"
+          ],
+          "set": [
+            { "section": "Graphics", "key": "GraphicsBackend", "value": "3 (VULKAN)", "label": "Graphics backend: Vulkan", "why": "PPSSPP's recommended backend." },
+            { "section": "Graphics", "key": "InternalResolution", "value": "4", "label": "Rendering resolution: 4× (1088p)", "why": "Matches a 1080p screen; PSP games are light enough for this." }
+          ]
+        }
+      ],
+      "source": "PPSSPP Core/Config.cpp ([Graphics] GraphicsBackend written as '3 (VULKAN)'; InternalResolution)"
+    },
+    {
+      "id": "ps2",
+      "systems": ["ps2"],
+      "emulator": "ARMSX2",
+      "kind": "checklist",
+      "why_checklist": "ARMSX2 doesn't keep its settings in a file this computer can change yet, so here's exactly what to set.",
+      "steps": [
+        "Settings → Graphics → Renderer: Vulkan",
+        "Internal Resolution: 3× (2× for heavy games like shooters and racers)",
+        "Texture Filtering: Bilinear (PS2) · Anisotropic Filtering: 4×–8×",
+        "TV Shader: Off · FXAA: On · CAS: Sharpen",
+        "Auto apply widescreen 16:9 patches: On · Aspect Ratio: Auto",
+        "Only if one game needs it: long-press the game → Game Settings, and change resolution or aspect there"
+      ],
+      "tested": true,
+      "source": "Owner's setup session on the Odin 2 Portal (handheld spec §3.1)"
+    },
+    {
+      "id": "nds",
+      "systems": ["nds"],
+      "emulator": "melonDS",
+      "kind": "checklist",
+      "why_checklist": "melonDS keeps its settings inside the app, so here's exactly what to set.",
+      "steps": [
+        "Settings → Video → Renderer: OpenGL",
+        "Internal resolution: 3×–4×",
+        "Layout: Hybrid or side-by-side when playing with buttons; map a 'Swap screens' hotkey",
+        "On the TV, games that need touch (aiming, menus) still use the Odin's own screen — hold the Odin as the controller",
+        "Tip: 007 Quantum of Solace plays better with the Odin held upright and a custom vertical layout"
+      ],
+      "tested": true,
+      "source": "Owner's setup session (handheld spec §3.1) and the owner's own tip"
+    }
+  ]
+}
