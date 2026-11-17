@@ -39,6 +39,11 @@ pub struct ScrapeConfig {
     pub ai_binary: Option<PathBuf>,
     /// Replace art that already exists.
     pub overwrite: bool,
+    /// When art already exists, save RomCrate's version on the side so you can
+    /// compare and choose (see `review.rs`). Needs `review_dir`.
+    pub ask_existing: bool,
+    /// Where those side-by-side candidates go (RomCrate's own data folder).
+    pub review_dir: Option<PathBuf>,
     pub prefs: MatchPrefs,
     /// Parallel games (clamped to 1..=8 to be polite to free servers).
     pub concurrency: usize,
@@ -76,6 +81,8 @@ impl Default for ScrapeConfig {
             upscale: Upscale::Smart,
             ai_binary: None,
             overwrite: false,
+            ask_existing: false,
+            review_dir: None,
             prefs: MatchPrefs::default(),
             concurrency: 4,
             refresh_index: false,
@@ -139,6 +146,9 @@ pub enum Event {
         missing: Vec<ArtKind>,
         preview: Option<PathBuf>,
         message: Option<String>,
+        /// Art you already have, next to what RomCrate found instead.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        review: Vec<crate::review::ReviewItem>,
     },
     #[serde(rename_all = "camelCase")]
     Log { level: String, message: String },
@@ -475,6 +485,7 @@ impl Ctx {
     async fn scrape_game(&self, game: &Game) -> (GameStatus, Option<GameArt>, usize) {
         let cfg = &self.cfg;
         let ss = &self.ss;
+        let review_out: std::sync::Mutex<Vec<crate::review::ReviewItem>> = Default::default();
         let send = |status: GameStatus,
                     matched: Option<String>,
                     method: Option<String>,
@@ -482,6 +493,7 @@ impl Ctx {
                     missing: Vec<ArtKind>,
                     preview: Option<PathBuf>,
                     message: Option<String>| {
+            let review = std::mem::take(&mut *review_out.lock().unwrap());
             (self.emit)(Event::GameDone {
                 system_id: ss.system_id.clone(),
                 game: game.stem.clone(),
@@ -492,6 +504,7 @@ impl Ctx {
                 missing,
                 preview,
                 message,
+                review,
             });
         };
 
@@ -564,6 +577,8 @@ impl Ctx {
         // 3. Plan output files, skipping ones that already exist.
         let mut plan: Vec<(ArtKind, Vec<PathBuf>)> = Vec::new();
         let mut existing: BTreeMap<ArtKind, PathBuf> = BTreeMap::new();
+        // Kinds you already have, fetched only to offer RomCrate's version.
+        let mut compare: Vec<ArtKind> = Vec::new();
         for &k in &cfg.kinds {
             if !self.ss_on && matches!(k, ArtKind::Video | ArtKind::Manual) {
                 continue;
@@ -583,6 +598,10 @@ impl Ctx {
             }
             if !cfg.overwrite && targets[0].exists() {
                 existing.insert(k, targets[0].clone());
+                if cfg.ask_existing && cfg.review_dir.is_some() {
+                    compare.push(k);
+                    plan.push((k, targets));
+                }
             } else {
                 plan.push((k, targets));
             }
@@ -768,10 +787,19 @@ impl Ctx {
                 },
             };
             let Some(output) = output else {
-                missing.push(k);
+                // Nothing to offer for art you already have isn't "missing".
+                if !compare.contains(&k) {
+                    missing.push(k);
+                }
                 continue;
             };
             let output = Arc::new(output);
+            if compare.contains(&k) {
+                if let Some(item) = self.offer(game, k, &targets, output.clone()).await {
+                    review_out.lock().unwrap().push(item);
+                }
+                continue;
+            }
             let mut ok = false;
             for t in &targets {
                 let (o, t2) = (output.clone(), t.clone());
@@ -793,6 +821,28 @@ impl Ctx {
         }
 
         let n = saved.len();
+        let offered = review_out.lock().unwrap().len();
+        if n == 0 && offered > 0 {
+            send(
+                GameStatus::Skipped,
+                matched_label,
+                method,
+                vec![],
+                missing,
+                preview_of(&existing),
+                Some(format!("Has artwork already. RomCrate found its own for {offered} — compare them when the run finishes")),
+            );
+            return (
+                GameStatus::Skipped,
+                Some(GameArt {
+                    game: game.clone(),
+                    files,
+                    info,
+                    matched: best.clone().or(canonical.clone()),
+                }),
+                0,
+            );
+        }
         // Nothing new found, but the game already has art from before (for
         // example a cover, with only the logo missing): say that, rather than
         // showing the old cover under a red "not found".
@@ -901,6 +951,64 @@ impl Ctx {
                 None
             }
         }
+    }
+
+    /// Save RomCrate's version of art you already have next to it (in the review
+    /// folder), unless it's the very same picture.
+    async fn offer(
+        &self,
+        game: &Game,
+        k: ArtKind,
+        targets: &[PathBuf],
+        output: Arc<Output>,
+    ) -> Option<crate::review::ReviewItem> {
+        let dir = self.cfg.review_dir.as_ref()?;
+        let ext = targets[0]
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("png")
+            .to_string();
+        let kind = format!("{k:?}").to_lowercase();
+        let cand = dir
+            .join(crate::review::safe_name(&self.ss.system_id))
+            .join(crate::review::safe_name(&game.stem))
+            .join(format!("{kind}.{ext}"));
+        let (c, e) = (cand.clone(), targets[0].clone());
+        let same = tokio::task::spawn_blocking(move || -> anyhow::Result<bool> {
+            match &*output {
+                Output::Image(img) => {
+                    if image::open(&e)
+                        .map(|o| o.to_rgba8() == *img)
+                        .unwrap_or(false)
+                    {
+                        return Ok(true);
+                    }
+                    imaging::save_png(img, &c)?;
+                }
+                Output::Bytes(b) => {
+                    if std::fs::read(&e).ok().as_deref() == Some(b.as_slice()) {
+                        return Ok(true);
+                    }
+                    imaging::save_bytes(b, &c)?;
+                }
+            }
+            Ok(false)
+        })
+        .await
+        .ok()?
+        .ok()?;
+        if same {
+            return None;
+        }
+        Some(crate::review::ReviewItem {
+            system_id: self.ss.system_id.clone(),
+            game: game.stem.clone(),
+            kind,
+            existing: targets[0].clone(),
+            candidate: cand,
+            targets: targets.to_vec(),
+            remote: vec![],
+        })
     }
 
     async fn render(&self, src: &DynamicImage, k: ArtKind, size: Size) -> image::RgbaImage {

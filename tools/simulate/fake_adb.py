@@ -35,6 +35,15 @@ if args[:1] == ["-s"]:
         for p in filter(None, os.environ.get("FAKE_ADB_PACKAGES", "").split(",")):
             print("package:" + p)
         sys.exit(0)
+    if cmd == "shell" and rest[0].strip() == "getprop":
+        # FAKE_ADB_PROPS="ro.product.model=Odin2 Portal;ro.product.manufacturer=AYN"
+        props = os.environ.get("FAKE_ADB_PROPS", "ro.product.manufacturer=AYN;ro.product.model=Odin2 Portal;ro.product.device=odin2portal;ro.build.version.release=13")
+        for kv in filter(None, props.split(";")):
+            k, _, v = kv.partition("=")
+            print(f"[{k}]: [{v}]")
+        sys.exit(0)
+    if cmd == "pull":
+        shutil.copyfile(to_fake(rest[0]), rest[1]); sys.exit(0)
     if cmd == "shell" and rest[0].startswith("am force-stop"):
         with open(os.path.join(root, "force-stopped.log"), "a") as f:
             f.write(rest[0].split()[-1].strip("'") + "\n")

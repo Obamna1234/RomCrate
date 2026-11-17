@@ -80,6 +80,14 @@ interface Prefs {
   ps2Picks: Record<string, string>;
   importMode: "copy" | "move";
   importRename: boolean;
+  /** Artwork you already have: keep it, compare it with RomCrate's, or replace it. */
+  existingArt: "keep" | "ask" | "replace";
+  /** Handheld serial → the device you confirmed it is (or kept). */
+  deviceAnswered: Record<string, string>;
+  /** Handheld serial → you said OK to settings changes on a system RomCrate doesn't know. */
+  osOk: Record<string, boolean>;
+  playScreen: string;
+  playController: string;
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -88,12 +96,18 @@ const DEFAULT_PREFS: Prefs = {
   identify: true, overwrite: false, metadata: true, extras: true, render3d: true, threads: 4, pegasusLayout: "auto", launchbox: true, gameInfo: true,
   pegasusOn: "none", device: "", emulators: {}, fixLaunch: false,
   importDest: "", importSources: [], importMode: "copy", importRename: false, sendTargets: {}, tuneTicks: {}, ps2Picks: {},
+  existingArt: "ask", deviceAnswered: {}, osOk: {}, playScreen: "handheld", playController: "builtin",
 };
 
 function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem("romcrate.prefs");
-    if (raw) return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+    if (raw) {
+      const p = { ...DEFAULT_PREFS, ...JSON.parse(raw) } as Prefs;
+      // Older versions had a plain "replace" switch.
+      if (!JSON.parse(raw).existingArt && p.overwrite) p.existingArt = "replace";
+      return p;
+    }
   } catch { /* storage unavailable */ }
   return { ...DEFAULT_PREFS };
 }
@@ -309,7 +323,7 @@ function fitBadge(systemId: string): Node | null {
   return null;
 }
 
-function applyDevice(id: string) {
+function applyDevice(id: string, stay = false) {
   prefs.device = id;
   const d = currentDevice();
   if (d) {
@@ -320,16 +334,29 @@ function applyDevice(id: string) {
     prefs.size = "standard";
   }
   savePrefs();
-  go("home");
+  if (stay) render(); else go("home");
   toast(d ? `Set up for ${d.name}. You can still change any setting.` : "Using safe defaults. You can pick a device any time.");
 }
 
-/** Drawing of a device (our own line art; no photos or logos). */
+/** Your own photos of your devices (device id → picture). */
+let photos: Record<string, string> = {};
+
+/** Drawing of a device (our own line art; no maker photos or logos), or your own photo of it. */
 function artOf(id: string, cls = "art"): HTMLElement {
   const d = document.createElement("div");
   d.className = cls;
-  d.innerHTML = deviceArt(id);
+  if (photos[id]) {
+    d.classList.add("photo");
+    d.append(h("img", { src: photos[id], alt: "" }));
+  } else d.innerHTML = deviceArt(id);
   return d;
+}
+
+async function pickPhoto(id: string) {
+  try {
+    const url = await invoke<string | null>("set_device_photo", { id });
+    if (url) { photos[id] = url; toast("Your photo is used for this device."); render(); }
+  } catch (e) { toast(String(e)); }
 }
 
 function viewDevice(): Node[] {
@@ -343,7 +370,7 @@ function viewDevice(): Node[] {
     h("div", { class: "row" },
       d.tested ? h("span", { class: "badge sure" }, "Tested on this device") : null,
       d.too_demanding.length ? h("span", { class: "badge attention", title: `Too demanding: ${d.too_demanding.map(shortSys).join(", ")}` }, `Not for ${d.too_demanding.slice(0, 3).map(shortSys).join(", ")}${d.too_demanding.length > 3 ? "…" : ""}`) : null));
-  return [
+  const out: (Node | null)[] = [
     h("h1", {}, "What will you play on?"),
     h("p", { class: "lead" }, "RomCrate sets things up to suit your device — the frontend it uses, how games are launched, and artwork sized for its screen. You can still change every setting yourself."),
     h("div", { class: "device-grid" },
@@ -353,11 +380,17 @@ function viewDevice(): Node[] {
         h("div", { class: "n" }, "Not sure / something else"),
         h("div", { class: "f" }, "Use safe defaults"),
         h("div", { class: "spec" }, "Works for most setups. Pick a device later for better defaults."))),
-    h("div", { class: "note", style: "margin-top:16px" }, "Only devices marked “Tested on this device” have been checked on a real unit. Specs for the others come from the makers and reviews. The pictures are simple drawings made for RomCrate."),
+    currentDevice() ? h("div", { class: "card", style: "margin-top:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap" },
+      h("div", { style: "flex:1;min-width:260px" }, h("div", { class: "t" }, `Use a photo of your own ${currentDevice()!.name}`),
+        h("div", { class: "desc", style: "margin-top:2px" }, "A photo you took yourself shows instead of the drawing, here and in the sidebar. It stays on this computer. (Photos from the maker or the web can't be used — they belong to whoever took them.)")),
+      h("button", { class: "btn", onclick: () => pickPhoto(prefs.device) }, photos[prefs.device] ? "Choose another photo" : "Choose a photo"),
+      photos[prefs.device] ? h("button", { class: "btn", onclick: async () => { await invoke("clear_device_photo", { id: prefs.device }).catch((e) => toast(String(e))); delete photos[prefs.device]; render(); } }, "Use the drawing again") : null) : null,
+    h("div", { class: "note", style: "margin-top:16px" }, "Only devices marked “Tested on this device” have been checked on a real unit. Specs for the others come from the makers and reviews. The pictures are drawings made for RomCrate from each device's published size and layout."),
     h("div", { class: "note", style: "margin-top:10px" },
       "RomCrate keeps its log and downloads in ", logInfo ? h("span", { class: "path" }, `\u200E${dataFolderText(logInfo)}\u200E`) : "your app data folder", ". ",
       h("button", { class: "link", style: "text-decoration:underline", onclick: chooseDataFolder }, "Change…")),
   ];
+  return out.filter((x): x is Node => !!x);
 }
 
 function viewHome(): Node[] {
@@ -368,7 +401,7 @@ function viewHome(): Node[] {
     ["Get artwork", "Covers and screenshots, for example for a game you just downloaded.", "art", () => go("library")],
     ["Pegasus launch lines", "Make Pegasus start your games, without getting artwork again.", "pegasus", () => go("pegasus")],
     ["Send to handheld", "Copy games and artwork to your Android handheld over USB.", "send", () => go("send")],
-    ["Game settings", "Graphics and speed settings for each console and each game.", "tune", () => go("tune")],
+    ["Game settings", "Graphics and speed for each console and each game, and play modes for the TV or a Bluetooth controller.", "tune", () => go("tune")],
   ];
   return [
     h("h1", {}, "What would you like to do?"),
@@ -783,8 +816,14 @@ function viewArtwork(): Node[] {
       toggle(prefs.extras && catalog.screenscraperAvailable, "Use the extras source (ScreenScraper guest mode)", catalog.screenscraperAvailable ? "Adds videos, manuals, 3D boxes and more. No account needed; slower than the free collection." : "Not included in this build yet.", () => (prefs.extras = !prefs.extras), !catalog.screenscraperAvailable),
       toggle(prefs.render3d, "Make 3D boxes myself when none exist", "Renders a 3D case from the 2D cover on your computer.", () => (prefs.render3d = !prefs.render3d)),
       toggle(prefs.metadata, "Update launcher files", "gamelist.xml (backed up first), Pegasus metadata if you don't have one, RetroArch playlists if missing.", () => (prefs.metadata = !prefs.metadata)),
-      toggle(prefs.overwrite, "Replace artwork that already exists", "Off = only fill in what's missing.", () => (prefs.overwrite = !prefs.overwrite)),
     ),
+    h("h2", {}, "Artwork you already have"),
+    seg([["ask", "Ask me (recommended)"], ["keep", "Keep mine"], ["replace", "Replace with RomCrate's"]], prefs.existingArt, (v) => { prefs.existingArt = v as Prefs["existingArt"]; savePrefs(); render(); }),
+    h("div", { class: "desc" }, {
+      ask: "Where a game already has a picture, RomCrate shows yours next to the one it found, and you choose for each game. Nothing of yours changes until you do. Works for your PC folders and the handheld.",
+      keep: "Only fills in what's missing. Pictures you already have are never touched.",
+      replace: "Uses RomCrate's pictures everywhere. Yours are replaced without asking, and no copy is kept — choose “Ask me” if you might want them back.",
+    }[prefs.existingArt]),
   ];
   out.push(...(parts("artwork", [["What to download", what], ["Size and sharpness", quality], ["Regions", regions], ["Options", more]]).filter(Boolean) as Node[]),
     footer("launcher", "scrape", "Continue", chosen.length === 0));
@@ -793,17 +832,18 @@ function viewArtwork(): Node[] {
 
 // ---------------------------------------------------------------- view: scrape
 
-async function startScrape() {
+function scrapeConfig() {
   const l = launcher();
   const preset = catalog.sizePresets.find((p) => p[0] === prefs.size) ?? catalog.sizePresets[1];
-  const config = {
+  return {
     launcher: l.id,
     folder: l.needs_folder ? prefs.folders[l.id] : null,
     kinds: kindsFor(l),
     size_scale: preset[2],
     upscale: prefs.upscale,
     ai_binary: prefs.upscale === "ai" && prefs.aiBinary ? prefs.aiBinary : null,
-    overwrite: prefs.overwrite,
+    overwrite: prefs.existingArt === "replace",
+    ask_existing: prefs.existingArt === "ask",
     prefs: { regions: prefs.regions, fuzzy: true, fuzzy_threshold: 0.92 },
     concurrency: prefs.threads,
     refresh_index: false,
@@ -818,6 +858,11 @@ async function startScrape() {
       ? { platform: "android", perSystem: prefs.emulators, fixExisting: prefs.fixLaunch }
       : { platform: null, perSystem: {}, fixExisting: false },
   };
+}
+
+async function startScrape() {
+  const config = scrapeConfig();
+  hh.active = false;
   Object.assign(run, { running: true, total: selectedGames(), processed: 0, results: [], log: [], summary: null, filter: "all", currentSystem: "" });
   render();
   try {
@@ -840,7 +885,7 @@ function queueRender() {
   renderQueued = true;
   requestAnimationFrame(() => {
     renderQueued = false;
-    if (view === "scrape" || view === "import") render(); else renderNav();
+    if (view === "scrape" || view === "import" || (view === "send" && hh.active)) render(); else renderNav();
   });
 }
 
@@ -865,7 +910,11 @@ function handleEvent(e: any) {
       else run.log.push({ level: e.level, message: e.message });
       break;
     }
-    case "finished": run.running = false; run.summary = e.summary; toast(e.summary.cancelled ? "Scrape stopped" : "All done!"); break;
+    case "finished":
+      run.running = false; run.summary = e.summary; cmp.loaded = false;
+      toast(e.summary.cancelled ? "Scrape stopped" : "All done!");
+      if (hh.active) void hhAfterScrape();
+      break;
   }
   queueRender();
 }
@@ -925,10 +974,104 @@ function viewScrape(): Node[] {
       h("div", { class: "g" }, h("span", { class: `dot ${r.status}` }), r.matched ? nice(r.matched) : r.game),
       h("div", { class: "m" }, r.status === "skipped" ? `${r.method === "hash" ? "✓ identified · " : ""}Already had art` : r.matched ? `${r.method === "hash" ? "✓ identified · " : ""}${r.saved.length} saved` : r.status === "missing" ? "Not in the collections" : r.message ?? ""))))));
 
+  if (s && !hh.active) viewCompare(out);
   if (run.log.length) {
     out.push(h("h2", {}, "Activity"), h("div", { class: "log" }, run.log.slice(-2000).map((l) => h("div", { class: l.level }, l.message))), logButtons());
   }
   return out.filter((x): x is Node => !!x);
+}
+
+// ---------------------------------------------------------------- keep yours or use RomCrate's
+
+interface ReviewItem { systemId: string; game: string; kind: string; existing: string; candidate: string; targets: string[]; remote: string[] }
+interface Kept { place: string; onHandheld: boolean; backup: string }
+interface Batch { id: string; kept: Kept[]; replaced: number; failed: string[] }
+
+const cmp = {
+  items: [] as ReviewItem[], loaded: false, busy: false,
+  /** Indexes where you chose RomCrate's picture. */
+  useNew: new Set<number>(),
+  thumbs: new Map<string, string>(),
+  batches: [] as Batch[], last: null as Batch | null,
+};
+
+const KIND_LABEL: Record<string, string> = { boxart: "Cover", snap: "Screenshot", title: "Title screen", logo: "Logo", box3d: "3D box", mix: "Mix image", fanart: "Fan art", cartridge: "Cartridge", boxback: "Back cover" };
+
+async function cmpLoad() {
+  cmp.items = await invoke<ReviewItem[]>("review_items").catch(() => []);
+  cmp.useNew = new Set(); cmp.loaded = true;
+  cmp.batches = await invoke<Batch[]>("review_batches").catch(() => []);
+  for (const it of cmp.items) for (const p of [it.existing, it.candidate]) {
+    if (!cmp.thumbs.has(p)) invoke<string>("thumbnail", { path: p }).then((d) => { cmp.thumbs.set(p, d); queueRender(); }).catch(() => {});
+  }
+  render();
+}
+
+async function cmpApply() {
+  const chosen = [...cmp.useNew];
+  const onHandheld = cmp.items.some((i) => i.remote.length);
+  if (!confirm(`Use RomCrate's picture for ${chosen.length} game picture${chosen.length === 1 ? "" : "s"}${onHandheld ? " on the handheld" : ""}?\n\nYour current pictures are kept on this computer first, and “Put them back” restores them.`)) return;
+  cmp.busy = true; render();
+  try {
+    cmp.last = await invoke<Batch>("review_apply", { chosen });
+    toast(cmp.last.failed.length ? `${cmp.last.replaced} replaced, ${cmp.last.failed.length} couldn't be — see the log` : `${cmp.last.replaced} replaced. Yours are kept.`);
+  } catch (e) { toast(String(e)); }
+  cmp.busy = false;
+  await cmpLoad();
+}
+
+async function cmpKeepAll() {
+  await invoke("review_dismiss").catch(() => {});
+  toast("Kept all of yours.");
+  await cmpLoad();
+}
+
+async function putBack(b: Batch) {
+  const onHandheld = b.kept.some((k) => k.onHandheld);
+  if (!confirm(`Put back the ${b.kept.length} picture${b.kept.length === 1 ? "" : "s"} you replaced on ${b.id.replace("_", " at ").replace(/(\d\d)(\d\d)(\d\d)$/, "$1:$2")}?${onHandheld ? "\n\nThe handheld needs to be connected." : ""}`)) return;
+  cmp.busy = true; render();
+  try {
+    const n = await invoke<number>("review_put_back", { id: b.id, serial: snd.serial || null });
+    toast(`Put back ${n} picture${n === 1 ? "" : "s"}.`);
+    if (cmp.last?.id === b.id) cmp.last = null;
+  } catch (e) { toast(String(e)); }
+  cmp.busy = false;
+  await cmpLoad();
+}
+
+/** Side-by-side choices, plus earlier replacements you can undo. */
+function viewCompare(out: (Node | null)[]) {
+  if (!cmp.loaded) { void cmpLoad(); return; }
+  const items = cmp.items;
+  if (items.length) {
+    const n = cmp.useNew.size;
+    out.push(h("h2", {}, `You already have art for ${new Set(items.map((i) => i.game)).size} of these games`),
+      h("p", { class: "desc", style: "margin:-4px 0 12px" }, "RomCrate found its own pictures too. Pick the one you want for each — yours stay unless you choose RomCrate's, and replaced ones are kept so you can put them back."),
+      h("div", { class: "row", style: "margin-bottom:12px" },
+        h("button", { class: "btn", disabled: cmp.busy, onclick: () => { cmp.useNew = new Set(items.map((_, i) => i)); render(); } }, "Choose RomCrate's for all"),
+        h("button", { class: "btn", disabled: cmp.busy, onclick: () => { cmp.useNew = new Set(); render(); } }, "Choose mine for all")),
+      h("div", { class: "compare-list" }, items.map((it, i) => {
+        const pick = cmp.useNew.has(i);
+        const pic = (p: string, label: string, on: boolean, choose: () => void) => h("button", { class: `cmp-pic ${on ? "on" : ""}`, onclick: choose, "aria-pressed": String(on) },
+          h("div", { class: "img" }, cmp.thumbs.get(p) ? h("img", { src: cmp.thumbs.get(p)!, alt: "" }) : "…"),
+          h("div", { class: "lbl" }, h("span", { class: "radio" }), label));
+        return h("div", { class: "cmp" },
+          h("div", { class: "cmp-head" }, h("div", { class: "t" }, it.game), h("div", { class: "desc" }, `${KIND_LABEL[it.kind] ?? it.kind}${it.remote.length ? " · on the handheld" : ""}`)),
+          h("div", { class: "cmp-pair" },
+            pic(it.existing, "Keep mine", !pick, () => { cmp.useNew.delete(i); render(); }),
+            pic(it.candidate, "Use RomCrate's", pick, () => { cmp.useNew.add(i); render(); })));
+      })),
+      h("div", { class: "row", style: "margin-top:14px" },
+        h("button", { class: "btn primary big", disabled: !n || cmp.busy, onclick: cmpApply }, cmp.busy ? "Working…" : n ? `Use RomCrate's for ${n}` : "Pick the ones to change"),
+        h("button", { class: "btn", disabled: cmp.busy, onclick: cmpKeepAll }, "Keep all of mine")));
+  }
+  if (cmp.batches.length) {
+    out.push(h("h2", {}, "Pictures you replaced"),
+      h("div", { class: "card toggles" }, cmp.batches.slice(0, 5).map((b) => h("div", { class: "emu-row" },
+        h("div", {}, h("div", { class: "t" }, `${b.kept.length} picture${b.kept.length === 1 ? "" : "s"}${b.kept.some((k) => k.onHandheld) ? " on the handheld" : ""}`), h("div", { class: "desc" }, b.id.replace("_", " at ").replace(/(\d\d)(\d\d)(\d\d)$/, "$1:$2"))),
+        h("span", {}),
+        h("button", { class: "btn", disabled: cmp.busy, onclick: () => putBack(b) }, "Put them back")))));
+  }
 }
 
 async function openOutput() {
@@ -1339,7 +1482,7 @@ interface LadderStep { value: string; label: string }
 interface GameRow { system: string; file: string; name: string; id: string | null; kind: string; label: string; ladder: LadderStep[]; consoleValue: string; ownValue: string | null; suggestion: { value: string; why: string; tested: boolean } | null; note: string | null; settingsFile: string | null; step: string | null }
 
 const tune = {
-  tab: "console" as "console" | "game",
+  tab: "console" as "console" | "game" | "mode",
   games: null as GameRow[] | null, scanning: false, scanPct: 0, filter: "",
   /** file → chosen value (null = console setting); missing = unchanged */
   pick: new Map<string, string | null>(),
@@ -1479,7 +1622,7 @@ function viewGames(out: (Node | null)[]) {
   }
   const n = tune.pick.size;
   out.push(h("div", { class: "row", style: "margin-top:12px" },
-    h("button", { class: "btn primary big", disabled: !n || tune.applying, onclick: gamesApply }, tune.applying ? "Applying…" : `Apply ${n} change${n === 1 ? "" : "s"}`),
+    h("button", { class: "btn primary big", disabled: !n || tune.applying || !osAllowsSettings(), onclick: gamesApply }, tune.applying ? "Applying…" : `Apply ${n} change${n === 1 ? "" : "s"}`),
     n ? h("button", { class: "btn", disabled: tune.applying, onclick: () => { tune.pick = new Map(); render(); } }, "Forget changes") : null,
     h("button", { class: "btn", disabled: tune.applying || tune.scanning, onclick: () => gamesScan() }, "Check again")));
   const ps2 = games.filter((g) => g.kind === "checklist" && prefs.ps2Picks[g.file]);
@@ -1502,7 +1645,12 @@ function viewTune(): Node[] {
   if (!handheldGate(out, "Changing settings on the handheld")) return out.filter((x): x is Node => !!x);
   out.push(h("div", { class: "seg", style: "margin:18px 0 6px" },
     h("button", { class: tune.tab === "console" ? "on" : "", onclick: () => { tune.tab = "console"; render(); } }, "Each console"),
-    h("button", { class: tune.tab === "game" ? "on" : "", onclick: () => { tune.tab = "game"; render(); } }, "Each game")));
+    h("button", { class: tune.tab === "game" ? "on" : "", onclick: () => { tune.tab = "game"; render(); } }, "Each game"),
+    h("button", { class: tune.tab === "mode" ? "on" : "", onclick: () => { tune.tab = "mode"; render(); } }, "Play mode")));
+  if (tune.tab === "mode") {
+    viewPlayMode(out);
+    return out.filter((x): x is Node => !!x);
+  }
   if (tune.tab === "game") {
     out.push(stepH(2, "Your games"));
     viewGames(out);
@@ -1520,6 +1668,24 @@ function viewTune(): Node[] {
     const p = tune.plan;
     out.push(h("div", { class: "banner info", style: "margin-bottom:12px" }, `${p.screens} If you later use a 4K TV, these still work — they just won't use the extra sharpness.`));
     if (!p.consoles.length) out.push(h("div", { class: "card" }, "No consoles found that RomCrate has settings for yet."));
+    planCards(out, p, tune.chosen);
+    const n = tune.chosen.size;
+    out.push(h("div", { class: "row", style: "margin-top:12px" },
+      h("button", { class: "btn primary big", disabled: !n || tune.applying || !osAllowsSettings(), onclick: tuneApply }, tune.applying ? "Applying…" : `Apply to handheld (${n} console${n === 1 ? "" : "s"})`),
+      h("button", { class: "btn", disabled: tune.applying, onclick: tuneCheck }, "Check again"),
+      h("button", { class: "btn", disabled: tune.applying, onclick: tuneUndo }, "Undo RomCrate's changes")),
+      h("div", { class: "hint", style: "margin-top:6px" }, "Close the emulators first? RomCrate does it for you when you apply, so they can't overwrite the new settings. Save your game before applying."));
+  }
+  if (tune.result) {
+    out.push(h("h2", {}, tune.resultKind === "undo" ? "Undo" : "Applied"),
+      h("div", { class: "log" }, tune.result.lines.length ? tune.result.lines.map((l) => h("div", { class: l.startsWith("FAILED") ? "error" : "" }, l)) : h("div", {}, "Nothing needed changing.")),
+      logButtons());
+  }
+  return out.filter((x): x is Node => !!x);
+}
+
+/** One card per console: status, what changes (now → will be, why), steps. */
+function planCards(out: (Node | null)[], p: TunePlan, chosen: Set<string>) {
     for (const c of p.consoles) {
       const [cls, label] = TUNE_BADGE[c.status] ?? ["muted", c.status];
       const names = c.systems.map((id) => SHORT_SYS[id] ?? id.toUpperCase()).join(" / ");
@@ -1528,7 +1694,7 @@ function viewTune(): Node[] {
       const someTested = keys.some((k) => k.tested);
       out.push(h("div", { class: "card tune" },
         h("div", { class: "tune-head" },
-          c.status === "ready" ? h("input", { type: "checkbox", checked: tune.chosen.has(c.id), onchange: (e: Event) => { (e.target as HTMLInputElement).checked ? tune.chosen.add(c.id) : tune.chosen.delete(c.id); render(); } }) : null,
+          c.status === "ready" ? h("input", { type: "checkbox", checked: chosen.has(c.id), onchange: (e: Event) => { (e.target as HTMLInputElement).checked ? chosen.add(c.id) : chosen.delete(c.id); render(); } }) : null,
           h("div", {}, h("div", { class: "t" }, `${names} · ${c.emulator}`),
             h("div", { class: "desc" }, c.status === "ready" || c.status === "already" || c.status === "checklist" ? (allTested ? "✓ Tested on the AYN Odin 2 Portal" : someTested ? "Partly tested on the AYN Odin 2 Portal (marked ✓ below); the rest are suggestions" : "Not tested on a device yet — suggested from the emulator's own docs") : "")),
           h("span", { class: `pill ${cls}` }, label)),
@@ -1543,19 +1709,74 @@ function viewTune(): Node[] {
           return h("li", {}, h("label", {}, h("input", { type: "checkbox", checked: !!prefs.tuneTicks[key], onchange: (e: Event) => { prefs.tuneTicks[key] = (e.target as HTMLInputElement).checked; savePrefs(); } }), " ", st));
         })) : null));
     }
-    const n = tune.chosen.size;
+}
+
+// ---------- play mode
+
+interface ModeChoice { id: string; label: string; desc: string }
+const pm = {
+  choices: null as null | { screens: ModeChoice[]; controllers: ModeChoice[] },
+  current: undefined as undefined | null | [string, string], currentFor: "",
+  plan: null as TunePlan | null, chosen: new Set<string>(), busy: false, result: null as ApplyResult | null,
+};
+
+async function pmLoad() {
+  if (!pm.choices) pm.choices = await invoke<typeof pm.choices>("playmode_choices").catch(() => null);
+  if (snd.serial && pm.currentFor !== snd.serial) {
+    pm.currentFor = snd.serial;
+    pm.current = await invoke<[string, string] | null>("playmode_current", { serial: snd.serial }).catch(() => null);
+  }
+  render();
+}
+
+async function pmCheck() {
+  pm.busy = true; pm.result = null; render();
+  try {
+    pm.plan = await invoke<TunePlan>("playmode_plan", { serial: snd.serial, systems: tuneSystems(), screen: prefs.playScreen, controller: prefs.playController });
+    pm.chosen = new Set(pm.plan.consoles.filter((c) => c.status === "ready").map((c) => c.id));
+  } catch (e) { toast(String(e)); }
+  pm.busy = false; render();
+}
+
+async function pmApply() {
+  if (!confirm("RomCrate will close RetroArch on the handheld before switching the play mode, so it can't overwrite the change.\n\nFinish and save any game that's running first. Continue?")) return;
+  pm.busy = true; render();
+  try {
+    pm.result = await invoke<ApplyResult>("playmode_apply", { ids: [...pm.chosen] });
+    toast(pm.result.failed ? `${pm.result.failed} file(s) couldn't be changed — see below` : "Play mode switched.");
+    pm.currentFor = "";
+  } catch (e) { toast(String(e)); }
+  pm.busy = false; pm.plan = null;
+  await pmLoad();
+}
+
+function viewPlayMode(out: (Node | null)[]) {
+  if (!pm.choices || pm.currentFor !== snd.serial) { void pmLoad(); out.push(h("div", { class: "card" }, "Reading the handheld…")); return; }
+  const c = pm.choices;
+  const name = (list: ModeChoice[], id: string) => list.find((x) => x.id === id)?.label ?? id;
+  out.push(stepH(2, "How you'll play"),
+    h("div", { class: "card" },
+      h("div", { class: "desc", style: "margin-top:0" }, pm.current ? `Now set for: ${name(c.screens, pm.current[0])}, ${name(c.controllers, pm.current[1]).toLowerCase()}.` : "RomCrate hasn't set a play mode on this handheld yet."),
+      h("div", { class: "field" }, h("label", {}, "Screen"),
+        seg(c.screens.map((x) => [x.id, x.label] as [string, string]), prefs.playScreen, (v) => { prefs.playScreen = v; savePrefs(); pm.plan = null; render(); }),
+        h("div", { class: "hint" }, c.screens.find((x) => x.id === prefs.playScreen)?.desc ?? "")),
+      h("div", { class: "field", style: "margin-top:14px" }, h("label", {}, "Controller"),
+        seg(c.controllers.map((x) => [x.id, x.label] as [string, string]), prefs.playController, (v) => { prefs.playController = v; savePrefs(); pm.plan = null; render(); }),
+        h("div", { class: "hint" }, c.controllers.find((x) => x.id === prefs.playController)?.desc ?? "")),
+      h("div", { class: "desc", style: "margin-top:14px" }, "A play mode only changes how quickly buttons register (RetroArch's run-ahead and frame delay, for SNES, NES, Game Boy and GBA). Graphics stay as Each console set them. Switch modes whenever you change how you play."),
+      !pm.plan ? h("div", { class: "row", style: "margin-top:12px" },
+        h("button", { class: "btn primary", disabled: pm.busy, onclick: pmCheck }, pm.busy ? "Looking at the handheld…" : "Check what changes")) : null));
+  if (pm.plan) {
+    out.push(stepH(3, "What changes"));
+    planCards(out, pm.plan, pm.chosen);
+    const n = pm.chosen.size;
     out.push(h("div", { class: "row", style: "margin-top:12px" },
-      h("button", { class: "btn primary big", disabled: !n || tune.applying, onclick: tuneApply }, tune.applying ? "Applying…" : `Apply to handheld (${n} console${n === 1 ? "" : "s"})`),
-      h("button", { class: "btn", disabled: tune.applying, onclick: tuneCheck }, "Check again"),
-      h("button", { class: "btn", disabled: tune.applying, onclick: tuneUndo }, "Undo RomCrate's changes")),
-      h("div", { class: "hint", style: "margin-top:6px" }, "Close the emulators first? RomCrate does it for you when you apply, so they can't overwrite the new settings. Save your game before applying."));
+      h("button", { class: "btn primary big", disabled: !n || pm.busy || !osAllowsSettings(), onclick: pmApply }, pm.busy ? "Switching…" : `Switch to ${name(c.screens, prefs.playScreen)}, ${name(c.controllers, prefs.playController).toLowerCase()}`),
+      h("button", { class: "btn", disabled: pm.busy, onclick: pmCheck }, "Check again"),
+      h("button", { class: "btn", disabled: pm.busy, onclick: tuneUndo }, "Undo RomCrate's changes")),
+      h("div", { class: "hint", style: "margin-top:6px" }, "Undo puts back every emulator setting RomCrate changed, including Each console."));
   }
-  if (tune.result) {
-    out.push(h("h2", {}, tune.resultKind === "undo" ? "Undo" : "Applied"),
-      h("div", { class: "log" }, tune.result.lines.length ? tune.result.lines.map((l) => h("div", { class: l.startsWith("FAILED") ? "error" : "" }, l)) : h("div", {}, "Nothing needed changing.")),
-      logButtons());
-  }
-  return out.filter((x): x is Node => !!x);
+  if (pm.result) out.push(h("h2", {}, "Switched"), h("div", { class: "log" }, pm.result.lines.map((l) => h("div", { class: l.startsWith("FAILED") ? "error" : "" }, l))), logButtons());
 }
 
 // ---------------------------------------------------------------- send to handheld
@@ -1574,7 +1795,51 @@ const snd = {
   running: false, done: 0, total: 0, summary: null as SendSummary | null,
   log: [] as { ok: boolean; message: string }[],
   poll: 0 as number,
+  /** Which device and system each connected handheld is. */
+  identity: {} as Record<string, Identity>,
 };
+
+interface Identity { manufacturer: string; model: string; android: string; os: string; osLabel: string; deviceId: string | null; caution: string | null }
+
+async function loadIdentity(serial: string) {
+  if (snd.identity[serial]) return;
+  try {
+    snd.identity[serial] = await invoke<Identity>("device_identity", { serial });
+  } catch (e) {
+    snd.identity[serial] = { manufacturer: "", model: "", android: "", os: "other", osLabel: "an unknown system", deviceId: null, caution: `RomCrate couldn't read which system this handheld runs (${e}). Sending files is still safe; RomCrate asks before changing any settings.` };
+  }
+  if (view === "send" || view === "tune") render();
+}
+
+/** Settings may be written: the system is one RomCrate knows, or you said it's OK. */
+function osAllowsSettings(): boolean {
+  const id = snd.identity[snd.serial];
+  return !!id && (id.os !== "other" || !!prefs.osOk[snd.serial]);
+}
+
+/** "This looks like…": confirm the detected device, or keep yours. */
+function identityCards(out: (Node | null)[]) {
+  const id = snd.identity[snd.serial];
+  if (!id) { void loadIdentity(snd.serial); return; }
+  const found = id.deviceId ? catalog.devices.find((d) => d.id === id.deviceId) : undefined;
+  const mine = currentDevice();
+  const answered = prefs.deviceAnswered[snd.serial];
+  if (found && found.id !== prefs.device && answered !== prefs.device) {
+    out.push(h("div", { class: "banner" }, h("div", {},
+      h("div", {}, h("b", {}, `This handheld looks like the ${found.name}`), ` (${id.osLabel}). `,
+        mine ? `RomCrate is set up for the ${mine.name}.` : "You haven't picked a device in RomCrate yet."),
+      h("div", { class: "row", style: "margin-top:10px" },
+        h("button", { class: "btn primary", onclick: () => { prefs.deviceAnswered[snd.serial] = found.id; applyDevice(found.id, true); } }, `Use ${found.name}`),
+        mine ? h("button", { class: "btn", onclick: () => { prefs.deviceAnswered[snd.serial] = prefs.device; savePrefs(); render(); } }, `Keep ${mine.name}`) : null))));
+  }
+  if (id.caution) {
+    out.push(h("div", { class: "banner warn" }, h("div", {},
+      h("div", {}, id.caution),
+      h("label", { class: "row", style: "margin-top:10px;gap:8px" },
+        h("input", { type: "checkbox", checked: !!prefs.osOk[snd.serial], onchange: (e: Event) => { prefs.osOk[snd.serial] = (e.target as HTMLInputElement).checked; savePrefs(); render(); } }),
+        "I understand — let RomCrate change emulator settings on this handheld (it still backs up every file first)"))));
+  }
+}
 
 const human = (b: number) => b >= 1073741824 ? `${(b / 1073741824).toFixed(1)} GB` : b >= 1048576 ? `${Math.round(b / 1048576)} MB` : `${Math.ceil(b / 1024)} KB`;
 
@@ -1647,6 +1912,60 @@ function handleSendEvent(e: any) {
   if (view === "send") queueRender(); else renderNav();
 }
 
+// ---------- artwork for games already on the handheld
+
+const hh = {
+  active: false, staging: false, planning: false,
+  found: null as null | { games: number; consoles: string[] },
+};
+
+async function hhStart() {
+  const l = launcher();
+  if (l.id !== "pegasus") { toast("Artwork on the handheld works with Pegasus. Pick Pegasus in Launcher & theme first."); return; }
+  hh.staging = true; hh.found = null; snd.plan = null; snd.summary = null; cmp.items = []; cmp.loaded = true; render();
+  try {
+    const r = await invoke<{ games: number; consoles: string[]; library: Library }>("handheld_stage", { serial: snd.serial });
+    hh.found = { games: r.games, consoles: r.consoles };
+    hh.staging = false;
+    if (!r.games) { render(); return; }
+    hh.active = true;
+    Object.assign(run, { running: true, total: r.games, processed: 0, results: [], log: [], summary: null, filter: "all", currentSystem: "" });
+    render();
+    await invoke("start_scrape", { selected: r.library.systems.map((x) => x.path), config: scrapeConfig(), ssUser: ssUser || null, ssPassword: ssPass || null, handheld: true });
+  } catch (e) {
+    hh.staging = false; hh.active = false; run.running = false; toast(String(e)); render();
+  }
+}
+
+async function hhAfterScrape() {
+  hh.planning = true; queueRender();
+  try {
+    snd.plan = await invoke<SendPlan>("handheld_plan_back");
+    await cmpLoad();
+  } catch (e) { toast(String(e)); }
+  hh.planning = false; render();
+}
+
+function viewHandheldArt(out: (Node | null)[], step = 0) {
+  out.push(step ? stepH(step, "Games already on the handheld") : h("h2", {}, "Games already on the handheld"));
+  if (!hh.active && !hh.staging) {
+    out.push(h("div", { class: "card" },
+      h("div", { class: "desc" }, "Got games on the handheld that aren't on this computer? RomCrate reads their names over the cable, gets their artwork here, and copies only the new pictures and Pegasus files back. The games themselves stay on the handheld."),
+      hh.found && !hh.found.games ? h("div", { class: "banner warn", style: "margin-top:10px" }, "No games found in a ROMs folder on the handheld.") : null,
+      h("div", { class: "row", style: "margin-top:10px" },
+        h("button", { class: "btn", disabled: snd.running || !snd.volumes.length, onclick: hhStart }, "Get artwork for games on the handheld"))));
+    return;
+  }
+  if (hh.staging) { out.push(h("div", { class: "card" }, "Reading the games on the handheld…")); return; }
+  const pct = run.total ? Math.round((run.processed / run.total) * 100) : 0;
+  out.push(h("div", { class: "card" },
+    h("div", { class: "v" }, run.running ? `Getting artwork for ${hh.found?.games ?? 0} games on the handheld` : hh.planning ? "Comparing with the handheld…" : "Artwork ready"),
+    h("div", { class: "progress", style: "margin-top:8px" }, h("div", { style: `width:${run.running ? pct : 100}%` })),
+    h("div", { class: "desc" }, run.running ? `${run.processed} of ${run.total} games` : run.summary ? `${run.results.filter((r) => r.status === "done" || r.status === "partial").length} games got new pictures · ${run.results.filter((r) => r.status === "missing").length} not found` : ""),
+    run.running ? h("button", { class: "btn", style: "margin-top:8px", onclick: () => invoke("cancel_scrape") }, "Stop") : null,
+    !run.running && !hh.planning ? h("button", { class: "btn", style: "margin-top:8px", onclick: () => { hh.active = false; snd.plan = null; cmp.items = []; render(); } }, "Done with handheld artwork") : null));
+}
+
 /** The "USB tool + handheld connected" part shared by Send and Game settings.
  * Adds its cards to `out` and returns true when a handheld is ready. */
 function handheldGate(out: (Node | null)[], purpose: string): boolean {
@@ -1669,9 +1988,10 @@ function handheldGate(out: (Node | null)[], purpose: string): boolean {
   if (ready.length) {
     out.push(h("div", { class: "card" },
       ready.length > 1 ? h("select", { onchange: (e: Event) => { snd.serial = (e.target as HTMLSelectElement).value; snd.volumes = []; snd.plan = null; tune.plan = null; void sendRefresh(); } },
-        ready.map((d) => h("option", { value: d.serial, selected: d.serial === snd.serial }, d.model ?? d.serial))) :
-        h("div", { class: "v" }, `✓ ${ready[0].model ?? ready[0].serial} connected`),
+        ready.map((d) => h("option", { value: d.serial, selected: d.serial === snd.serial }, `${d.model ?? d.serial}${snd.identity[d.serial] ? ` · ${snd.identity[d.serial].osLabel}` : ""}`))) :
+        h("div", { class: "v" }, `✓ ${ready[0].model ?? ready[0].serial} connected${snd.identity[snd.serial] ? ` · ${snd.identity[snd.serial].osLabel}` : ""}`),
       snd.volumes.length ? h("div", { class: "desc", style: "margin-top:6px" }, snd.volumes.map((v) => `${v.label}: ${human(v.freeBytes)} free${v.romsDir ? ` · has ${v.romsDir}/` : ""}`).join("   ·   ")) : h("div", { class: "desc" }, "Reading storage…")));
+    identityCards(out);
     return true;
   }
   out.push(h("div", { class: "card" },
@@ -1684,7 +2004,8 @@ function handheldGate(out: (Node | null)[], purpose: string): boolean {
           h("li", {}, "Settings → System → Developer options → turn on “USB debugging”."),
           h("li", {}, "Plug it in with a USB cable that carries data, and tap “Allow” when asked."),
           h("li", {}, "This screen notices it within a few seconds.")),
-        h("div", { class: "hint" }, "USB debugging only lets this computer copy files and run Android's own commands while you allow it. You can turn it off again afterwards.")),
+        h("div", { class: "hint" }, "USB debugging only lets this computer copy files and run Android's own commands while you allow it. You can turn it off again afterwards."),
+        h("div", { class: "hint", style: "margin-top:8px" }, "Handheld running Linux (AYN Linux, ROCKNIX, Knulli, muOS…)? Those don't have USB debugging, so RomCrate can't reach them over the cable — and won't change anything on them. Put the SD card in this computer instead and choose its ROMs folder in Your games.")),
     snd.error ? h("div", { class: "hint", style: "color:var(--bad);margin-top:8px" }, snd.error) : null));
   return false;
 }
@@ -1700,9 +2021,21 @@ function viewSend(): Node[] {
   }
   // 3. What goes where.
   const systems = selectedSystems();
+  if (hh.active || hh.staging) {
+    viewHandheldArt(out, 2);
+    if (snd.plan && !snd.running) out.push(...sendReady(snd.plan, "new pictures and launcher files to copy"));
+    if (!snd.running && !hh.planning && run.summary) viewCompare(out);
+    sendProgress(out);
+    out.push(logPanelSend());
+    return out.filter((x): x is Node => !!x);
+  }
   out.push(stepH(2, "What goes where"));
   if (!systems.length) {
-    out.push(h("div", { class: "banner warn" }, "Choose your game folders first."), h("button", { class: "btn primary", onclick: () => go("library") }, "Choose game folders"));
+    out.push(h("div", { class: "card" },
+      h("div", { class: "desc", style: "margin-top:0" }, "To send games from this computer, choose your game folders first."),
+      h("button", { class: "btn", style: "margin-top:10px", onclick: () => go("library") }, "Choose game folders")));
+    viewHandheldArt(out);
+    out.push(logPanelSend());
     return out.filter((x): x is Node => !!x);
   }
   out.push(h("div", { class: "card emu-list" }, systems.map((s) => {
@@ -1717,20 +2050,29 @@ function viewSend(): Node[] {
     out.push(h("div", { class: "row", style: "margin-top:12px" }, h("button", { class: "btn primary", disabled: snd.planning || !snd.volumes.length, onclick: planSend }, snd.planning ? "Looking at the handheld…" : "Check what will be copied")));
   // 4. The plan.
   const p = snd.plan;
-  if (p && !snd.running) {
-    const bytes = p.files.reduce((a, f) => a + f.bytes, 0);
-    const full = p.perVolume.filter((v) => !v.fits);
-    out.push(stepH(3, "Ready"),
+  if (p && !snd.running) out.push(...sendReady(p));
+  sendProgress(out);
+  viewHandheldArt(out);
+  out.push(logPanelSend());
+  return out.filter((x): x is Node => !!x);
+}
+
+function sendReady(p: SendPlan, what = ""): Node[] {
+  const bytes = p.files.reduce((a, f) => a + f.bytes, 0);
+  const full = p.perVolume.filter((v) => !v.fits);
+  return [stepH(3, "Ready"),
       h("div", { class: "card" },
-        h("div", { class: "v" }, p.files.length ? `${p.files.length} files to copy (${human(bytes)})` : "Everything is already on the handheld"),
+        h("div", { class: "v" }, p.files.length ? `${p.files.length} ${what || "files to copy"} (${human(bytes)})` : "Everything is already on the handheld"),
         h("div", { class: "desc", style: "margin-top:4px" }, `${p.alreadyThere} already there (skipped)${p.conflicts.length ? ` · ${p.conflicts.length} left alone because a different file with the same name is on the handheld` : ""}`),
         h("ul", { class: "desc", style: "margin:8px 0 0;padding-left:18px" }, p.folders.map(([from, to]) => h("li", {}, `${shortPath(from)}  →  ${to}`))),
         ...p.notes.map((n) => h("div", { class: "hint" }, n)),
         ...full.map((v) => h("div", { class: "banner warn", style: "margin-top:8px" }, `Not enough space on ${v.label}: needs ${human(v.bytes)} plus 200 MB spare, ${human(v.freeBytes)} free. Pick the other storage for some consoles, or free up space.`)),
         h("div", { class: "row", style: "margin-top:12px" },
           h("button", { class: "btn primary big", disabled: !p.files.length || full.length > 0, onclick: startSend }, "Send to handheld"),
-          h("button", { class: "btn", onclick: planSend }, "Check again"))));
-  }
+          hh.active ? null : h("button", { class: "btn", onclick: planSend }, "Check again")))];
+}
+
+function sendProgress(out: (Node | null)[]) {
   if (snd.running || snd.summary) {
     const pct = snd.total ? Math.round((snd.done / snd.total) * 100) : 0;
     out.push(h("h2", {}, snd.running ? "Sending…" : "Done"),
@@ -1740,8 +2082,6 @@ function viewSend(): Node[] {
       snd.running ? h("button", { class: "btn", style: "margin-top:10px", onclick: () => invoke("cancel_scrape") }, "Stop after this file") :
         h("button", { class: "btn", style: "margin-top:10px", onclick: () => { snd.summary = null; render(); } }, "Send more"));
   }
-  out.push(logPanelSend());
-  return out.filter((x): x is Node => !!x);
 }
 
 function logPanelSend(): Node | null {
@@ -1765,6 +2105,7 @@ async function boot() {
   document.getElementById("nav-home")!.addEventListener("click", () => go("home"));
   document.getElementById("nav-device")!.addEventListener("click", () => go("device"));
   view = prefs.device ? "home" : "device";
+  photos = await invoke<Record<string, string>>("device_photos").catch(() => ({}));
   await listen("import-event", (ev) => handleImportEvent(ev.payload));
   await listen("send-event", (ev) => handleSendEvent(ev.payload));
   await listen<{ done: number; total: number | null }>("adb-install-progress", (ev) => { snd.installPct = ev.payload.total ? Math.round((ev.payload.done / ev.payload.total) * 100) : 0; if (view === "send" || view === "tune") render(); });

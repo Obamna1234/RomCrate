@@ -67,6 +67,18 @@ pub fn default_cache_dir() -> PathBuf {
         .join("RomCrate")
 }
 
+/// RomCrate's own kept files (pictures you replaced, pictures to compare):
+/// next to the log, never in the downloads cache that "Clear cache" empties.
+fn keep_dir_of(log: &Path) -> PathBuf {
+    log.parent()
+        .map(|p| p.join("kept"))
+        .unwrap_or_else(|| log.join("kept"))
+}
+
+pub fn keep_dir() -> PathBuf {
+    keep_dir_of(&log_dir())
+}
+
 fn dirs_for(loc: &Location) -> (PathBuf, PathBuf) {
     match &loc.data_dir {
         Some(d) => (d.join("logs"), d.join("downloads")),
@@ -110,9 +122,11 @@ fn set_data_dir_in(file: &Path, new: Option<PathBuf>) -> anyhow::Result<Vec<Stri
         let _ = fs::remove_file(probe);
     }
     let mut notes = Vec::new();
+    let (old_keep, new_keep) = (keep_dir_of(&old_log), keep_dir_of(&new_log));
     for (what, from, to) in [
         ("log", &old_log, &new_log),
         ("downloads", &old_cache, &new_cache),
+        ("kept picture", &old_keep, &new_keep),
     ] {
         if from == to || !from.exists() {
             continue;

@@ -558,7 +558,9 @@ pub fn disc_id<R: Read + Seek>(sys_id: &str, f: &mut R, ext: &str) -> Option<Str
             };
             let head = read_at(f, off, 6)?;
             let id = std::str::from_utf8(&head).ok()?;
-            id.chars().all(|c| c.is_ascii_alphanumeric()).then(|| id.to_string())
+            id.chars()
+                .all(|c| c.is_ascii_alphanumeric())
+                .then(|| id.to_string())
         }
         "psp" if ext == "iso" => {
             let iso = IsoReader::detect(f)?;
