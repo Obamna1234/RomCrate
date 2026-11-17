@@ -210,16 +210,20 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         let file = t.path().join("cfg/location.json");
         let a = t.path().join("A");
-        // Start in A.
-        set_data_dir_in(&file, Some(a.clone())).unwrap();
+        // Start in A (saved directly: moving from the real default folder would
+        // pick up this computer's own RomCrate files).
+        save(&file, &Location { data_dir: Some(a.clone()), log_enabled: true }).unwrap();
         fs::create_dir_all(a.join("logs")).unwrap();
         fs::write(a.join("logs/romcrate-2026-11-16.log"), "hello").unwrap();
         fs::create_dir_all(a.join("downloads/libretro")).unwrap();
         fs::write(a.join("downloads/libretro/snes.json"), "{}").unwrap();
+        fs::create_dir_all(a.join("kept/replaced-artwork")).unwrap();
+        fs::write(a.join("kept/replaced-artwork/old.png"), "png").unwrap();
         // Move to B.
         let b = t.path().join("B");
         let notes = set_data_dir_in(&file, Some(b.clone())).unwrap();
-        assert_eq!(notes.len(), 2, "{notes:?}");
+        assert_eq!(notes.len(), 3, "{notes:?}");
+        assert!(b.join("kept/replaced-artwork/old.png").exists(), "kept pictures move too");
         assert_eq!(
             fs::read_to_string(b.join("logs/romcrate-2026-11-16.log")).unwrap(),
             "hello"
