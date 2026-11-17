@@ -296,7 +296,7 @@ select.input { appearance: none; padding: 8px 34px 8px 12px; background-image: l
 .art .face, .chip-art .face { fill: none; stroke: #8995b0; stroke-width: .9; }
 .art .shoulder, .chip-art .shoulder { fill: #222838; stroke: #8995b0; stroke-width: .9; }
 .art .menu-btn, .chip-art .menu-btn { fill: #8995b0; }
-.art .grille, .chip-art .grille { fill: #6a7590; }
+.art .grille, .chip-art .grille { fill: #7d88a3; }
 .art .q { fill: var(--faint); font: 700 34px var(--display); }
 /* the chosen device (and the one in the sidebar) is drawn in amber */
 .device.on .art :is(.body, .screen, .ctl, .face, .shoulder), .device:hover .art :is(.body, .screen, .ctl, .face, .shoulder),
@@ -396,3 +396,6 @@ select.input { padding-right: 34px !important; }
 h1 + .parts { margin-top: 16px; }
 .brand { padding-bottom: 12px; }
 .device-chip .v { font-size: 14.5px; }
+.art .ring, .chip-art .ring { fill: none; stroke: rgba(137, 149, 176, .35); stroke-width: .6; stroke-dasharray: 1.2 1.2; }
+.art .front-glass, .chip-art .front-glass { fill: none; stroke: rgba(255, 255, 255, .10); stroke-width: .6; }
+.device.on .art .ring, .device:hover .art .ring, .chip-art .ring { stroke: rgba(245, 184, 65, .45); }

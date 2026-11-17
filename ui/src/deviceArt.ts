@@ -7,10 +7,16 @@
 // RetroCatalog, Retro Handhelds, DroiX, TechRadar), checked 17 Nov 2026.
 
 type Ctl =
-  | { k: "stick"; x: number; y: number; r?: number }
+  | { k: "stick"; x: number; y: number; r?: number; ring?: boolean }
   | { k: "dpad"; x: number; y: number; s?: number }
   | { k: "abxy"; x: number; y: number; s?: number }
-  | { k: "pad"; x: number; y: number; w: number; h: number };
+  | { k: "pad"; x: number; y: number; w: number; h: number }
+  /** a small pill button (select / start / view / menu) */
+  | { k: "pill"; x: number; y: number }
+  /** a small round button (home / back / function) */
+  | { k: "dot"; x: number; y: number }
+  /** a speaker grille: a short row of holes */
+  | { k: "grille"; x: number; y: number };
 
 interface Spec {
   /** Body width × height in mm. */
@@ -22,21 +28,11 @@ interface Spec {
   radius?: number;
   /** How far the grips hang below the body (mm). */
   grip?: number;
-  /** Controls, x/y in mm from the body's top-left corner (left side; mirrored for the right). */
+  /** One sheet of glass over the whole front (Portal, Retroid Pocket 5). */
+  glass?: boolean;
+  /** Controls, x/y in mm from the body's top-left corner. Right-side x is measured from the right edge. */
   left: Ctl[]; right: Ctl[];
-  /** Small extra marks: front speakers. */
-  speakers?: "grips" | "sides";
 }
-
-const ODIN_LIKE = (w: number, h: number, inches: number, grip: number, r = 10): Spec => {
-  const side = (w - screenW(inches, [16, 9])) / 2;
-  return {
-    w, h, inches, aspect: [16, 9], body: "grips", grip, radius: r,
-    // Stick above, D-pad below on the left; buttons above, stick below on the right.
-    left: [{ k: "stick", x: side * 0.5, y: h * 0.3, r: 8.5 }, { k: "dpad", x: side * 0.56, y: h * 0.7 }],
-    right: [{ k: "abxy", x: side * 0.5, y: h * 0.3 }, { k: "stick", x: side * 0.56, y: h * 0.7, r: 8.5 }],
-  };
-};
 
 function screenW(inches: number, [a, b]: [number, number]) {
   return inches * 25.4 * (a / Math.hypot(a, b));
@@ -44,47 +40,88 @@ function screenW(inches: number, [a, b]: [number, number]) {
 function screenH(inches: number, [a, b]: [number, number]) {
   return inches * 25.4 * (b / Math.hypot(a, b));
 }
+/** Width of the area beside the screen, and the top edge of the screen. */
+function sideOf(w: number, h: number, inches: number, aspect: [number, number]) {
+  return { side: (w - screenW(inches, aspect)) / 2, sy: (h - screenH(inches, aspect)) / 2 };
+}
 
 const SPECS: Record<string, Spec> = {
-  // 257 × 98.6 mm, 7" 16:9; D-pad bottom left, asymmetric sticks, grips, front speakers.
-  "odin2-portal": { ...ODIN_LIKE(257, 98.6, 7.0, 9, 14), speakers: "sides" },
-  // 225 × 98 mm, 6" 16:9; D-pad under the left stick, buttons above the right stick.
-  odin2: ODIN_LIKE(225, 98, 6.0, 8),
-  // 198 × 86 mm, 5"; Vita-like rounded ends, stick above the D-pad.
-  "odin2-mini": (() => {
-    const s = ODIN_LIKE(198, 86, 5.0, 0);
-    return { ...s, body: "stadium" as const, grip: 0, left: s.left.map((c) => ({ ...c, x: (c as { x: number }).x + 3 })) as Ctl[], right: s.right.map((c) => ({ ...c, x: (c as { x: number }).x + 3 })) as Ctl[] };
-  })(),
-  // 199 × 78 mm, 5.5" 16:9; D-pad upper left, left stick to the right of and below it.
-  "retroid-pocket-5": (() => {
-    const w = 199, h = 78, side = (w - screenW(5.5, [16, 9])) / 2;
+  // AYN Odin 2 Portal — 257 × 98.6 mm, 7" 16:9 OLED under one curved sheet of glass.
+  // Left stick above the D-pad ("D-pad bottom left"), buttons above the right stick,
+  // Select/Start and Home/Back at the screen's corners, front-facing speakers, rear grips.
+  "odin2-portal": (() => {
+    const w = 257, h = 98.6, { side, sy } = sideOf(w, h, 7, [16, 9]);
+    const corner = (y: number): Ctl => ({ k: "pill", x: side - 6.5, y });
     return {
-      w, h, inches: 5.5, aspect: [16, 9], body: "rect", radius: 22,
-      left: [{ k: "dpad", x: side * 0.42, y: h * 0.33 }, { k: "stick", x: side * 0.72, y: h * 0.74, r: 7.5 }],
-      right: [{ k: "abxy", x: side * 0.42, y: h * 0.33 }, { k: "stick", x: side * 0.72, y: h * 0.74, r: 7.5 }],
-    } satisfies Spec;
+      w, h, inches: 7, aspect: [16, 9], body: "grips", grip: 9, radius: 15, glass: true,
+      left: [{ k: "stick", x: 24, y: 27, r: 9, ring: true }, { k: "dpad", x: 26, y: 68 }, corner(sy + 5), { k: "dot", x: side - 6.5, y: h - sy - 5 }, { k: "grille", x: 26, y: 89 }],
+      right: [{ k: "abxy", x: 24, y: 27 }, { k: "stick", x: 26, y: 68, r: 9, ring: true }, corner(sy + 5), { k: "dot", x: side - 6.5, y: h - sy - 5 }, { k: "grille", x: 26, y: 89 }],
+    };
   })(),
-  // 223 × 90 mm, 5.48" 16:9; offset sticks with the D-pad at the bottom, grips, speakers at the grips.
-  "anbernic-rg556": { ...ODIN_LIKE(223, 90, 5.48, 11, 12), speakers: "grips" },
-  // RG35XX H: 145 × 69 mm, 3.5" 4:3; D-pad and buttons on top, two small sticks below.
+  // AYN Odin 2 — 225 × 98 mm, 6" 16:9. D-pad under the left stick, buttons above the right
+  // stick, RGB rings round the sticks, Select/Start top corners, Home/Back bottom corners,
+  // stereo speakers along the lower edge, big rear grips.
+  odin2: (() => {
+    const w = 225, h = 98, { side, sy } = sideOf(w, h, 6, [16, 9]);
+    return {
+      w, h, inches: 6, aspect: [16, 9], body: "grips", grip: 10, radius: 11,
+      left: [{ k: "stick", x: 23, y: 29, r: 9, ring: true }, { k: "dpad", x: 24, y: 68 }, { k: "pill", x: side - 6, y: sy + 4 }, { k: "dot", x: side - 6, y: h - sy - 4 }, { k: "grille", x: 23, y: 91 }],
+      right: [{ k: "abxy", x: 23, y: 29 }, { k: "stick", x: 24, y: 68, r: 9, ring: true }, { k: "pill", x: side - 6, y: sy + 4 }, { k: "dot", x: side - 6, y: h - sy - 4 }, { k: "grille", x: 23, y: 91 }],
+    };
+  })(),
+  // AYN Odin 2 Mini — 198 × 86 mm, 5". Vita-like rounded ends and a flat back (no grips);
+  // stick above the D-pad on the left, buttons above the stick on the right.
+  "odin2-mini": (() => {
+    const w = 198, h = 86, { side, sy } = sideOf(w, h, 5, [16, 9]);
+    return {
+      w, h, inches: 5, aspect: [16, 9], body: "stadium",
+      left: [{ k: "stick", x: 25, y: 27, r: 8 }, { k: "dpad", x: 26, y: 60, s: 16 }, { k: "pill", x: side - 5, y: sy + 4 }, { k: "dot", x: side - 5, y: h - sy - 4 }],
+      right: [{ k: "abxy", x: 25, y: 27, s: 7 }, { k: "stick", x: 26, y: 60, r: 8 }, { k: "pill", x: side - 5, y: sy + 4 }, { k: "dot", x: side - 5, y: h - sy - 4 }],
+    };
+  })(),
+  // Retroid Pocket 5 — 199 × 78.5 mm, 5.5" 16:9 OLED under one sheet of glass. D-pad up top
+  // on the left with the stick inboard and lower; buttons up top on the right with the stick
+  // inboard and lower. Speakers fire downwards, so none on the front.
+  "retroid-pocket-5": (() => {
+    const w = 199, h = 78.5;
+    return {
+      w, h, inches: 5.5, aspect: [16, 9], body: "rect", radius: 20, glass: true,
+      left: [{ k: "dpad", x: 16, y: 24, s: 16 }, { k: "stick", x: 27, y: 56, r: 7 }, { k: "pill", x: 12, y: 70 }],
+      right: [{ k: "abxy", x: 16, y: 24, s: 6.8 }, { k: "stick", x: 27, y: 56, r: 7 }, { k: "pill", x: 12, y: 70 }],
+    };
+  })(),
+  // Anbernic RG556 — 223 × 90 mm, 5.48" 16:9 OLED. Small Switch-style sticks: left stick above
+  // the D-pad, buttons above the right stick. Function/Return under the D-pad, Select/Start
+  // under the right stick. Large hand grips with the speakers at their base.
+  "anbernic-rg556": (() => {
+    const w = 223, h = 90;
+    return {
+      w, h, inches: 5.48, aspect: [16, 9], body: "grips", grip: 14, radius: 12,
+      left: [{ k: "stick", x: 25, y: 25, r: 7.5 }, { k: "dpad", x: 27, y: 58, s: 17 }, { k: "dot", x: 20, y: 80 }, { k: "dot", x: 33, y: 80 }, { k: "grille", x: 22, y: 98 }],
+      right: [{ k: "abxy", x: 25, y: 25 }, { k: "stick", x: 27, y: 58, r: 7.5 }, { k: "pill", x: 20, y: 80 }, { k: "pill", x: 33, y: 80 }, { k: "grille", x: 22, y: 98 }],
+    };
+  })(),
+  // Anbernic RG35XX H — 145 × 69 mm, 3.5" 4:3. D-pad top left, buttons top right, small sticks
+  // set into the bottom corners, Select left of the screen and Start right of it.
   "anbernic-h700": (() => {
-    const w = 145, h = 69, side = (w - screenW(3.5, [4, 3])) / 2;
+    const w = 145, h = 69, { side } = sideOf(w, h, 3.5, [4, 3]);
     return {
       w, h, inches: 3.5, aspect: [4, 3], body: "rect", radius: 7,
-      left: [{ k: "dpad", x: side * 0.45, y: h * 0.3, s: 15 }, { k: "stick", x: side * 0.6, y: h * 0.76, r: 5.5 }],
-      right: [{ k: "abxy", x: side * 0.45, y: h * 0.3, s: 6.5 }, { k: "stick", x: side * 0.6, y: h * 0.76, r: 5.5 }],
-    } satisfies Spec;
+      left: [{ k: "dpad", x: 17, y: 22, s: 15 }, { k: "stick", x: 18, y: 52, r: 6 }, { k: "pill", x: side - 6, y: 40 }],
+      right: [{ k: "abxy", x: 17, y: 22, s: 6.2 }, { k: "stick", x: 18, y: 52, r: 6 }, { k: "pill", x: side - 6, y: 40 }],
+    };
   })(),
-  // 298 × 117 mm, 7" 16:10; D-pad and buttons on the outside, sticks inside at the top, trackpads below.
+  // Steam Deck — 298 × 117 mm, 7" 16:10. D-pad and buttons on the outside, sticks inboard at
+  // the top, square trackpads below them, View/Menu above, Steam and Quick Access below.
   "steam-deck": (() => {
-    const w = 298, h = 117, side = (w - screenW(7.0, [16, 10])) / 2;
+    const w = 298, h = 117;
     return {
-      w, h, inches: 7.0, aspect: [16, 10], body: "grips", grip: 12, radius: 16,
-      left: [{ k: "dpad", x: side * 0.3, y: h * 0.36 }, { k: "stick", x: side * 0.66, y: h * 0.25, r: 10 },
-        { k: "pad", x: side * 0.64, y: h * 0.68, w: 33, h: 33 }],
-      right: [{ k: "abxy", x: side * 0.3, y: h * 0.36 }, { k: "stick", x: side * 0.66, y: h * 0.25, r: 10 },
-        { k: "pad", x: side * 0.64, y: h * 0.68, w: 33, h: 33 }],
-    } satisfies Spec;
+      w, h, inches: 7, aspect: [16, 10], body: "grips", grip: 8, radius: 18,
+      left: [{ k: "dpad", x: 21, y: 36, s: 20 }, { k: "pill", x: 35, y: 13 }, { k: "stick", x: 53, y: 30, r: 10.5 },
+        { k: "pad", x: 51, y: 81, w: 33, h: 33 }, { k: "dot", x: 66, y: 107 }],
+      right: [{ k: "abxy", x: 21, y: 36, s: 8 }, { k: "pill", x: 35, y: 13 }, { k: "stick", x: 53, y: 30, r: 10.5 },
+        { k: "pad", x: 51, y: 81, w: 33, h: 33 }, { k: "dot", x: 66, y: 107 }],
+    };
   })(),
 };
 
@@ -112,8 +149,12 @@ function control(c: Ctl, mirrorW: number | null): string {
   switch (c.k) {
     case "stick": {
       const r = c.r ?? 8;
-      return `<circle class="ctl" cx="${X(c.x)}" cy="${c.y}" r="${r}"/><circle class="ctl-cap" cx="${X(c.x)}" cy="${c.y}" r="${r * 0.62}"/>`;
+      const ring = c.ring ? `<circle class="ring" cx="${X(c.x)}" cy="${c.y}" r="${r + 1.8}"/>` : "";
+      return `${ring}<circle class="ctl" cx="${X(c.x)}" cy="${c.y}" r="${r}"/><circle class="ctl-cap" cx="${X(c.x)}" cy="${c.y}" r="${r * 0.62}"/>`;
     }
+    case "pill": return `<rect class="menu-btn" x="${X(c.x) - 2.4}" y="${c.y - 1.1}" width="4.8" height="2.2" rx="1.1"/>`;
+    case "dot": return `<circle class="menu-btn" cx="${X(c.x)}" cy="${c.y}" r="1.7"/>`;
+    case "grille": return [-4, -2, 0, 2, 4].map((d) => `<circle class="grille" cx="${X(c.x) + d}" cy="${c.y}" r="0.75"/>`).join("");
     case "dpad": {
       const s = c.s ?? 18, a = s / 2, t = s / 6;
       const x = X(c.x), y = c.y;
@@ -135,13 +176,10 @@ function handheld(s: Spec, id: string): string {
   const sw = screenW(s.inches, s.aspect), sh = screenH(s.inches, s.aspect);
   const sx = (s.w - sw) / 2, sy = (s.h - sh) / 2;
   const ox = (FRAME_W - s.w) / 2, oy = (FRAME_H - s.h - (s.grip ?? 0)) / 2 + 2;
-  const shoulders = `<rect class="shoulder" x="${s.w * 0.06}" y="-2.6" width="${s.w * 0.17}" height="4" rx="2"/><rect class="shoulder" x="${s.w * 0.77}" y="-2.6" width="${s.w * 0.17}" height="4" rx="2"/>`;
-  const dots = (cx: number, cy: number) => [-3, 0, 3].map((d) => `<circle class="grille" cx="${cx + d}" cy="${cy}" r="0.9"/>`).join("");
-  let speakers = "";
-  if (s.speakers === "grips") speakers = dots(s.w * 0.12, s.h + (s.grip ?? 0) * 0.55) + dots(s.w * 0.88, s.h + (s.grip ?? 0) * 0.55);
-  if (s.speakers === "sides") speakers = dots(sx * 0.5, s.h * 0.92) + dots(s.w - sx * 0.5, s.h * 0.92);
-  // Start / select beside the screen's top corners.
-  const menu = `<rect class="menu-btn" x="${sx - 7}" y="${sy + 2}" width="4" height="2" rx="1"/><rect class="menu-btn" x="${s.w - sx + 3}" y="${sy + 2}" width="4" height="2" rx="1"/>`;
+  // Shoulder buttons sit on the flat part of the top edge, clear of rounded corners.
+  const corner = s.body === "stadium" ? s.h / 2 : (s.radius ?? 10);
+  const sx0 = Math.max(s.w * 0.06, corner * 0.8), sw0 = s.w * 0.17;
+  const shoulders = `<rect class="shoulder" x="${sx0}" y="-2.6" width="${sw0}" height="4" rx="2"/><rect class="shoulder" x="${s.w - sx0 - sw0}" y="-2.6" width="${sw0}" height="4" rx="2"/>`;
   const g = `rc-${id}-${Math.random().toString(36).slice(2, 7)}`;
   const bottom = s.h + (s.grip ?? 0);
   return `<svg viewBox="0 0 ${FRAME_W} ${FRAME_H}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -154,10 +192,10 @@ function handheld(s: Spec, id: string): string {
     <ellipse class="floor" cx="${s.w / 2}" cy="${bottom + 3}" rx="${s.w * 0.42}" ry="3"/>
     ${shoulders}
     <g class="body" style="fill:url(#${g})">${outline(s)}</g>
+    ${s.glass ? `<rect class="front-glass" x="2.2" y="2.2" width="${s.w - 4.4}" height="${s.h - 4.4}" rx="${Math.max(2, (s.radius ?? 10) - 2.2)}"/>` : ""}
     <rect class="glass" x="${sx - 2.5}" y="${sy - 2.5}" width="${sw + 5}" height="${sh + 5}" rx="3.5"/>
     <rect class="screen" x="${sx}" y="${sy}" width="${sw}" height="${sh}" rx="2"/>
     <rect class="glow" x="${sx + 2}" y="${sy + 2}" width="${sw - 4}" height="${sh - 4}" rx="1.5"/>
-    ${menu}${speakers}
     ${s.left.map((c) => control(c, null)).join("")}
     ${s.right.map((c) => control(c, s.w)).join("")}
   </g></svg>`;
