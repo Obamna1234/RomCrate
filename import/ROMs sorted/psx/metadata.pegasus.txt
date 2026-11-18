@@ -1,0 +1,16 @@
+# Created by RomCrate. Edit freely — RomCrate never overwrites this file.
+collection: PlayStation
+shortname: psx
+extensions: ccd, chd, cue, ecm, img, iso, m3u, mds, pbp
+# Add how Pegasus should start these games, for example:
+# launch: retroarch -L "/path/to/core" "{file.path}"
+
+game: Big Game
+file: Big Game.m3u
+
+game: Crash Bandicoot
+file: Crash Bandicoot (USA).chd
+
+game: Crash Bandicoot
+file: My Game.cue
+

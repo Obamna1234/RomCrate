@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<gameList>
+	<game>
+		<path>./Metal Gear Solid (USA) (Disc 1).cue</path>
+		<name>Metal Gear Solid</name>
+		<desc>Metal Gear Solid follows Solid Snake, a soldier who infiltrates a nuclear weapons facility to neutralize the terrorist threat from FOXHOUND, a renegade special forces unit. Snake must liberate two hostages, the head of DARPA and the president of a major arms manufacturer, confront the terrorists, and stop them from launching a nuclear strike.
+
+Note: For those who don&apos;t have the box art of the back, this game uses a security feature of the time of telling you to use the station number on the back of the box. That radio frequency is &quot;140.15&quot;</desc>
+		<releasedate>19980903T000000</releasedate>
+		<developer>Konami Computer Entertainment Japan</developer>
+		<publisher>Konami</publisher>
+		<genre>Shooter, Stealth</genre>
+		<players>1</players>
+		<rating>0.94</rating>
+	</game>
+	<game>
+		<path>./Final Fantasy VII (USA).m3u</path>
+		<name>Final Fantasy VII</name>
+		<desc>Mako—the discovery of this natural resource drawn directly from the planet’s life force marked the dawn of a new era, and now the energy sustains the lives of people across the world. However, the Shinra Company has monopolized Mako production, and in doing so established a powerful hegemony--its influence reaching the far corners of the globe.
+
+Cloud, a former member of Shinra&apos;s military organization, SOLDIER, joins the anti-Shinra resistance group AVALANCHE, despite caring little for their motives. During one of the group’s attempts to stop the company, they learn of the return of Sephiroth, Cloud’s nemesis, and that with his reemergence, the planet is in greater danger than anyone had expected. With the fate of the world riding on their success, Cloud and his allies set out to quell this deadly threat.
+
+Experience the game that popularized the JRPG in the West and propelled Final Fantasy to become the quintessential RPG franchise across the globe and in the video game history.</desc>
+		<releasedate>19970131T000000</releasedate>
+		<developer>Square</developer>
+		<publisher>Sony Computer Entertainment Europe</publisher>
+		<genre>Role-Playing</genre>
+		<players>1</players>
+		<rating>0.92</rating>
+	</game>
+	<game>
+		<path>./Tony Hawk&apos;s Pro Skater 2 (USA).chd</path>
+		<name>Tony Hawk&apos;s Pro Skater 2</name>
+		<desc>Tony Hawk&apos;s Pro Skater 2 features the series&apos; trademark open-ended gameplay, in which the player (playing as a professional skateboarder) completes a number of tasks which result in cash rewards. With money gained, the player can then purchase skill improvements and better skateboards. THPS2 was also the first game in the series to introduce the manual, a skateboarding trick where the performer balances on two wheels. This enables players to string together trick combos. The game also introduced the Noseslide, Tailslide, Bluntslide, Nosebluntside, Feeble, and Overcrook grinds. It was also the first of the Pro Skater games to feature Create-a-Skater and Park Editor features, now staples in the series.</desc>
+		<releasedate>20000902T000000</releasedate>
+		<developer>Neversoft Entertainment</developer>
+		<publisher>Activision</publisher>
+		<genre>Sports</genre>
+		<players>2</players>
+		<rating>0.90</rating>
+	</game>
+	<game>
+		<path>./Crash Bandicoot (USA).chd</path>
+		<name>Crash Bandicoot</name>
+		<desc>Experience the game that revolutionized 3D platforming on Playstation! When Dr. Neo Cortex&apos;s plan to use Crash Bandicoot as part of his world domination army fails, Crash manages to escape but in the confusion leaves his girlfriend Tanya behind. Now washed up on N. Sanity Beach, Crash teams up with ancient spirit Aku-Aku in order to fight his way back to Cortex&apos;s lair in order to save Tanya from the same fate Crash narrowly avoided. With 32 levels of 3D platforming mayhem and gems to collect don&apos;t expect any mercy.</desc>
+		<releasedate>19960831T000000</releasedate>
+		<developer>Naughty Dog</developer>
+		<publisher>Sony Computer Entertainment</publisher>
+		<genre>Action, Platform</genre>
+		<players>1</players>
+		<rating>0.85</rating>
+	</game>
+	<game>
+		<path>./Spyro the Dragon (USA).chd</path>
+		<name>Spyro the Dragon</name>
+		<desc>He&apos;s cute. He&apos;s purple. A nasty burp could send those in his vicinity to the burn unit. Allow us to introduce you to Spyro the Dragon. In his debut adventure, Spyro must free his fellow fire-breathers from their crystalline prisons that are located across six worlds. He&apos;ll have to run, jump, glide, walk, roll, and fly his way through each of the 35 levels. And when things get physical, he can use a number of attacks on enemies, including fireballs, charge attacks, and superflames.</desc>
+		<releasedate>19980910T000000</releasedate>
+		<developer>Insomniac Games</developer>
+		<publisher>Sony Computer Entertainment</publisher>
+		<genre>Action, Platform</genre>
+		<players>1</players>
+		<rating>0.85</rating>
+	</game>
+</gameList>

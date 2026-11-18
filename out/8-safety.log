@@ -1,0 +1,60 @@
+(7z: yes; symlink: yes)
+PASS  the folder has a path over 260 characters (353)
+PASS  preview only: nothing changes
+Import into /Users/runner/work/_temp/safety/ROMs
+  Game Boy Advance                      2 games       1 KB   → gba/
+  NES / Famicom                         4 games      65 KB   → nes/
+
+  Deep Game With A Long Name.gba  [Game Boy Advance cartridge header]
+      → gba/Deep Game With A Long Name.gba
+  Read Only Game.gba  [Game Boy Advance cartridge header]
+      → gba/Read Only Game.gba
+  Same Name.nes  [NES cartridge header]
+      → nes/Same Name.nes
+  Same Name.nes  [NES cartridge header]
+      → nes/Same Name (2).nes
+      ! Another file in this import is also called "Same Name.nes" — this one becomes "Same Name (2).nes" so both are kept
+  Spïel 🎮 Ünïcødé.nes  [NES cartridge header]
+      → nes/Spïel 🎮 Ünïcødé.nes
+  Zipped Game.zip  [NES cartridge header]
+      → nes/Zipped Game.zip
+  CHD Game.chd  [Couldn't tell which console this is for]
+      ? console unknown — use --assign "name=console" or --skip
+  Seven Game.7z  [Couldn't tell which console this is for]
+      ? console unknown — use --assign "name=console" or --skip
+
+Needs 0 KB on the destination drive; 96.0 GB free.
+  ✓ Moved → gba/Deep Game With A Long Name.gba
+  ✓ Moved → gba/Read Only Game.gba
+  ✓ Moved → nes/Same Name.nes
+  ✓ Moved → nes/Same Name (2).nes
+  ✓ Moved → nes/Spïel 🎮 Ünïcødé.nes
+  ✓ Moved → nes/Zipped Game.zip
+
+Done: 6 imported, 0 already there, 2 skipped, 0 failed (66 KB).
+  26%
+  50%
+  75%
+  100%
+
+PASS  move ran with nothing failed
+PASS  no file lost in the move []
+PASS  games arrived in the ROMs folder
+PASS  both different 'Same Name.nes' files survive
+PASS  the file the symlink points to (outside the folder) is untouched
+PASS  no half-written files
+Undid 2026-11-18_210628.109: 6 moved back, 0 copies removed, 0 left as they are
+
+PASS  undo ran
+PASS  after undo the messy folder is exactly as it was
+PASS  after undo the ROMs folder holds no games []
+PASS  outside file still untouched
+PASS  killed halfway: a half-written .part file is left (as expected)
+PASS  killed halfway: no partial file under the real name
+Huge Game.gba: put back as it was (0 moved back, 1 partial copies removed, 0 left as they are)
+
+PASS  import-recover rolls back the cut-off game
+PASS  after recovery: no half-written leftovers
+PASS  after recovery: the original is whole
+
+all passed

@@ -1,0 +1,5 @@
+Downloading Android's USB tool (platform-tools) from Google…
+By downloading you accept Google's terms: https://developer.android.com/tools/releases/platform-tools
+Checksum matches Google's list. Installed: /Users/runner/Library/Caches/RomCrate/tools/platform-tools/adb
+Found (romcrate): /Users/runner/Library/Caches/RomCrate/tools/platform-tools/adb
+Android Debug Bridge version 1.0.41

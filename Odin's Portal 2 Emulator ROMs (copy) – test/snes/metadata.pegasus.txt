@@ -1,0 +1,137 @@
+# Created by RomCrate. Edit freely — RomCrate never overwrites this file.
+collection: Super Nintendo / Super Famicom
+shortname: snes
+extensions: 7z, bs, fig, sfc, smc, swc, zip
+# Launch line for RetroArch (Play Store) · Snes9x core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/snes9x_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Nintendo - SNES / SFC (Snes9x - Current)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.
+
+game: Chrono Trigger
+file: Chrono Trigger (USA).sfc
+developer: Square
+publisher: Squaresoft
+genre: Role-Playing
+players: 1
+release: 1995-03-11
+rating: 95%
+description:
+  The millennium. A portal is opened. The chain of time is broken. A young man is transported into the past, altering the course of history and the outcome of the future. He has to find his way home, but first he must travel to the outer edges of time to repair the world's chronology. On the way he encounters strange friends and foes, utilizes incredible devices and vehicles, and penetrates and neutralizes the fortresses of the past, present, and future. A paradox has been created. If he does not restore the order of time, nothing will ever be the same. He is the one who will become a hero. He is Crono.
+
+game: Donkey Kong Country 2: Diddy's Kong Quest
+file: Donkey Kong Country 2 - Diddy's Kong Quest (USA) (En,Fr) (Rev 1).sfc
+developer: Rare
+publisher: Nintendo
+genre: Platform
+players: 2
+release: 1995-11-21
+rating: 92%
+description:
+  Okay kid, wipe that drool off your chin and listen up if you really want to learn something about this game. Sure, it's got newfangled computer graphics and what Diddy calls stereo sound that "rocks heavily and with little resistance!" BUT, the game play? Well, they FINALLY added some proper challenge to the game - a snap for me of course. AND THE STORY? You sure ask a lot of questions, kid! Kaptain K. Rool and his cruelest cut-throat Kremlings have kidnapped that flea-bitten ape Donkey Kong. I figured I'd rescue him when the little pip-squeak DIDDY pops up along with his girlfriend, and they head off fixin' to prove themselves heroes or something. Come to think of it, I haven't laid eyes on those two for quite a while. I just may have to help them out after all!
+
+game: EarthBound
+file: Earthbound.sfc
+developer: HAL Laboratory
+publisher: Nintendo
+genre: Role-Playing
+players: 1
+release: 1994-08-27
+rating: 93%
+description:
+  In the year 199X, in the village of Onett, on the continent of Eagleland...
+  .
+  Young Ness was asleep one night when a loud crashing noise awoke him suddenly. As he rushes out of bed and up to a nearby hill, he encounters a strange meteor, carrying a single passenger: a mysterious insect-like being named Buzz Buzz. Buzz Buzz tells him that in the future, an evil alien being known as Giygas has conquered the world, and the only one who can stop him are four young kids: three boys and a girl. Ness, of course, is one of the chosen ones, and he must find the other three children: Paula, a young girl with remarkable psychic powers, Jeff, a mechanical genius, and Poo, the young Prince of Dahlaam. Together, these four friends have the power to defeat Giygas and save the world from his chaotic reign!
+  .
+  EarthBound is a sequel to Mother. It is a top-down role-playing game in which the heroes travel around Eagleland and various other, exotic countries, trying to end Giygas' evil influence.
+  .
+  On the way, Ness and his friends will encounter a lot of enemies and battle them in turn-based combat. Unlike in the previous game, enemies are visibly walking on the screen. Each turn, each of the characters in the party can attack with their weapons, use a special ability (some characters have powerful psychic powers that can hurt enemies, heal comrades and more; some also have some other, unique special powers), use an item or try and escape.
+  .
+  The game features "rolling HP meters" - when a character is dealt damage, it's not all taken away from his HP right away, but instead his HP decreases slowly; if the combat is ended quickly, even a massively damaging attack can leave a character with only minor injuries. By winning battles, characters receive experience and thus become stronger. If the player-controlled characters are strong enough, weak enemies will escape from them instead of trying to attack; when chased down, they will be defeated instantly.
+  .
+  Saving the game is done by finding a telephone and calling Ness' father. When the heroes defeat enemies, Ness' bank account receives money, which can be then retrieved from ATM machines throughout the game and spent in shops to buy better equipment or useful items.
+
+game: The Legend of Zelda: A Link to the Past
+file: Legend of Zelda, The - A Link to the Past (USA).sfc
+developer: Nintendo EAD
+publisher: Nintendo
+genre: Action, Adventure
+players: 1
+release: 1991-11-21
+rating: 95%
+description:
+  Recently, famine and drought have plagued Hyrule. When all seemed lost, a mysterious wizard, Agahnim, appeared and stopped these strange happenings from occurring. But there is talk that Agahnim now rules the country with his magic, behind the scenes. And then, one night, the Princess of Hyrule, Zelda, calls out for help - and the one who hears her pleas is a young lad named Link.
+  .
+  The Legend of Zelda: A Link to the Past is a top-down action game with puzzle-solving elements (similar to the original Legend of Zelda). Players assume the role of Link, and their goal is to rescue Princess Zelda and save the land of Hyrule. All combat in the game is action-oriented - the player can make the protagonist swing the sword at enemies with a press of a button, or spin the sword around for a more powerful attack by holding down the button until it is charged.
+  .
+  Progression through the game is done by conquering a series of dungeons - each dungeon has its own special item associated with it, such as the hookshot (which latches onto a far-off object and pulls Link across) or the hammer (which can be used to flatten objects in your way). Most of these dungeons are rendered impassable until the dungeon's particular item is acquired; from there, the rest of the dungeon becomes accessible due to Link's latest new ability. The bosses of each dungeon are also themed to that level's particular item.
+  .
+  Link starts out with only three units of health; however, these can be increased by defeating dungeon bosses, which give one additional heart container, or by finding four 'pieces of heart'; which can be given for anything from passing a small trial to winning a mini-game. Some of Link's items also use magic - this can be refilled with collectible green magic pots. After defeating the initial three dungeons, Link gains access to the Dark World - many puzzles and difficulties come from alternating between the Light World (Hyrule) and the Dark World to make his way past previously impassable obstacles.
+
+game: Street Fighter II Turbo
+file: Street Fighter II Turbo (U) [!].smc
+developer: Capcom
+publisher: Capcom
+genre: Fighting
+players: 2
+release: 1993-07-10
+rating: 91%
+description:
+  They're back and they're badder than ever! Faster, stronger and with all new moves, twelve of the greatest fighters from across the globe are ready to do battle! Choose your champion and get ready for the big brawl as they try to earn the right to battle M. Bison for the title. And just when you think you've mastered it all, crank it up a notch and go TURBO!
+
+game: Super Mario Kart
+file: Super Mario Kart (USA).zip
+developer: Nintendo EAD
+publisher: Nintendo
+genre: Racing
+players: 2
+release: 1992-08-27
+rating: 87%
+description:
+  The Super Mario GoKart Park is open for tons of racing fun!  Hit the track with Mario, Luigi, Yoshi and the Princess.  Get tough and lock fenders with Donkey Kong, Jr. and Bowser.  Even Toad and Koopa Troopa will mix it up in an all-out quest for the Gold Cup!  Race head-to-head with a friend or challenge the computer in great, split-screen, Mode 7 graphics.
+  .
+  Feel like a bit less speed and a lot more strategy?  Take a crack at the Battle Mode!  In four different maze-like courses you’ll use Koopa Shells, Banana Peels, Super Stars and other wacky weapons to burst your opponent's target balloons and triumph!
+  .
+  * 2 games in 1 - Mario Grand Prix and Battle Mode
+  * 8  Familiar Characters
+  * 20 Different Tracks
+  * 3 Different Skill Levels
+  * Battery-backed memory saves your best times!
+
+game: Super Mario World
+file: Super Mario World (USA).sfc
+developer: Nintendo EAD
+publisher: Nintendo
+genre: Platform
+players: 2
+release: 1990-11-21
+rating: 95%
+description:
+  Mario is having a vacation in Dinosaur Land when he learns that Princess Peach Toadstool has been kidnapped by the evil King Koopa Bowser. When Mario starts searching for her he finds a giant egg with a dinosaur named Yoshi hatching out of it. Yoshi tells Mario that his fellow dinosaurs have been imprisoned in eggs by Bowser's underlings. The intrepid plumber has to travel to their castles, rescue the dinosaurs, and eventually face King Koopa himself, forcing him to release the princess.
+  .
+  Super Mario World is a jump-and-run platformer and a follow-up to Super Mario Bros. 3. The gameplay is similar to previous installments and includes fast-paced platforming in (mostly) side-view stages populated by various enemies and traps, which must be completed within time limits. Mario has access to his traditional power-ups — the Super Mushroom that makes him bigger, the Fire Flower that allows him to throw little fireballs at enemies, and others. A new power-up is the Cape Feather: when wearing the cape, Mario can spin to hurt enemies, and fly as long as the player is able to sustain his balance in the air. Another new feature is the possibility to ride the dinosaur Yoshi, who can eat enemies and gain special attacks from some of them. In order to unlock certain areas, it is sometimes necessary to physically pick up and carry items (e.g. keys) and use them in appropriate places.
+  .
+  The game's world is divided into several large areas, each containing a number of stages. Outdoor scenarios prevail, but there are also many underground and underwater levels. Each large area has at least one ghost house, typically containing more elaborate traps and ghostly non-destructible enemies. In order to venture to the next area, the player usually has to visit a castle (a more difficult stage with harder enemies and dangerous traps) and defeat the boss enemy guarding it.
+  .
+  Many stages have secret exits, which lead to optional areas, such as fortresses with recurrent boss enemies, interconnected stages of the Star World, and Switch Palaces, which allow the player to materialize specifically colored bricks in all the stages, gaining access to power-ups and other secrets. Secret areas may also open access to other dinosaur types, with different abilities such as breathing fire or flying.
+
+game: Super Metroid
+file: super metroid.smc
+developer: Intelligent Systems
+publisher: Nintendo
+genre: Adventure, Platform, Shooter
+players: 1
+release: 1994-03-19
+rating: 94%
+description:
+  Take on a legion of Space Pirates and a new Metroid force as you forge into the covert underworld of Planet Zebes!  It’s up to you and Samus to recapture the long-surviving Metroid hatchling before evil hands unleash its energy.
+  .
+  An army of ominous creatures are poised for battle at every turn of Zebes’ twisted, threatening passageways… including the menacing Ridley and the great lizard Kraid.  Knock down enemies with a killer somersault and swing on an electric beam through narrow passageways!  They’re no match for you and Samus… but wait!  It seems the Mother Brain has returned…
+

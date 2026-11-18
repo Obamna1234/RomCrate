@@ -1,0 +1,16 @@
+made 10500 test files in 3.0s
+PASS  preview of 10500 games (4.9s, 24 MB)
+PASS  preview takes under 5 minutes
+PASS  preview memory under 1 GB (24 MB)
+
+PASS  copied all (57.6s, 32 MB)
+PASS  import memory under 1 GB (32 MB)
+PASS  every game arrived exactly once (10500 of 10500)
+PASS  the copies are byte-for-byte the originals
+PASS  progress is reported as it goes (10 updates)
+PASS  second run: everything already there (5.0s)
+PASS  second run made no duplicates
+PASS  undo removed every copy (1.0s)
+PASS  originals untouched throughout
+
+all passed

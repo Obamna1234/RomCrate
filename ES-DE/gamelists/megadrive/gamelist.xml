@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<gameList>
+	<game>
+		<path>./Gunstar Heroes (USA).md</path>
+		<name>Gunstar Heroes</name>
+		<desc>With the military detained and the planet in serious peril, two brothers vow to find and destroy the evil power that now threatens Gunstar 9. If they succeed they shall go down in history as Gunstar Heroes! If they fail... Gunstar 9 shall perish. Explosive 2-player action. Race through impossible mine shafts at mind-numbing speed! Do battle with incredible mechanical menaces! Hang from ledges, shoot in 360 degrees and body slam the mindless minions!</desc>
+		<releasedate>19930909T000000</releasedate>
+		<developer>Treasure</developer>
+		<publisher>Sega of America</publisher>
+		<genre>Platform, Shooter</genre>
+		<players>2</players>
+		<rating>0.88</rating>
+	</game>
+	<game>
+		<path>./Streets of Rage 2 (USA).md</path>
+		<name>Streets of Rage 2</name>
+		<desc>Original rumblers Axel and Blaze slam the asphalt with bigger, better, totally devastating attacks! Skull-crushing ex-wrestler Max Thunder joins up with earth-shattering body slams and spinning fist attacks. New thrasher Skate slices punks with high speed in-line skate attacks and spinning jump kicks.
+
+Go maniac with jaw-shattering, bone-busting punches, head-cracking jump kicks and secret weapons. Gangs of dirt bikers dive into you from every side. Smash &apos;em with a pipe as they speed by.
+
+- 16 gigantic megs of compound fractures! All new moves, and more of &apos;em!
+- Bust knuckles with a friend in an all-new 2-player head-to-head mode!</desc>
+		<releasedate>19930113T000000</releasedate>
+		<developer>Ancient</developer>
+		<publisher>Sega of America</publisher>
+		<genre>Beat &apos;em Up</genre>
+		<players>2</players>
+		<rating>0.92</rating>
+	</game>
+	<game>
+		<path>./Sonic The Hedgehog 2 (World) (Rev A).md</path>
+		<name>Sonic the Hedgehog 2</name>
+		<desc>Super Speed! Sonic&apos;s back and better than ever. He&apos;s a blur in blue! A blaze of action! With his new Spin Dash. And a new, fabulous friend, &quot;Tails&quot; Miles Prower. You won&apos;t believe it &apos;til you see it. And when you play, you won&apos;t stop. Super Play! Defy gravity in hair-raising loop-de-loops. Grab Power Sneakers and race like lightning through the mazes. Dash in a dizzying whirl across corkscrew speedway. Bounce like a pinball through the bumpers and springs of the amazing Zones. All at break-neck speed! Super Power! Sonic&apos;s attitude is can-do. The mad scientist Dr. Robotnik is planning a world takeover. Sonic gets tough in the fight to save his friends and squash Robotnik for good!</desc>
+		<releasedate>19921121T000000</releasedate>
+		<developer>Sonic Team</developer>
+		<publisher>Sega of America</publisher>
+		<genre>Platform</genre>
+		<players>2</players>
+		<rating>0.91</rating>
+	</game>
+</gameList>
