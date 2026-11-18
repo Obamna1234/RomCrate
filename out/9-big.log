@@ -1,0 +1,17 @@
+made 10500 test files in 3.1s
+PASS  preview of 10500 games (4.5s)
+PASS  preview takes under 5 minutes
+Homebrew Game 10487.nes
+
+Done: 10500 imported, 0 already there, 0 skipped, 0 failed (12 MB).
+
+PASS  copied all (99.3s)
+PASS  every game arrived exactly once (10500 of 10500)
+PASS  the copies are byte-for-byte the originals
+PASS  progress is reported as it goes (10 updates)
+PASS  second run: everything already there (9.2s)
+PASS  second run made no duplicates
+PASS  undo removed every copy (1.8s)
+PASS  originals untouched throughout
+
+all passed

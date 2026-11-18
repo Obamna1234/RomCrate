@@ -1,0 +1,55 @@
+# Created by RomCrate. Edit freely — RomCrate never overwrites this file.
+collection: Game Boy Advance
+shortname: gba
+extensions: 7z, gba, zip
+# Launch line for RetroArch (Play Store) · mGBA core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/mgba_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Nintendo - Game Boy Advance (mGBA)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.
+
+game: Mario & Luigi: Superstar Saga
+file: Mario & Luigi - Superstar Saga (USA).gba
+developer: AlphaDream
+publisher: Nintendo
+genre: Action, Platform, Role-Playing
+players: 1
+release: 2003-11-17
+rating: 88%
+description:
+  Princess Peach's voice has been stolen by Cackletta and replaced with explosives! Mario and Luigi with the help of Bowser follow her trail to the neighboring Beanbean Kingdom, where they interact with a new cast of characters in their quest to stop her.
+  .
+  Battle gameplay further continues the Super Mario RPG and Paper Mario traditions. Rather than merely making selections from a menu as in many RPGs, timing your button presses correctly can inflict or defend from extra damage.
+
+game: Metroid Fusion
+file: Metroid Fusion (USA).gba
+developer: Nintendo R&D1
+publisher: Nintendo
+genre: Action, Adventure, Platform
+players: 1
+release: 2002-11-01
+rating: 89%
+description:
+  Samus Aran returns in an all-new Metroid adventure!
+  .
+  While lending mission support on planet SR388, interstellar bounty hunter Samus Aran is attacked by an X parasite, an organism with the ability to mimic the abilities of any creature it infects. Near death, Samus is saved by a vaccine made from the DNA of the last Metroid -- the X parasite's only natural predator. When the X spread to a research station in orbit around SR388, a weakened Samus is forced to exterminate them all ... or die trying.
+
+game: Pokémon Emerald Version
+file: Pokémon - Emerald Version (USA, Europe).gba
+developer: Game Freak
+publisher: Nintendo
+genre: Adventure, Role-Playing
+players: 4
+release: 2004-09-16
+rating: 91%
+description:
+  Pokémon Emerald Version takes Trainers back to the land of Hoenn for an expanded adventure, this time against both Team Magma and Team Aqua! Pokémon Emerald also features an even more exciting storyline featuring the Legendary Rayquaza, and the chance to catch more Legendary Pokémon such as both Latios and Latias!
+  Around the region you'll notice exciting locales, especially the Battle Frontier. The Battle Frontier is basically an amusement park for Trainers, with a variety of challenges in a number of arenas headed by the always-intimidating Frontier Brains, some of the most formidable Trainers you've ever faced.
+

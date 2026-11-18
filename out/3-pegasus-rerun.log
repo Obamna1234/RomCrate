@@ -1,0 +1,173 @@
+note: this build has no ScreenScraper access; using the free collection only
+
+== Game Boy Advance (3 games)
+   6127 artwork entries, 3509 database entries
+   [Skipped] Metroid Fusion (USA)  →  Metroid Fusion (USA) (exact)
+        Already has artwork
+   [Skipped] Mario & Luigi - Superstar Saga (USA)  →  Mario _ Luigi - Superstar Saga (USA) (exact)
+        Already has artwork
+   [Skipped] Pokémon - Emerald Version (USA, Europe)  →  Pokemon - Emerald Version (USA, Europe) (title)
+        Already has artwork
+   [info] Game Boy Advance: kept your existing metadata.pegasus.txt; art is in the media folder.
+   [info] Game Boy Advance: it has no launch line, so Pegasus can't start these games. This launch line hasn't been tested yet; try it by adding it to the top of the file:
+# Launch line for RetroArch (Play Store) · mGBA core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/mgba_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Nintendo - Game Boy Advance (mGBA)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.
+
+== GameCube (2 games)
+   1961 artwork entries, 1985 database entries
+   [Skipped] Legend of Zelda, The - The Wind Waker (USA)  →  Legend of Zelda, The - The Wind Waker (USA) (exact)
+        Already has artwork
+   [Skipped] smash  →  Super Smash Bros. Melee (USA) (En,Ja) (Rev 2) (hash)
+        Already has artwork
+   [info] GameCube: kept your existing metadata.pegasus.txt; art is in the media folder.
+   [info] GameCube: it has no launch line, so Pegasus can't start these games. This launch line hasn't been tested yet; try it by adding it to the top of the file:
+# Launch line for Dolphin — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n org.dolphinemu.dolphinemu/.ui.main.MainActivity
+#   -a android.intent.action.VIEW
+#   --es AutoStartFile "{file.path}"
+# Note: Dolphin from the Play Store or dolphin-emu.org. Dolphin MMJR and other forks use different package names.
+
+== NES / Famicom (5 games)
+   16300 artwork entries, 13296 database entries
+   [Skipped] Castlevania (USA)  →  Castlevania (USA) (exact)
+        Already has artwork
+   [Skipped] Mega Man 2 (USA)  →  Mega Man 2 (USA) (exact)
+        Already has artwork
+   [Skipped] Legend of Zelda, The (USA)  →  Legend of Zelda, The (USA) (exact)
+        Already has artwork
+   [Skipped] Duck Tales  →  DuckTales (USA) (title)
+        Already has artwork
+   [Skipped] Super Mario Bros. 3 (USA)  →  Super Mario Bros. 3 (USA) (exact)
+        Already has artwork
+   [info] NES / Famicom: kept your existing metadata.pegasus.txt; art is in the media folder.
+   [info] NES / Famicom: it has no launch line, so Pegasus can't start these games. This launch line hasn't been tested yet; try it by adding it to the top of the file:
+# Launch line for RetroArch (Play Store) · Nestopia core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/nestopia_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Nintendo - NES / Famicom (Nestopia UE)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.
+
+== Nintendo 64 (4 games)
+   1131 artwork entries, 2263 database entries
+   [Skipped] GoldenEye 007 (USA)  →  GoldenEye 007 (USA) (exact)
+        Already has artwork
+   [Skipped] Legend of Zelda, The - Ocarina of Time (USA) (Rev 2)  →  Legend of Zelda, The - Ocarina of Time (USA) (Rev 2) (exact)
+        Already has artwork
+   [Skipped] Super Mario 64 (USA)  →  Super Mario 64 (USA) (exact)
+        Already has artwork
+   [Skipped] Mario Kart 64 (U) [!]  →  Mario Kart 64 (USA) (title)
+        Already has artwork
+   [info] Nintendo 64: kept your existing metadata.pegasus.txt; art is in the media folder.
+
+== Super Nintendo / Super Famicom (8 games)
+   4231 artwork entries, 3746 database entries
+   [Skipped] Chrono Trigger (USA)  →  Chrono Trigger (USA) (exact)
+        Already has artwork
+   [Skipped] Donkey Kong Country 2 - Diddy's Kong Quest (USA) (En,Fr) (Rev 1)  →  Donkey Kong Country 2 - Diddy's Kong Quest (USA) (En,Fr) (Rev 1) (exact)
+        Already has artwork
+   [Skipped] Earthbound  →  EarthBound (USA) (title)
+        Already has artwork
+   [Skipped] Legend of Zelda, The - A Link to the Past (USA)  →  Legend of Zelda, The - A Link to the Past (USA) (exact)
+        Already has artwork
+   [Skipped] Super Mario Kart (USA)  →  Super Mario Kart (USA) (exact)
+        Already has artwork
+   [Skipped] Street Fighter II Turbo (U) [!]  →  Street Fighter II Turbo (USA) (title)
+        Already has artwork
+   [Skipped] Super Mario World (USA)  →  Super Mario World (USA) (exact)
+        Already has artwork
+   [Skipped] super metroid  →  Super Metroid (Japan, USA) (En,Ja) (title)
+        Already has artwork
+   [info] Super Nintendo / Super Famicom: kept your existing metadata.pegasus.txt; art is in the media folder.
+   [info] Super Nintendo / Super Famicom: it has no launch line, so Pegasus can't start these games. This launch line hasn't been tested yet; try it by adding it to the top of the file:
+# Launch line for RetroArch (Play Store) · Snes9x core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/snes9x_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Nintendo - SNES / SFC (Snes9x - Current)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.
+
+== Wii (3 games)
+   6804 artwork entries, 3723 database entries
+   [Skipped] mystery disc  →  Super Mario Galaxy (USA) (En,Fr,Es) (hash)
+        Already has artwork
+   [Skipped] Mario Kart Wii (USA)  →  Mario Kart Wii (USA) (exact)
+        Already has artwork
+   [Skipped] Wii Sports (USA) (Rev 1)  →  Wii Sports (USA) (Rev 1) (hash)
+        Already has artwork
+   [info] Wii: kept your existing metadata.pegasus.txt; art is in the media folder.
+
+== Mega Drive / Genesis (3 games)
+   2479 artwork entries, 2800 database entries
+   [Skipped] Sonic The Hedgehog 2 (World) (Rev A)  →  Sonic The Hedgehog 2 (World) (Rev A) (exact)
+        Already has artwork
+   [Skipped] Gunstar Heroes (USA)  →  Gunstar Heroes (USA) (exact)
+        Already has artwork
+   [Skipped] Streets of Rage 2 (USA)  →  Streets of Rage 2 (USA) (exact)
+        Already has artwork
+   [info] Mega Drive / Genesis: kept your existing metadata.pegasus.txt; art is in the media folder.
+
+== PlayStation (5 games)
+   10184 artwork entries, 12749 database entries
+   [Skipped] Final Fantasy VII (USA)  →  Final Fantasy VII (USA) (exact)
+        Already has artwork
+   [Skipped] Crash Bandicoot (USA)  →  Crash Bandicoot (USA) (exact)
+        Already has artwork
+   [Skipped] Spyro the Dragon (USA)  →  Spyro the Dragon (USA) (exact)
+        Already has artwork
+   [Skipped] Metal Gear Solid (USA) (Disc 1)  →  Metal Gear Solid (USA) (Disc 1) (exact)
+        Already has artwork
+   [Skipped] Tony Hawk's Pro Skater 2 (USA)  →  Tony Hawk's Pro Skater 2 (USA) (exact)
+        Already has artwork
+   [info] PlayStation: kept your existing metadata.pegasus.txt; art is in the media folder.
+   [info] PlayStation: it has no launch line, so Pegasus can't start these games. This launch line hasn't been tested yet; try it by adding it to the top of the file:
+# Launch line for RetroArch (Play Store) · SwanStation core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/swanstation_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Sony - PlayStation (SwanStation)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.
+
+== PlayStation 2 (4 games)
+   9788 artwork entries, 12977 database entries
+   [Skipped] Shadow of the Colossus (USA)  →  Shadow of the Colossus (USA) (exact)
+        Already has artwork
+   [Skipped] Kingdom Hearts (USA)  →  Kingdom Hearts (USA) (exact)
+        Already has artwork
+   [Skipped] Ratchet & Clank (USA)  →  Ratchet _ Clank (USA) (En,Fr,De,Es,It) (title)
+        Already has artwork
+   [Skipped] game disc 1  →  Grand Theft Auto III (USA) (hash)
+        Already has artwork
+   [info] PlayStation 2: kept your existing metadata.pegasus.txt; art is in the media folder.
+
+Done: 37 games — 0 complete, 0 partial, 37 already had art, 0 not found, 0 failed. 0 files saved.

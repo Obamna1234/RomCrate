@@ -1,0 +1,194 @@
+== Copy import (Downloads → ROMs sorted)
+PASS  nes/game1.bin is there
+PASS  nes/game1.bin is identical to the original
+PASS  gba/Zelda Minish.gba is there
+PASS  gb/pokemon red.gb is there
+PASS  gb/pokemon red.gb is identical to the original
+PASS  gbc/pokemon crystal.gb is there
+PASS  gbc/pokemon crystal.gb is identical to the original
+PASS  snes/SMW.smc is there
+PASS  snes/SMW.smc is identical to the original
+PASS  Nintendo 64/Super Mario 64 (USA).v64 is there
+PASS  Nintendo 64/Super Mario 64 (USA).v64 is identical to the original
+PASS  Nintendo 64/Pokémon Stadium (USA).z64 is there
+PASS  Nintendo 64/Pokémon Stadium (USA).z64 is identical to the original
+PASS  megadrive/Sonic.bin is there
+PASS  megadrive/Sonic.bin is identical to the original
+PASS  nds/nds game.nds is there
+PASS  nds/nds game.nds is identical to the original
+PASS  nes/Mega Man 2 (USA).zip is there
+PASS  nes/Mega Man 2 (USA).zip is identical to the original
+PASS  ps2/thing.iso is there
+PASS  ps2/thing.iso is identical to the original
+PASS  pc/Enter the Matrix PC Disc 1.iso is there
+PASS  pc/Enter the Matrix PC Disc 1.iso is identical to the original
+PASS  psp/UMD.iso is there
+PASS  psp/UMD.iso is identical to the original
+PASS  wii/mystery.iso is there
+PASS  wii/mystery.iso is identical to the original
+PASS  gc/gc.iso is there
+PASS  gc/gc.iso is identical to the original
+PASS  saturn/Nights.cue is there
+PASS  saturn/Nights.cue is identical to the original
+PASS  saturn/Nights.bin is there
+PASS  saturn/Nights.bin is identical to the original
+PASS  psx/My Game.cue is there
+PASS  psx/My Game.cue is identical to the original
+PASS  psx/My Game.bin is there
+PASS  psx/My Game.bin is identical to the original
+PASS  psx/Big Game.m3u is there
+PASS  psx/Big Game.m3u is identical to the original
+PASS  psx/Big Game (Disc 1).cue is there
+PASS  psx/Big Game (Disc 1).cue is identical to the original
+PASS  psx/Big Game (Disc 1).bin is there
+PASS  psx/Big Game (Disc 1).bin is identical to the original
+PASS  psx/Big Game (Disc 2).cue is there
+PASS  psx/Big Game (Disc 2).cue is identical to the original
+PASS  psx/Big Game (Disc 2).bin is there
+PASS  psx/Big Game (Disc 2).bin is identical to the original
+PASS  ps2/Kingdom Hearts (USA).chd is there
+PASS  ps2/Kingdom Hearts (USA).chd is identical to the original
+PASS  psx/Crash Bandicoot (USA).chd is there
+PASS  psx/Crash Bandicoot (USA).chd is identical to the original
+PASS  dreamcast/Shenmue (USA) (Disc 1).chd is there
+PASS  dreamcast/Shenmue (USA) (Disc 1).chd is identical to the original
+PASS  existing different file was NOT overwritten
+PASS  not imported: scph1001.bin
+PASS  not imported: readme.txt
+PASS  not imported: cover.jpg
+PASS  not imported: setup.exe
+PASS  not imported: failed download.gba
+PASS  not imported: Broken (USA).cue
+PASS  not imported: mystery.dat2
+PASS  not imported: evil.m3u
+PASS  not imported: .hidden.sfc
+PASS  not imported: passwd
+PASS  not imported: Unconfirmed 812733.crdownload
+PASS  not imported: Manhunt (PS2 Classics Vault) [SLUS20827].pkg
+PASS  not imported: Manhunt (Europe) (Disc 1).zip
+PASS  not imported: Broken Kart (USA).z64
+PASS  not imported: GTA San Andreas.mds
+PASS  not imported: GTA San Andreas.mdf
+PASS  not imported: CmdLineExt03.dll
+PASS  not imported: manhunt.exe
+PASS  not imported: nds game.cht
+PASS  not imported: Super_Famicom.dat
+PASS  not imported: Half Game (USA).iso.part
+PASS  no half-written .part files left
+PASS  nothing unexpected in the ROMs folder 
+PASS  original kept (copy mode): game1.bin
+PASS  original kept (copy mode): stuff/pokemon red.gb
+PASS  original kept (copy mode): stuff/pokemon crystal.gb
+PASS  original kept (copy mode): SMW.smc
+PASS  original kept (copy mode): n64/Super Mario 64 (USA).v64
+PASS  original kept (copy mode): Pokémon Stadium (USA).z64
+PASS  original kept (copy mode): sega/Sonic.bin
+PASS  original kept (copy mode): ds/nds game.nds
+PASS  original kept (copy mode): Mega Man 2 (USA).zip
+PASS  original kept (copy mode): random/thing.iso
+PASS  original kept (copy mode): PS2 games/Enter the Matrix PC Disc 1.iso
+PASS  original kept (copy mode): psp/UMD.iso
+PASS  original kept (copy mode): wii stuff/mystery.iso
+PASS  original kept (copy mode): gc.iso
+PASS  original kept (copy mode): Nights.cue
+PASS  original kept (copy mode): Nights.bin
+PASS  original kept (copy mode): ps1/My Game.cue
+PASS  original kept (copy mode): ps1/My Game.bin
+PASS  original kept (copy mode): ps1/Big Game.m3u
+PASS  original kept (copy mode): ps1/Big Game (Disc 1).cue
+PASS  original kept (copy mode): ps1/Big Game (Disc 1).bin
+PASS  original kept (copy mode): ps1/Big Game (Disc 2).cue
+PASS  original kept (copy mode): ps1/Big Game (Disc 2).bin
+PASS  original kept (copy mode): PS2 Games/Kingdom Hearts (USA).chd
+PASS  original kept (copy mode): Crash Bandicoot (USA).chd
+PASS  original kept (copy mode): Shenmue (USA) (Disc 1).chd
+PASS  preview alone changes nothing
+PASS  explains that the PC disc in the PS2 folder is really a PC disc
+PASS  Crash Bandicoot.chd found in the official PlayStation list
+PASS  N64 ROMs with good checksums are marked 'checksum OK'
+PASS  free space is found for a relative ROMs folder name
+PASS  cheat files and scraper game lists are left alone, not listed as unknown games
+PASS  a .part download is shown and refused in import
+PASS  import preview refuses Unconfirmed 812733.crdownload (Download didn't finish)
+PASS  import preview refuses Manhunt (PS2 Classics Vault) [SLUS20827].pkg (PlayStation Store package)
+PASS  import preview refuses Manhunt (Europe) (Disc 1).zip (archive is damaged)
+PASS  import preview refuses Broken Kart (USA).z64 (N64 ROM is damaged)
+PASS  check my files reports: Download didn't finish
+PASS  check my files reports: PlayStation Store package
+PASS  check my files reports: archive is damaged
+PASS  check my files reports: Disc 1).bin
+PASS  check my files reports: N64 ROM is damaged
+PASS  check my files reports: N64 ROM verified
+PASS  check my files reports: chdman can't read
+PASS  check my files reports: SecuROM disc copy protection
+PASS  copy protection named per game folder (PC/Manhunt)
+PASS  readme mention found (PC/FEAR)
+PASS  no copy-protection bypass advice ('crack')
+PASS  no copy-protection bypass advice ('no-cd')
+PASS  no copy-protection bypass advice ('nocd')
+PASS  no copy-protection bypass advice ('bypass')
+PASS  check exits with code 1 when there are problems
+PASS  second import copies nothing again (Done: 0 imported, 20 already there)
+
+== Move import (Downloads2 → ROMs moved)
+PASS  moved intact: nes/game1.bin
+PASS  original removed after move: game1.bin
+PASS  moved intact: gb/pokemon red.gb
+PASS  original removed after move: stuff/pokemon red.gb
+PASS  moved intact: gbc/pokemon crystal.gb
+PASS  original removed after move: stuff/pokemon crystal.gb
+PASS  moved intact: snes/SMW.smc
+PASS  original removed after move: SMW.smc
+PASS  moved intact: n64/Super Mario 64 (USA).v64
+PASS  original removed after move: n64/Super Mario 64 (USA).v64
+PASS  moved intact: n64/Pokémon Stadium (USA).z64
+PASS  original removed after move: Pokémon Stadium (USA).z64
+PASS  moved intact: megadrive/Sonic.bin
+PASS  original removed after move: sega/Sonic.bin
+PASS  moved intact: nds/nds game.nds
+PASS  original removed after move: ds/nds game.nds
+PASS  moved intact: nes/Mega Man 2 (USA).zip
+PASS  original removed after move: Mega Man 2 (USA).zip
+PASS  moved intact: ps2/thing.iso
+PASS  original removed after move: random/thing.iso
+PASS  moved intact: pc/Enter the Matrix PC Disc 1.iso
+PASS  original removed after move: PS2 games/Enter the Matrix PC Disc 1.iso
+PASS  moved intact: psp/UMD.iso
+PASS  original removed after move: psp/UMD.iso
+PASS  moved intact: wii/mystery.iso
+PASS  original removed after move: wii stuff/mystery.iso
+PASS  moved intact: gc/gc.iso
+PASS  original removed after move: gc.iso
+PASS  moved intact: saturn/Nights.cue
+PASS  original removed after move: Nights.cue
+PASS  moved intact: saturn/Nights.bin
+PASS  original removed after move: Nights.bin
+PASS  moved intact: psx/My Game.cue
+PASS  original removed after move: ps1/My Game.cue
+PASS  moved intact: psx/My Game.bin
+PASS  original removed after move: ps1/My Game.bin
+PASS  moved intact: psx/Big Game.m3u
+PASS  original removed after move: ps1/Big Game.m3u
+PASS  moved intact: psx/Big Game (Disc 1).cue
+PASS  original removed after move: ps1/Big Game (Disc 1).cue
+PASS  moved intact: psx/Big Game (Disc 1).bin
+PASS  original removed after move: ps1/Big Game (Disc 1).bin
+PASS  moved intact: psx/Big Game (Disc 2).cue
+PASS  original removed after move: ps1/Big Game (Disc 2).cue
+PASS  moved intact: psx/Big Game (Disc 2).bin
+PASS  original removed after move: ps1/Big Game (Disc 2).bin
+PASS  moved intact: ps2/Kingdom Hearts (USA).chd
+PASS  original removed after move: PS2 Games/Kingdom Hearts (USA).chd
+PASS  moved intact: psx/Crash Bandicoot (USA).chd
+PASS  original removed after move: Crash Bandicoot (USA).chd
+PASS  moved intact: dreamcast/Shenmue (USA) (Disc 1).chd
+PASS  original removed after move: Shenmue (USA) (Disc 1).chd
+PASS  left alone in source: scph1001.bin
+PASS  left alone in source: readme.txt
+PASS  left alone in source: mystery.dat2
+PASS  left alone in source: Broken (USA).cue
+
+== Scraping the sorted folder afterwards
+PASS  imported 'thing.iso' scrapes as Grand Theft Auto III
+
+0 failure(s)
