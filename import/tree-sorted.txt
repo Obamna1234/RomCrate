@@ -1,0 +1,27 @@
+Nintendo 64/Pokémon Stadium (USA).z64
+Nintendo 64/Super Mario 64 (USA).v64
+dreamcast/Shenmue (USA) (Disc 1).chd
+gb/pokemon red.gb
+gba/Zelda Minish.gba
+gbc/pokemon crystal.gb
+gc/gc.iso
+megadrive/Sonic.bin
+nds/nds game.nds
+nes/Mega Man 2 (USA).zip
+nes/game1.bin
+pc/Enter the Matrix PC Disc 1.iso
+ps2/Kingdom Hearts (USA).chd
+ps2/thing.iso
+psp/UMD.iso
+psx/Big Game (Disc 1).bin
+psx/Big Game (Disc 1).cue
+psx/Big Game (Disc 2).bin
+psx/Big Game (Disc 2).cue
+psx/Big Game.m3u
+psx/Crash Bandicoot (USA).chd
+psx/My Game.bin
+psx/My Game.cue
+saturn/Nights.bin
+saturn/Nights.cue
+snes/SMW.smc
+wii/mystery.iso

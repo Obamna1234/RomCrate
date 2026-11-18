@@ -1,0 +1,56 @@
+RomCrate No account, no tracking Games are forAYN Odin 2 Portal Home Set up everything 1Sort new games✓Your games3Launcher & theme4Artwork✓Scrape6Send to handheld One task at a time Check my files Import and sort games Get artwork Pegasus launch lines Send to handheld Game settings Settings and privacy v0.7.0 Pegasus launch linesPegasus needs a launch line in each console folder to start your games. This writes just those — no artwork is downloaded.Game Boy AdvanceNot tested yet — written switched off, with a note so you can try itUntestedRetroArch (Play Store) · mGBA coreGameCubeNot tested yet — written switched off, with a note so you can try itUntestedDolphinNES / FamicomNot tested yet — written switched off, with a note so you can try itUntestedRetroArch (Play Store) · Nestopia coreNintendo 64Tested on AYN Odin 2 Portal, Android 13TestedRetroArch (Play Store) · Mupen64Plus-Next coreRetroArch (64-bit) · Mupen64Plus-Next corePlayStationNot tested yet — written switched off, with a note so you can try itUntestedRetroArch (Play Store) · SwanStation corePlayStation 2Tested on AYN Odin 2 Portal, Android 13, ARMSX2 2.7.x from the Play StoreTestedARMSX2 (Play Store)ARMSX2 (GitHub build)Super Nintendo / Super FamicomNot tested yet — written switched off, with a note so you can try itUntestedRetroArch (Play Store) · Snes9x coreRetroArch (64-bit) · Snes9x coreWiiTested on AYN Odin 2 Portal, Android 13TestedDolphinFix launch lines in Pegasus files I already haveOff: your existing metadata.pegasus.txt files are never changed — RomCrate just shows you the line to add. On: a .bak backup is made first, then only the tested launch line is added (or a known-broken one replaced).Write launch linesWhat changedGame Boy Advance: kept your existing metadata.pegasus.txt; art is in the media folder.Game Boy Advance: it has no launch line, so Pegasus can't start these games. This launch line hasn't been tested yet; try it by adding it to the top of the file:
+# Launch line for RetroArch (Play Store) · mGBA core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/mgba_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Nintendo - Game Boy Advance (mGBA)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.GameCube: kept your existing metadata.pegasus.txt; art is in the media folder.GameCube: it has no launch line, so Pegasus can't start these games. This launch line hasn't been tested yet; try it by adding it to the top of the file:
+# Launch line for Dolphin — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n org.dolphinemu.dolphinemu/.ui.main.MainActivity
+#   -a android.intent.action.VIEW
+#   --es AutoStartFile "{file.path}"
+# Note: Dolphin from the Play Store or dolphin-emu.org. Dolphin MMJR and other forks use different package names.NES / Famicom: kept your existing metadata.pegasus.txt; art is in the media folder.NES / Famicom: it has no launch line, so Pegasus can't start these games. This launch line hasn't been tested yet; try it by adding it to the top of the file:
+# Launch line for RetroArch (Play Store) · Nestopia core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/nestopia_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Nintendo - NES / Famicom (Nestopia UE)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.Nintendo 64: kept your existing metadata.pegasus.txt; art is in the media folder.Super Nintendo / Super Famicom: kept your existing metadata.pegasus.txt; art is in the media folder.Super Nintendo / Super Famicom: it has no launch line, so Pegasus can't start these games. This launch line hasn't been tested yet; try it by adding it to the top of the file:
+# Launch line for RetroArch (Play Store) · Snes9x core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/snes9x_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Nintendo - SNES / SFC (Snes9x - Current)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.Wii: kept your existing metadata.pegasus.txt; art is in the media folder.Mega Drive / Genesis: kept your existing metadata.pegasus.txt; art is in the media folder.PlayStation: kept your existing metadata.pegasus.txt; art is in the media folder.PlayStation: it has no launch line, so Pegasus can't start these games. This launch line hasn't been tested yet; try it by adding it to the top of the file:
+# Launch line for RetroArch (Play Store) · SwanStation core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/swanstation_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Sony - PlayStation (SwanStation)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.PlayStation 2: kept your existing metadata.pegasus.txt; art is in the media folder.
