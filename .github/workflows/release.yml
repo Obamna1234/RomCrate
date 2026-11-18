@@ -1,16 +1,28 @@
 name: Release
 
-# Two ways to release:
-#  1. Actions → Release → Run workflow → enter a version (e.g. 0.2.0). The
-#     version is bumped in every file, committed, tagged and built.
-#  2. Push a tag like v0.2.0 yourself.
+# Releases happen only after the owner says "release it", and a new version
+# goes out as a beta (a GitHub pre-release) before it becomes the stable one.
+#
+#  1. Actions → Release → Run workflow → version (0.8.0-1 for a beta, 0.8.0 stable)
+#     and channel (beta or stable). The version is bumped, committed, tagged
+#     and built.
+#  2. Push a tag like v0.2.0 yourself (a "-N" tag like v0.2.0-1 publishes as beta).
+#
+# Gate: the commit being released must already have passed CI (formatting,
+# clippy, tests and builds on Windows, macOS and Linux) and the Real-user
+# simulation. If either hasn't passed on that exact commit, nothing is built.
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "New version (e.g. 0.2.0)"
+        description: "New version: 0.8.0-1 for a beta, 0.8.0 for stable"
         required: true
+      channel:
+        description: "beta = pre-release for testing first; stable = the version everyone gets"
+        type: choice
+        options: [beta, stable]
+        default: beta
   push:
     tags: ["v*"]
 
@@ -26,8 +38,23 @@ jobs:
     outputs:
       tag: ${{ steps.vars.outputs.tag }}
       release_id: ${{ steps.release.outputs.id }}
+      channel: ${{ steps.vars.outputs.channel }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Gate — CI and the simulation passed on this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          for wf in ci.yml simulate.yml; do
+            ok=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/runs?head_sha=$SHA&status=success&per_page=1" --jq '.total_count')
+            if [ "${ok:-0}" -lt 1 ]; then
+              echo "::error::$wf has not passed on $SHA. Run it on this commit and wait for it to pass before releasing."
+              exit 1
+            fi
+            echo "$wf passed on $SHA"
+          done
 
       - name: Work out version
         id: vars
@@ -35,6 +62,7 @@ jobs:
         env:
           # Passed through the environment, never pasted into the script.
           INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_CHANNEL: ${{ github.event.inputs.channel }}
           EVENT: ${{ github.event_name }}
         run: |
           if [ "$EVENT" = "workflow_dispatch" ]; then
@@ -45,8 +73,18 @@ jobs:
           if ! [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
             echo "::error::'$V' is not a valid version like 1.2.3"; exit 1
           fi
+          C="${INPUT_CHANNEL:-}"
+          if [ -z "$C" ]; then case "$V" in *-*) C=beta;; *) C=stable;; esac; fi
+          if [ "$C" = "beta" ] && ! [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+            # Windows .msi installers only allow a number after the dash.
+            echo "::error::a beta needs a version like 0.8.0-1 (a number after the dash), so the stable 0.8.0 can follow"; exit 1
+          fi
+          if [ "$C" = "stable" ] && [[ "$V" == *-* ]]; then
+            echo "::error::a stable release needs a plain version like 1.2.3"; exit 1
+          fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          echo "channel=$C" >> "$GITHUB_OUTPUT"
 
       - name: Bump version, commit and tag
         if: github.event_name == 'workflow_dispatch'
@@ -176,10 +214,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
           GH_REPO: ${{ github.repository }}
         run: |
           mkdir assets && cd assets
           gh release download "$TAG"
           sha256sum * > SHA256SUMS.txt
           gh release upload "$TAG" SHA256SUMS.txt --clobber
-          gh release edit "$TAG" --draft=false --latest
+          if [ "$CHANNEL" = "beta" ]; then
+            # A pre-release: testers can get it, the stable download stays as it is.
+            gh release edit "$TAG" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$TAG" --draft=false --latest
+          fi
