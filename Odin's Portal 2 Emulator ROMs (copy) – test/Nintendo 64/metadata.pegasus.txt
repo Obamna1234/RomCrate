@@ -1,0 +1,77 @@
+# Created by RomCrate. Edit freely — RomCrate never overwrites this file.
+collection: Nintendo 64
+shortname: Nintendo 64
+extensions: 7z, n64, v64, z64, zip
+# Launch line for RetroArch (Play Store) · Mupen64Plus-Next core — tested on AYN Odin 2 Portal, Android 13 (2026-11-16).
+launch: am start
+  -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+  -e ROM "{file.path}"
+  -e LIBRETRO /data/data/com.retroarch/cores/mupen64plus_next_gles3_libretro_android.so
+  -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+  -e IME com.android.inputmethod.latin/.LatinIME
+  -e DATADIR /data/data/com.retroarch
+  -e SDCARD /storage/emulated/0
+  -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Nintendo - Nintendo 64 (Mupen64Plus-Next)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.
+
+game: GoldenEye 007
+file: GoldenEye 007 (USA).n64
+developer: Rare
+publisher: Nintendo
+genre: Shooter, Stealth
+players: 4
+release: 1997-08-23
+rating: 90%
+description:
+  The name is Bond. James Bond. The famous hero of Ian Fleming's novels returns in this first-person shooter, which is based on the movie of the same name. Agent 007 and his friend Alec Trevalyan (a.k.a. Agent 006) were sent to the Soviet Union on a secret mission. But everything goes wrong, James Bond barely escapes, and his friend is presumed dead.
+  .
+  Ten years later, a mysterious organization named "Janus" appeared. Commanding a new satellite called "GoldenEye", the organization attempts to steal money electronically from banks, deleting all evidence of transfer. It's up to our Agent 007 to venture to the Soviet Union once again and to put an end to Janus' ambitions.
+  .
+  In this 3D action game, the player controls James Bond from a first-person perspective, using a variety of weapons (from knuckles to grenade launcher) to eliminate his foes. However, many parts require the player to be careful, to stay unnoticed, or to snipe guards from distance, since they will react to his presence and alarm their comrades. The game is divided into missions, and in most of them Bond will have to perform other tasks besides killing his enemies: disarm bombs, take pictures of important evidence, or avoid killing scientists. The game features a multiplayer mode with a variety of options and three difficulty levels. Higher difficulty means, besides having to deal with tougher enemies, additional objectives needed to be fulfilled in order to successfully complete the level.
+
+game: The Legend of Zelda: Ocarina of Time
+file: Legend of Zelda, The - Ocarina of Time (USA) (Rev 2).z64
+developer: Nintendo EAD
+publisher: Nintendo
+genre: Action, Adventure
+players: 1
+release: 1998-11-21
+rating: 95%
+description:
+  Ganondorf, the evil King of Thieves, is on the move, threatening the peaceful land of Hyrule.  He is determined to steal his way into the legendary Sacred Realm in hopes of harnessing the power of the mythical Triforce.  As the young hero Link, it is your destiny to thwart Ganondorf’s evil schemes.  Navi, your guardian fairy, will guide you as you venture through the many regions of Hyrule, from the volcanic caves of Death Mountain to the treacherous waters of Zora’s Domain.  Before you complete this epic quest, you’ll delve into deadly dungeons, collect weapons of great power and learn the spells you need to conquer the most irresistible force of all-time.
+  .
+  * The immersive storyline and environments draw players into an amazing 3D world.
+  * Time travel allows you to play as Link in different stages of his life.
+  * New gameplay features include a unique targeting system and 1st and 3rd person perspectives.
+  * Up to three games can be saved simultaneously to memory!
+
+game: Mario Kart 64
+file: Mario Kart 64 (U) [!].v64
+developer: Nintendo EAD
+publisher: Nintendo
+genre: Racing
+players: 4
+release: 1996-12-14
+rating: 91%
+description:
+  Mario Kart 64 brings eight familiar faces, including Mario, Bowser and Yoshi, to the race on four progressively tougher four-track cups. Wide curves and gentle banks mark the Mushroom Cup tracks. Your commute gets notably tougher on the Flower Cup, though. The player will have to dodge semis rumbling on Toad's Turnpike and bouncing boulders on fogbound Choco Mountain! Star Cup tracks range from the icy surfaces of Sherbet Land to the lava lakes of Bowser's Castle. The true test of karting competence, though, comes on the four tracks in Special Cup.
+  .
+  The game offers two camera angles and three engine sizes: 50cc, 100cc and 150cc. You can gain even more speed by mastering the power slide technique or grabbing Super Star power-ups. Each kart has distinctive handling, acceleration and top speed capabilities. Light karts like that of Princess Peach smoothly steer through tight corners, but run the constant risk of getting flattened by heavy karts, such as Donkey Kong's. Shells that you fire at rival racers, bananas that make them skid out and lightning bolts that make them small and very slow are just a few of the game's unique power-ups.
+
+game: Super Mario 64
+file: Super Mario 64 (USA).z64
+developer: Nintendo EAD
+publisher: Nintendo
+genre: Action, Platform
+players: 1
+release: 1996-06-23
+rating: 94%
+description:
+  Mario is invited to Peach's castle, but when he arrives Peach is nowhere to be seen. He soon learns from Toad that Bowser has once again kidnapped her. The Koopa King has also put a spell on her castle, imprisoning her subjects. So it is up to Mario to break the spell and rescue Peach.
+  .
+  Super Mario 64 is the first Mario game done entirely with 3D graphics. The core gameplay is similar to previous platform installments, focusing on jumping, avoiding obstacles and defeating enemies. Levels can be explored without time limits. Stars must be collected in order to unlock new areas, eventually gaining access to various parts of Bowser's castle. Defeating Bowser on each floor procures keys necessary to unlock big doors and enter other floors, which contain more areas.
+  .
+  Mario has more moves at his disposal in this installment. Besides running and jumping, he can now walk, crouch, crawl, climb, and punch enemies. Double and triple jumps, long jumps, wall jumps and backflips can be executed as well. Swimming underwater now depletes Mario's oxygen level. Items must be picked up and carried in some instances in order to solve puzzles.
+  .
+  Power-ups include the Wing Cap, which allows Mario to fly; the Metal Cap, which protects him from damage (including environmental hazards such as poisonous gas); and the Vanish Cap, which makes Mario ethereal, allowing him to walk through certain obstacles (such as wire mesh). Mario can also enter cannons and be shot from them; combining this with the flying ability grants access to high areas.
+

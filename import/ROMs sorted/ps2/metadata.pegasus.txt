@@ -1,0 +1,13 @@
+# Created by RomCrate. Edit freely — RomCrate never overwrites this file.
+collection: PlayStation 2
+shortname: ps2
+extensions: bin, chd, cso, cue, gz, iso, m3u, zso
+# Add how Pegasus should start these games, for example:
+# launch: retroarch -L "/path/to/core" "{file.path}"
+
+game: Kingdom Hearts
+file: Kingdom Hearts (USA).chd
+
+game: Grand Theft Auto III
+file: thing.iso
+

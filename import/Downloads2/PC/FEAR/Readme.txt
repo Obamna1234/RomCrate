@@ -1,0 +1,1 @@
+This game uses SecuROM copy protection.

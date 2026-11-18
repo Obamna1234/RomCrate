@@ -1,0 +1,95 @@
+== Pegasus output
+PASS  snes: metadata.pegasus.txt written
+PASS  snes: 8 games listed (expected 8)
+PASS  snes/Chrono Trigger (USA).sfc: cover is a valid image (900x640)
+PASS  snes/Donkey Kong Country 2 - Diddy's Kong Quest (USA) (En,Fr) (Rev 1).sfc: cover is a valid image (900x628)
+PASS  snes/Earthbound.sfc: cover is a valid image (900x656)
+PASS  snes/Legend of Zelda, The - A Link to the Past (USA).sfc: cover is a valid image (900x628)
+PASS  snes/Street Fighter II Turbo (U) [!].smc: cover is a valid image (900x640)
+PASS  snes/Super Mario Kart (USA).zip: cover is a valid image (900x628)
+PASS  snes/Super Mario World (USA).sfc: cover is a valid image (900x628)
+PASS  snes/super metroid.smc: cover is a valid image (900x628)
+PASS  NES: metadata.pegasus.txt written
+PASS  NES: 5 games listed (expected 5)
+PASS  NES/Castlevania (USA).nes: cover is a valid image (840x1200)
+PASS  NES/Duck Tales.nes: cover is a valid image (840x1200)
+PASS  NES/Legend of Zelda, The (USA).nes: cover is a valid image (841x1200)
+PASS  NES/Mega Man 2 (USA).nes: cover is a valid image (840x1200)
+PASS  NES/Super Mario Bros. 3 (USA).nes: cover is a valid image (841x1200)
+PASS  Nintendo 64: metadata.pegasus.txt written
+PASS  Nintendo 64: 4 games listed (expected 4)
+PASS  Nintendo 64/GoldenEye 007 (USA).n64: cover is a valid image (900x628)
+PASS  Nintendo 64/Legend of Zelda, The - Ocarina of Time (USA) (Rev 2).z64: cover is a valid image (900x628)
+PASS  Nintendo 64/Mario Kart 64 (U) [!].v64: cover is a valid image (900x628)
+PASS  Nintendo 64/Super Mario 64 (USA).z64: cover is a valid image (900x628)
+PASS  gba: metadata.pegasus.txt written
+PASS  gba: 3 games listed (expected 3)
+PASS  gba/Mario & Luigi - Superstar Saga (USA).gba: cover is a valid image (900x900)
+PASS  gba/Metroid Fusion (USA).gba: cover is a valid image (900x900)
+PASS  gba/Pokémon - Emerald Version (USA, Europe).gba: cover is a valid image (900x900)
+PASS  megadrive: metadata.pegasus.txt written
+PASS  megadrive: 3 games listed (expected 3)
+PASS  megadrive/Gunstar Heroes (USA).md: cover is a valid image (840x1200)
+PASS  megadrive/Sonic The Hedgehog 2 (World) (Rev A).md: cover is a valid image (852x1200)
+PASS  megadrive/Streets of Rage 2 (USA).md: cover is a valid image (862x1200)
+PASS  psx: metadata.pegasus.txt written
+PASS  psx: 5 games listed (expected 5)
+PASS  psx/Crash Bandicoot (USA).chd: cover is a valid image (900x900)
+PASS  psx/Final Fantasy VII (USA).m3u: cover is a valid image (900x900)
+PASS  psx/Metal Gear Solid (USA) (Disc 1).cue: cover is a valid image (900x900)
+PASS  psx/Spyro the Dragon (USA).chd: cover is a valid image (900x900)
+PASS  psx/Tony Hawk's Pro Skater 2 (USA).chd: cover is a valid image (900x900)
+PASS  ps2: metadata.pegasus.txt written
+PASS  ps2: 4 games listed (expected 4)
+PASS  ps2/game disc 1.iso: cover is a valid image (846x1200)
+PASS  ps2/Kingdom Hearts (USA).chd: cover is a valid image (846x1200)
+PASS  ps2/Ratchet & Clank (USA).chd: cover is a valid image (850x1200)
+PASS  ps2/Shadow of the Colossus (USA).chd: cover is a valid image (849x1200)
+PASS  wii: metadata.pegasus.txt written
+PASS  wii: 3 games listed (expected 3)
+PASS  wii/Mario Kart Wii (USA).rvz: cover is a valid image (845x1200)
+PASS  wii/mystery disc.iso: cover is a valid image (858x1200)
+PASS  wii/Wii Sports (USA) (Rev 1).wbfs: cover is a valid image (900x905)
+PASS  gc: metadata.pegasus.txt written
+PASS  gc: 2 games listed (expected 2)
+PASS  gc/Legend of Zelda, The - The Wind Waker (USA).rvz: cover is a valid image (842x1200)
+PASS  gc/smash.iso: cover is a valid image (843x1200)
+PASS  junk file not treated as a game: ._Super Mario World (USA).sfc
+PASS  junk file not treated as a game: .DS_Store
+PASS  junk file not treated as a game: Thumbs.db
+PASS  junk file not treated as a game: desktop.ini
+PASS  junk file not treated as a game: empty.sfc
+PASS  multi-disc FF7 shows once (via .m3u), not as 3 discs
+
+== Identification of badly named files (title shown in the launcher)
+PASS  ps2/game disc 1.iso → 'Grand Theft Auto III'
+PASS  wii/mystery disc.iso → 'Super Mario Galaxy'
+PASS  gc/smash.iso → 'Super Smash Bros. Melee'
+PASS  wii/Wii Sports (USA) (Rev 1).wbfs → 'Wii Sports'
+PASS  snes/super metroid.smc → 'Super Metroid'
+PASS  snes/Street Fighter II Turbo (U) [!].smc → 'Street Fighter II Turbo'
+PASS  Nintendo 64/Mario Kart 64 (U) [!].v64 → 'Mario Kart 64'
+PASS  NES/Duck Tales.nes → 'DuckTales'
+PASS  gba/Pokémon - Emerald Version (USA, Europe).gba → 'Pokémon Emerald Version'
+
+== Pegasus launch lines (Android)
+PASS  PS2 gets the tested ARMSX2 (Play Store) launch line
+PASS  exactly one active launch line for PS2
+PASS  SNES RetroArch line is written switched off (untested)
+
+== Cover coverage: 37/37 games (100%)
+PASS  at least 80% of games got a cover
+PASS  second run re-downloads nothing (0 files saved)
+PASS  warns about the .cue whose .bin is missing
+PASS  no crashes in the logs
+
+== ES-DE output
+PASS  ES-DE gamelist for snes
+PASS  ES-DE gamelist for ps2
+PASS  ES-DE gamelist for wii
+PASS  ES-DE shows 'game disc 1.iso' as Grand Theft Auto III
+PASS  ES-DE snes covers: 8
+
+== Notes (not failures)
+
+0 failure(s)

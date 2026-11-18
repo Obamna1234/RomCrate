@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<gameList>
+	<game>
+		<path>./Castlevania (USA).nes</path>
+		<name>Castlevania</name>
+		<desc>If you think it&apos;s scary on the outside, wait&apos;ll you see the basement! You&apos;re in for the longest night of your life. Ghosts, goblins, demons, wolves, bats - creatures lurking around every corner. As you descend deeper and deeper, they get thicker and thicker. Better stick close to the cavern floor - it&apos;s your only chance of finding a weapon or two. You&apos;re gonna need &apos;em. Because when you finally meet the Count, you know he&apos;ll be going for the jugular. So keep your courage up and your stake sharp. And say your prayers!</desc>
+		<releasedate>19860926T000000</releasedate>
+		<developer>Konami</developer>
+		<publisher>Konami</publisher>
+		<genre>Platform</genre>
+		<players>1</players>
+		<rating>0.85</rating>
+	</game>
+	<game>
+		<path>./Duck Tales.nes</path>
+		<name>DuckTales</name>
+		<desc>Bless me bagpipes! When will that thrill-seeker, Scrooge McDuck, ever quit? Never one to turn away from adventure, Uncle Scrooge has taken on his greatest challenge - to discover the legendary Five Lost Treasures and become the &quot;Richest Duck in the World!&quot;
+
+Join Scrooge and the DUCKTALES gang: gung-ho flying ace, Launchpad; the nephews, Huey, Dewey and Louie, and little Webby on their search. Together, they must trek through the treacherous Amazon jungle, down into the diamond mines of Africa, and even to the Moon!
+
+Are you &quot;Duck&quot; enough to join them on their adventure? Come along to Duckburg Headquarters and see for yourself!</desc>
+		<releasedate>19890901T000000</releasedate>
+		<developer>Capcom</developer>
+		<publisher>Capcom</publisher>
+		<genre>Platform</genre>
+		<players>1</players>
+		<rating>0.86</rating>
+	</game>
+	<game>
+		<path>./Legend of Zelda, The (USA).nes</path>
+		<name>The Legend of Zelda</name>
+		<desc>Welcome to the Legend of Zelda.  Where the only sound you’ll hear is your own heart pounding as you race through forests, lakes, mountains and dungeonous mazes in an attempt to restore peace to the land of Hyrule.  Along the way you’ll be challenged by Tektites, Wizzrobes and an endless array of ruthless creatures who’ll stop at nothing to prevent you from finding the lost fragments of the Triforce of Wisdom.  But don’t despair.  With a little luck and a lot of courage, you’ll conquer your adversaries, unite the Triforce fragments and unravel the mystery of the Legend of Zelda!
+
+* Explore the vast Overworld terrain of the land of Hyrule and discover hidden treasures.
+* Explore the mystical labyrinths of the Underworld and ward-off ruthless enemies.</desc>
+		<releasedate>19860221T000000</releasedate>
+		<developer>Nintendo</developer>
+		<publisher>Nintendo</publisher>
+		<genre>Action, Adventure</genre>
+		<players>1</players>
+		<rating>0.91</rating>
+	</game>
+	<game>
+		<path>./Mega Man 2 (USA).nes</path>
+		<name>Mega Man 2</name>
+		<desc>He&apos;s Back! And this time the evil Dr. Wily (once the supreme power in the universe) has created even more sinister robots to mount his attack. But as MegaMan, you&apos;ve also grown in power and ability. Can you save mankind from the evil desires of Dr. Wily? Each of the eight empires is ruled by a different super-robot. You must defeat each enemy on his own turf, building up weapons as you go. Only after all are destroyed will you go head-on with the mastermind himself, the evil Dr. Wily.</desc>
+		<releasedate>19881224T000000</releasedate>
+		<developer>Capcom</developer>
+		<publisher>Capcom</publisher>
+		<genre>Platform, Shooter</genre>
+		<players>1</players>
+		<rating>0.88</rating>
+	</game>
+	<game>
+		<path>./Super Mario Bros. 3 (USA).nes</path>
+		<name>Super Mario Bros. 3</name>
+		<desc>Fight monsters and mini-bosses, avoid ghosts and the burning sun.  Make your way through water and quicksand.  Dodge cannon balls and bullets and rescue the King’s wand!
+
+In Super Mario Bros. 3 there are more warps, more chances at extra lives, and new special suits!  The raccoon suit lets you fly and knock out blocks.  The frog suit helps you out-swim the deadly fish.  There are suits for every occasion!
+
+Store up flowers and mushrooms to use later on.  Play game-show type bonus rounds!  Go back to that last screen and get a mushroom!  Pause to take a break, then continue where you left off!
+
+Super Mario Bros. 3 is fun to play alone, or team up with a buddy to prolong the adventure!</desc>
+		<releasedate>19881023T000000</releasedate>
+		<developer>Nintendo EAD</developer>
+		<publisher>Nintendo</publisher>
+		<genre>Platform</genre>
+		<players>2</players>
+		<rating>0.95</rating>
+	</game>
+</gameList>

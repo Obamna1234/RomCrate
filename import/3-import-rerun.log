@@ -1,0 +1,75 @@
+Import into ROMs sorted
+
+  Shenmue (USA) (Disc 1).chd  [Dreamcast GD-ROM (CHD)]
+      already in your ROMs folder
+  pokemon red.gb  [Game Boy cartridge header]
+      already in your ROMs folder
+  pokemon crystal.gb  [Game Boy Color cartridge header]
+      already in your ROMs folder
+  gc.iso  [GameCube disc (GALE01)]
+      already in your ROMs folder
+  Sonic.bin  [Mega Drive / Genesis cartridge header]
+      already in your ROMs folder
+  game1.bin  [NES cartridge header]
+      already in your ROMs folder
+  Mega Man 2 (USA).zip  [NES cartridge header]
+      already in your ROMs folder
+  Pokémon Stadium (USA).z64  [Nintendo 64 cartridge header · checksum OK]
+      already in your ROMs folder
+  Super Mario 64 (USA).v64  [Nintendo 64 cartridge header · checksum OK]
+      already in your ROMs folder
+  nds game.nds  [Nintendo DS cartridge header]
+      already in your ROMs folder
+  Enter the Matrix PC Disc 1.iso  [PC disc (autorun/setup files, no console boot file) — even though it was in "PS2 games"]
+      already in your ROMs folder
+  Big Game.m3u  [PlayStation disc SLUS-00892]
+      already in your ROMs folder
+  Crash Bandicoot (USA).chd  [name found in the official PlayStation list]
+      already in your ROMs folder
+  My Game.cue  [PlayStation disc SCUS-94900]
+      already in your ROMs folder
+  Kingdom Hearts (USA).chd  [was in a folder called "PS2 Games"]
+      already in your ROMs folder
+  thing.iso  [PlayStation 2 disc SLUS-20062]
+      already in your ROMs folder
+  UMD.iso  [PSP disc]
+      already in your ROMs folder
+  Nights.cue  [Sega Saturn disc]
+      already in your ROMs folder
+  SMW.smc  [Super Nintendo cartridge header]
+      already in your ROMs folder
+  mystery.iso  [Wii disc (RMGE01)]
+      already in your ROMs folder
+  GTA San Andreas.mdf  [Couldn't tell which console this is for]
+      ? console unknown — use --assign "name=console" or --skip
+  GTA San Andreas.mds  [Couldn't tell which console this is for]
+      ? console unknown — use --assign "name=console" or --skip
+      ! Disc image in .mds/.mdf format — emulators and chdman can't read it — Mount it and save it as an .iso (or .bin/.cue) first, or use a converter.
+  mystery.dat2  [Couldn't tell which console this is for]
+      ? console unknown — use --assign "name=console" or --skip
+  Zelda Minish.gba  [Game Boy Advance cartridge header]
+      NOT imported: a different file called "Zelda Minish.gba" is already there
+  Broken (USA).cue  [Couldn't tell which console this is for]
+      skipped: incomplete — fix or re-download it first
+      ! Incomplete: a file it needs is missing (Broken (USA).bin).
+  evil.m3u  [Couldn't tell which console this is for]
+      skipped: incomplete — fix or re-download it first
+      ! Incomplete: a file it needs is missing (../../../../etc/passwd).
+  Half Game (USA).iso.part  [Couldn't tell which console this is for]
+      skipped: Download didn't finish — This file is an incomplete download. Re-download it — never copy it to your handheld.
+  Manhunt (Europe) (Disc 1).zip  [Couldn't tell which console this is for]
+      skipped: This archive is damaged — "Manhunt (Europe) (Disc 1).bin" is broken (Invalid checksum). Re-download it — ideally using the site's torrent link, which checks every piece.
+  Manhunt (PS2 Classics Vault) [SLUS20827].pkg  [Couldn't tell which console this is for]
+      skipped: PlayStation Store package, not a disc image — This is a PS3/PS4 store package. PS2 emulators can't use it — you need a PS2 disc image (.iso or .chd) of the game.
+  scph1001.bin  [Looks like a BIOS file]
+      skipped: BIOS files go in your emulator's BIOS folder, not with games
+  Unconfirmed 812733.crdownload  [Couldn't tell which console this is for]
+      skipped: Download didn't finish — This file is an incomplete download. Re-download it — never copy it to your handheld.
+  Broken Kart (USA).z64  [Nintendo 64 cartridge header]
+      skipped: N64 ROM is damaged or modified — Its checksum is 4D12F9E4 B0BB39EA but the header says 6512F9E4 0E1D092A. Re-download it (hacks and translations can also cause this).
+  note: 1 empty file skipped (failed copies or downloads).
+  note: 9 non-game files (text, pictures, installers…) left alone.
+
+Needs 0 KB on the destination drive; 84.8 GB free.
+
+Done: 0 imported, 20 already there, 12 skipped, 0 failed (0 KB).
