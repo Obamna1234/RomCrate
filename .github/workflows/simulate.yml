@@ -83,6 +83,12 @@ jobs:
       - name: Check import results
         if: always()
         run: python tools/simulate/check_import.py "$RUNNER_TEMP/sim/import" | tee "$RUNNER_TEMP/sim/import/6-check.log"
+      - name: File safety (unicode, long paths, read-only, same names, links, undo, a copy killed halfway)
+        if: always()
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/sim/out"
+          python tools/simulate/check_safety.py target/release/romcrate-cli "$RUNNER_TEMP/safety" 2>&1 | tee "$RUNNER_TEMP/sim/out/8-safety.log"
       - name: Publish results for review (branch sim-results/cli-${{ matrix.os }})
         if: always()
         env:

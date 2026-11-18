@@ -42,7 +42,7 @@ fn game(p: &Path, bytes: usize, seed: u8) {
 
 #[test]
 fn sends_to_the_sd_card_checks_every_game_and_skips_on_the_second_run() {
-    let _g = ONE_AT_A_TIME.lock().unwrap();
+    let _g = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let t = tempfile::tempdir().unwrap();
     let a = stand_in(t.path(), "device");
     let pc = t.path().join("pc/ROMs");
@@ -139,7 +139,7 @@ fn sends_to_the_sd_card_checks_every_game_and_skips_on_the_second_run() {
 
 #[test]
 fn a_damaged_copy_is_caught_and_removed() {
-    let _g = ONE_AT_A_TIME.lock().unwrap();
+    let _g = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let t = tempfile::tempdir().unwrap();
     let a = stand_in(t.path(), "device");
     let pc = t.path().join("pc/ROMs");
@@ -184,7 +184,7 @@ fn a_damaged_copy_is_caught_and_removed() {
 
 #[test]
 fn an_sd_card_android_wont_let_us_write_to_is_caught_before_copying() {
-    let _g = ONE_AT_A_TIME.lock().unwrap();
+    let _g = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let t = tempfile::tempdir().unwrap();
     let a = stand_in(t.path(), "device");
     std::env::set_var("FAKE_ADB_READONLY", "/storage/1A2B-3C4D");
@@ -207,7 +207,7 @@ fn an_sd_card_android_wont_let_us_write_to_is_caught_before_copying() {
 
 #[test]
 fn unauthorized_handheld_gets_a_clear_message() {
-    let _g = ONE_AT_A_TIME.lock().unwrap();
+    let _g = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let t = tempfile::tempdir().unwrap();
     let a = stand_in(t.path(), "unauthorized");
     assert_eq!(a.devices().unwrap()[0].state, "unauthorized");

@@ -11,6 +11,42 @@ import os, shutil, subprocess, sys
 root = os.environ["FAKE_ADB_ROOT"]
 args = sys.argv[1:]
 
+# Android's toolbox has GNU-style `stat -c` and `md5sum`; macOS's BSD tools
+# don't. Off Linux, small stand-ins for exactly what RomCrate uses come first
+# on PATH, so the handheld behaves like Android whatever runs the tests.
+SHIMS = {
+    "stat": """#!/usr/bin/env python3
+import os, sys
+a = sys.argv[1:]
+fmt = a[a.index("-c") + 1] if "-c" in a else "%n"
+files = [x for i, x in enumerate(a) if x != "-c" and (i == 0 or a[i - 1] != "-c")]
+for f in files:
+    print(fmt.replace("%s", str(os.path.getsize(f))).replace("%n", f))
+""",
+    "md5sum": """#!/usr/bin/env python3
+import hashlib, sys
+for f in sys.argv[1:]:
+    print(hashlib.md5(open(f, "rb").read()).hexdigest() + "  " + f)
+""",
+}
+
+
+def android_like_env():
+    env = dict(os.environ)
+    if sys.platform.startswith("linux") and not os.environ.get("FAKE_ADB_FORCE_SHIMS"):
+        return env
+    d = os.path.join(root, ".shims")
+    os.makedirs(d, exist_ok=True)
+    for name, text in SHIMS.items():
+        p = os.path.join(d, name)
+        if not os.path.exists(p):
+            with open(p, "w") as f:
+                f.write(text)
+            os.chmod(p, 0o755)
+    env["PATH"] = d + os.pathsep + env.get("PATH", "")
+    return env
+
+
 def to_fake(s: str) -> str:
     return s.replace("/storage", root + "/storage")
 
@@ -49,7 +85,7 @@ if args[:1] == ["-s"]:
             f.write(rest[0].split()[-1].strip("'") + "\n")
         sys.exit(0)
     if cmd == "shell":
-        p = subprocess.run(["sh", "-c", to_fake(rest[0])], capture_output=True, text=True)
+        p = subprocess.run(["sh", "-c", to_fake(rest[0])], capture_output=True, text=True, env=android_like_env())
         sys.stdout.write(from_fake(p.stdout)); sys.stderr.write(from_fake(p.stderr)); sys.exit(p.returncode)
     if cmd == "push":
         local, remote = rest[0], to_fake(rest[1])

@@ -1150,6 +1150,9 @@ fn finish_plan(
     let folders = existing_folders(dest);
     let mut totals: BTreeMap<String, SystemTotal> = BTreeMap::new();
     let mut needed = 0u64;
+    // Where earlier games in this import will land (lower-case: Windows and
+    // macOS treat "Game.nes" and "game.nes" as the same file).
+    let mut taken: HashMap<String, PathBuf> = HashMap::new();
     for it in items.iter_mut() {
         let Some(sys) = it.system.clone() else {
             continue;
@@ -1158,6 +1161,9 @@ fn finish_plan(
         it.dest_folder = Some(folder.clone());
         if it.state == ItemState::Ready {
             check_destination(dest, it);
+        }
+        if it.state == ItemState::Ready {
+            keep_apart(dest, it, &mut taken);
         }
         if it.state == ItemState::Ready {
             let same = mode == Mode::Move
@@ -1270,6 +1276,60 @@ fn check_destination(dest: &Path, it: &mut ImportItem) {
     }
     if all_same {
         it.state = ItemState::AlreadyThere;
+    }
+}
+
+/// Two games in one import that would land on the same file: the same file
+/// twice is imported once; two different files both survive — a single-file
+/// game gets " (2)" added to its name, a game with several files (whose
+/// sheet names its other files) is left out with the reason.
+fn keep_apart(dest: &Path, it: &mut ImportItem, taken: &mut HashMap<String, PathBuf>) {
+    let key = |p: &Path| p.to_string_lossy().to_lowercase();
+    let clash = |t: &[PathBuf], taken: &HashMap<String, PathBuf>| {
+        t.iter().find_map(|p| taken.get(&key(p)).cloned())
+    };
+    let t = targets(dest, it);
+    if let Some(first) = clash(&t, taken) {
+        let same = it.files.len() == 1
+            && fs::metadata(&first).map(|m| m.len()).ok()
+                == fs::metadata(&it.files[0]).map(|m| m.len()).ok()
+            && file_crc(&first).ok() == file_crc(&it.files[0]).ok();
+        if same {
+            it.state = ItemState::AlreadyThere;
+            it.warnings.push(format!(
+                "The same file is also at {} — imported once",
+                first.display()
+            ));
+            return;
+        }
+        if it.files.len() > 1 {
+            it.state = ItemState::Conflict(
+                "another game in this import has the same name — import it on its own".into(),
+            );
+            return;
+        }
+        let (stem, ext) = match it.dest_name.rsplit_once('.') {
+            Some((a, b)) => (a.to_string(), format!(".{b}")),
+            None => (it.dest_name.clone(), String::new()),
+        };
+        let original = it.dest_name.clone();
+        for n in 2..1000 {
+            it.dest_name = format!("{stem} ({n}){ext}");
+            let t2 = targets(dest, it);
+            if clash(&t2, taken).is_none() && !t2[0].exists() {
+                break;
+            }
+        }
+        it.warnings.push(format!(
+            "Another file in this import is also called \"{original}\" — this one becomes \"{}\" so both are kept",
+            it.dest_name
+        ));
+        check_destination(dest, it);
+    }
+    if it.state == ItemState::Ready {
+        for p in targets(dest, it) {
+            taken.insert(key(&p), it.files[0].clone());
+        }
     }
 }
 
@@ -2161,6 +2221,64 @@ mod tests {
         let id = runs[0].id.clone();
         crate::importlog::undo(&log, &id).unwrap();
         assert_eq!(snapshot(&src), before);
+    }
+
+    #[test]
+    fn same_names_both_survive_and_true_duplicates_import_once() {
+        let t = tempfile::tempdir().unwrap();
+        let (src, dest) = (t.path().join("in"), t.path().join("ROMs"));
+        write(&src.join("a/Same Name.nes"), b"NES\x1a first");
+        write(&src.join("b/Same Name.nes"), b"NES\x1a second, different");
+        write(
+            &src.join("c/same name.NES"),
+            b"NES\x1a third, different again",
+        );
+        write(&src.join("d/Twice.nes"), b"NES\x1a twice");
+        write(&src.join("e/Twice.nes"), b"NES\x1a twice");
+        let p = plan_of(&src, &dest, Mode::Copy);
+        let names: HashSet<String> = p
+            .items
+            .iter()
+            .filter(|i| i.state == ItemState::Ready)
+            .map(|i| i.dest_name.to_lowercase())
+            .collect();
+        assert!(
+            names.contains("same name.nes")
+                && names.contains("same name (2).nes")
+                && names.contains("same name (3).nes"),
+            "{names:?}"
+        );
+        let twice: Vec<_> = p.items.iter().filter(|i| i.name == "Twice.nes").collect();
+        assert_eq!(
+            twice.iter().filter(|i| i.state == ItemState::Ready).count(),
+            1
+        );
+        assert_eq!(
+            twice
+                .iter()
+                .filter(|i| i.state == ItemState::AlreadyThere)
+                .count(),
+            1
+        );
+        let s = execute(
+            &p,
+            &HashMap::new(),
+            &HashSet::new(),
+            &AtomicBool::new(false),
+            &|_| {},
+        );
+        assert_eq!((s.imported, s.failed), (4, 0), "{s:?}");
+        let mut got: Vec<Vec<u8>> = walkdir_all(&dest.join("nes"))
+            .into_iter()
+            .filter(|p| p.is_file())
+            .map(|p| fs::read(p).unwrap())
+            .collect();
+        got.sort();
+        assert_eq!(
+            got.len(),
+            4,
+            "three different files + one copy of the duplicate"
+        );
     }
 
     #[test]
