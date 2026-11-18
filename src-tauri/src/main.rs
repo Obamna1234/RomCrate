@@ -919,7 +919,10 @@ fn device_console_dirs(adb: &romcrate_core::adb::Adb, serial: &str) -> Vec<(Stri
             let roms = v.roms_dir.clone();
             v.console_folders.iter().filter_map(move |f| {
                 let sys = romcrate_core::systems::detect_from_folder(f)?;
-                Some((sys.id.to_string(), format!("{}/{}/{f}", v.path, roms.as_deref()?)))
+                Some((
+                    sys.id.to_string(),
+                    format!("{}/{}/{f}", v.path, roms.as_deref()?),
+                ))
             })
         })
         .collect()
@@ -931,7 +934,10 @@ async fn style_games(serial: String) -> Result<Vec<romcrate_core::picstyle::Styl
     let adb = find_adb()?;
     tokio::task::spawn_blocking(move || {
         let dirs = device_console_dirs(&adb, &serial);
-        let mut dev = romcrate_core::adb::AdbFs { adb: &adb, serial: &serial };
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &serial,
+        };
         romcrate_core::picstyle::games(&mut dev, &dirs)
     })
     .await
@@ -948,15 +954,33 @@ async fn style_apply(
     let res = tokio::task::spawn_blocking(move || {
         // Only games that are really on the handheld.
         let dirs = device_console_dirs(&adb, &serial);
-        let mut dev = romcrate_core::adb::AdbFs { adb: &adb, serial: &serial };
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &serial,
+        };
         let known: std::collections::HashSet<String> =
-            romcrate_core::picstyle::games(&mut dev, &dirs).into_iter().map(|g| g.file).collect();
-        let picks: Vec<_> = picks.into_iter().filter(|p| known.contains(&p.file)).collect();
+            romcrate_core::picstyle::games(&mut dev, &dirs)
+                .into_iter()
+                .map(|g| g.file)
+                .collect();
+        let picks: Vec<_> = picks
+            .into_iter()
+            .filter(|p| known.contains(&p.file))
+            .collect();
         romcrate_core::picstyle::apply(&mut dev, &picks)
     })
     .await
     .map_err(|e| e.to_string())?;
-    log_settings(&[vec![format!("Picture style for single games: {} changed, {} failed", res.changed_files, res.failed)], res.lines.clone()].concat());
+    log_settings(
+        &[
+            vec![format!(
+                "Picture style for single games: {} changed, {} failed",
+                res.changed_files, res.failed
+            )],
+            res.lines.clone(),
+        ]
+        .concat(),
+    );
     Ok(res)
 }
 
@@ -1154,7 +1178,6 @@ async fn pergame_apply(
     Ok(res)
 }
 
-/// Open the activity log folder in the file manager.
 // ---------------------------------------------------------------- device check
 
 /// Which device and system is plugged in.
@@ -1559,6 +1582,7 @@ async fn handheld_plan_back(
     Ok(plan)
 }
 
+/// Open the activity log folder in the file manager.
 #[tauri::command]
 fn open_log_folder(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;

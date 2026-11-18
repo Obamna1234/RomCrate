@@ -308,7 +308,10 @@ impl crate::gamesettings::DeviceFs for AdbFs<'_> {
         use base64::Engine;
         // dd in 4 KB blocks (offsets here are always 64 KB-aligned), base64 so
         // the bytes survive the trip through the shell.
-        anyhow::ensure!(offset % 4096 == 0 && len % 4096 == 0, "unaligned read");
+        anyhow::ensure!(
+            offset.is_multiple_of(4096) && len.is_multiple_of(4096),
+            "unaligned read"
+        );
         let out = self.adb.shell(
             self.serial,
             &format!(

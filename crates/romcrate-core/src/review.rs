@@ -208,7 +208,7 @@ mod tests {
             targets: vec![mine.clone()],
             remote: vec![],
         };
-        let b = replace_on_pc(&data, &[item.clone()]);
+        let b = replace_on_pc(&data, std::slice::from_ref(&item));
         assert_eq!(b.replaced, 1, "{:?}", b.failed);
         assert_eq!(std::fs::read(&mine).unwrap(), b"romcrate cover");
         assert_eq!(batches(&data).len(), 1);

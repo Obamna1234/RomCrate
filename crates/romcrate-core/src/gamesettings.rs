@@ -75,7 +75,9 @@ impl ShaderStyle {
     /// The preset for this video driver ("vulkan" → slang, anything else → glsl).
     pub fn preset_for(&self, driver: &str) -> Option<(&'static str, &'static str, &str)> {
         if driver == "vulkan" {
-            self.slang.as_deref().map(|p| ("shaders_slang", "slangp", p))
+            self.slang
+                .as_deref()
+                .map(|p| ("shaders_slang", "slangp", p))
         } else {
             self.glsl.as_deref().map(|p| ("shaders_glsl", "glslp", p))
         }
@@ -489,19 +491,30 @@ impl Profile {
 
     pub fn default_style(&self) -> Option<String> {
         let st = self.styles();
-        st.iter().find(|s| s.default).or(st.first()).map(|s| s.id.clone())
+        st.iter()
+            .find(|s| s.default)
+            .or(st.first())
+            .map(|s| s.id.clone())
     }
 }
 
 /// Which style a preset file RomCrate wrote points at (by its `#reference`).
 pub fn style_of_preset(p: &Profile, text: &str) -> Option<String> {
-    let r = text.lines().find_map(|l| l.trim().strip_prefix("#reference"))?;
+    let r = text
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("#reference"))?;
     let r = r.trim().trim_matches('"');
     p.styles().into_iter().find_map(|s| {
-        [("shaders_slang", "slangp", &s.slang), ("shaders_glsl", "glslp", &s.glsl)]
-            .iter()
-            .any(|(f, e, pr)| pr.as_ref().is_some_and(|pr| r.ends_with(&format!("{f}/{pr}.{e}"))))
-            .then(|| s.id.clone())
+        [
+            ("shaders_slang", "slangp", &s.slang),
+            ("shaders_glsl", "glslp", &s.glsl),
+        ]
+        .iter()
+        .any(|(f, e, pr)| {
+            pr.as_ref()
+                .is_some_and(|pr| r.ends_with(&format!("{f}/{pr}.{e}")))
+        })
+        .then(|| s.id.clone())
     })
 }
 
@@ -512,7 +525,12 @@ pub enum PresetFound {
     Missing { updater: &'static str },
 }
 
-pub fn find_preset(fs: &mut dyn DeviceFs, driver: &str, shader_dir: Option<&str>, style: &ShaderStyle) -> PresetFound {
+pub fn find_preset(
+    fs: &mut dyn DeviceFs,
+    driver: &str,
+    shader_dir: Option<&str>,
+    style: &ShaderStyle,
+) -> PresetFound {
     let Some((folder, ext, preset)) = style.preset_for(driver) else {
         return PresetFound::NotForDriver;
     };
@@ -597,7 +615,11 @@ pub fn plan(fs: &mut dyn DeviceFs, systems: &[String]) -> SettingsPlan {
 
 /// Like `plan`, with a picture style chosen per console (profile id → style id;
 /// consoles not listed get their default style).
-pub fn plan_styled(fs: &mut dyn DeviceFs, systems: &[String], styles: &BTreeMap<String, String>) -> SettingsPlan {
+pub fn plan_styled(
+    fs: &mut dyn DeviceFs,
+    systems: &[String],
+    styles: &BTreeMap<String, String>,
+) -> SettingsPlan {
     plan_profiles(fs, systems, &db().profiles, styles)
 }
 
@@ -691,7 +713,10 @@ pub fn plan_profiles(
                     c.style = style.clone();
                     let mut over = p.r#override.clone();
                     if let Some(st) = style.as_deref().filter(|s| !STYLES_KEEP_FILTER.contains(s)) {
-                        let usable = styles.iter().find(|x| x.id == st).is_some_and(|x| x.preset_for(&r.driver).is_some());
+                        let usable = styles
+                            .iter()
+                            .find(|x| x.id == st)
+                            .is_some_and(|x| x.preset_for(&r.driver).is_some());
                         if usable {
                             over.push(Setting {
                                 section: None,
@@ -749,13 +774,19 @@ pub fn plan_profiles(
                         }
                     }
                     if let Some(style) = style.as_deref() {
-                        let ext = if r.driver == "vulkan" { "slangp" } else { "glslp" };
+                        let ext = if r.driver == "vulkan" {
+                            "slangp"
+                        } else {
+                            "glslp"
+                        };
                         let path = format!("{dir}/{core}.{ext}");
                         let existing = fs.read(&path).map_err(err)?;
                         let ours = existing.as_deref().is_none_or(|t| t.starts_with(MARKER));
                         let old_label = |t: &str| {
                             style_of_preset(p, t)
-                                .and_then(|id| styles.iter().find(|s| s.id == id).map(|s| s.label.clone()))
+                                .and_then(|id| {
+                                    styles.iter().find(|s| s.id == id).map(|s| s.label.clone())
+                                })
                                 .unwrap_or_else(|| "another shader".into())
                         };
                         if !ours {
@@ -933,7 +964,13 @@ pub fn apply(fs: &mut dyn DeviceFs, plan: &SettingsPlan, ids: &[String]) -> Appl
                     res.lines.push(format!(
                         "OK {} — {}: {what} ({})",
                         c.emulator,
-                        if ch.remove { "removed" } else if ch.exists { "changed" } else { "created" },
+                        if ch.remove {
+                            "removed"
+                        } else if ch.exists {
+                            "changed"
+                        } else {
+                            "created"
+                        },
                         ch.path
                     ));
                 }
@@ -1040,13 +1077,37 @@ mod tests {
             }
             let styles = p.styles();
             if !styles.is_empty() {
-                assert_eq!(p.kind, "retroarch-core", "{}: styles are RetroArch shaders", p.id);
-                assert_eq!(styles.iter().filter(|s| s.default).count(), 1, "{}: exactly one default style", p.id);
+                assert_eq!(
+                    p.kind, "retroarch-core",
+                    "{}: styles are RetroArch shaders",
+                    p.id
+                );
+                assert_eq!(
+                    styles.iter().filter(|s| s.default).count(),
+                    1,
+                    "{}: exactly one default style",
+                    p.id
+                );
                 let mut sid = HashSet::new();
                 for s in &styles {
-                    assert!(sid.insert(s.id.clone()) && s.id != STYLE_NONE, "{}: style id {}", p.id, s.id);
-                    assert!(!s.label.is_empty() && !s.why.is_empty(), "{}: {} needs a label and a why", p.id, s.id);
-                    assert!(s.slang.is_some() || s.glsl.is_some(), "{}: {} has no preset", p.id, s.id);
+                    assert!(
+                        sid.insert(s.id.clone()) && s.id != STYLE_NONE,
+                        "{}: style id {}",
+                        p.id,
+                        s.id
+                    );
+                    assert!(
+                        !s.label.is_empty() && !s.why.is_empty(),
+                        "{}: {} needs a label and a why",
+                        p.id,
+                        s.id
+                    );
+                    assert!(
+                        s.slang.is_some() || s.glsl.is_some(),
+                        "{}: {} has no preset",
+                        p.id,
+                        s.id
+                    );
                 }
             }
             match p.kind.as_str() {

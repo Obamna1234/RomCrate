@@ -344,7 +344,10 @@ pub(crate) fn manifest(fs: &mut dyn DeviceFs) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
-pub(crate) fn save_manifest(fs: &mut dyn DeviceFs, list: &[(String, String)]) -> anyhow::Result<()> {
+pub(crate) fn save_manifest(
+    fs: &mut dyn DeviceFs,
+    list: &[(String, String)],
+) -> anyhow::Result<()> {
     let mut t = String::from("# Per-game settings files RomCrate created or changed. \"Undo RomCrate's changes\" in RomCrate puts them back.\n");
     for (k, p) in list {
         t.push_str(&format!("{k} {p}\n"));
