@@ -40,8 +40,16 @@ impl Staging {
     }
     /// The handheld path for a staged file.
     pub fn remote_of(&self, local: &Path) -> Option<(String, String)> {
+        let resolved = local
+            .parent()
+            .and_then(|p| fs::canonicalize(p).ok())
+            .zip(local.file_name())
+            .map(|(p, n)| p.join(n));
         self.roots.iter().find_map(|(l, r, vol)| {
-            let rel = local.strip_prefix(l).ok()?;
+            let rel = local
+                .strip_prefix(l)
+                .ok()
+                .or_else(|| resolved.as_deref().and_then(|x| x.strip_prefix(l).ok()))?;
             let rel = rel
                 .components()
                 .map(|c| c.as_os_str().to_string_lossy().into_owned())
@@ -79,6 +87,9 @@ pub fn stage(
             .join(review::safe_name(&v.label))
             .join(review::safe_name(dir));
         fs::create_dir_all(&local_root)?;
+        // The resolved path (on macOS /var is a link to /private/var), so it
+        // matches the paths the artwork step reports back.
+        let local_root = fs::canonicalize(&local_root)?;
         let files = list(&remote_root);
         let mut any = false;
         for (path, size) in files {

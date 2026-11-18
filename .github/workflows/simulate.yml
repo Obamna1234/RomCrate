@@ -89,6 +89,11 @@ jobs:
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/sim/out"
           python tools/simulate/check_safety.py target/release/romcrate-cli "$RUNNER_TEMP/safety" 2>&1 | tee "$RUNNER_TEMP/sim/out/8-safety.log"
+      - name: Big library (10,500 games)
+        if: always()
+        run: |
+          set -o pipefail
+          python tools/simulate/check_big.py target/release/romcrate-cli "$RUNNER_TEMP/big" 2>&1 | grep -v "^  " | tee "$RUNNER_TEMP/sim/out/9-big.log"
       - name: Publish results for review (branch sim-results/cli-${{ matrix.os }})
         if: always()
         env:
@@ -246,3 +251,67 @@ jobs:
           if ($p.HasExited) { throw "app exited within 20s (code $($p.ExitCode))" }
           "app is running after 20s: OK"
           Stop-Process $p
+
+  update:
+    name: Update over the last release (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Install the last release, use it, and leave the kind of files a user has
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R $env:GITHUB_REPOSITORY -p "*_x64-setup.exe" -D "$env:RUNNER_TEMP\old"
+          $setup = Get-ChildItem "$env:RUNNER_TEMP\old" -Filter *_x64-setup.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList "/S" -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\RomCrate","$env:ProgramFiles\RomCrate" -Include romcrate.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "the last release didn't install" }
+          "old version: $($exe.VersionInfo.ProductVersion) at $($exe.FullName)"
+          $p = Start-Process $exe.FullName -PassThru; Start-Sleep 20; Stop-Process $p
+          # A user's own RomCrate files: settings, an import record, a kept picture.
+          New-Item -ItemType Directory -Force "$env:APPDATA\RomCrate" | Out-Null
+          '{"dataDir":null,"logEnabled":true}' | Set-Content -NoNewline "$env:APPDATA\RomCrate\location.json"
+          $k = "$env:LOCALAPPDATA\RomCrate\kept"
+          New-Item -ItemType Directory -Force "$k\import-history","$k\replaced-artwork\2026-01-01_000000" | Out-Null
+          '{"op":"start","id":"2026-01-01_000000.000","moving":true,"dest":"D:\\ROMs"}' | Set-Content "$k\import-history\2026-01-01_000000.000.jsonl"
+          '{"id":"2026-01-01_000000","kept":[],"replaced":0,"failed":[]}' | Set-Content "$k\replaced-artwork\2026-01-01_000000\manifest.json"
+          $files = Get-ChildItem "$env:APPDATA\RomCrate","$k" -Recurse -File | ForEach-Object { "$($_.FullName)|$((Get-FileHash $_.FullName).Hash)" }
+          $files | Set-Content "$env:RUNNER_TEMP\before.txt"
+          $web = "$env:LOCALAPPDATA\io.github.obamna1234.romcrate\EBWebView"
+          if (-not (Test-Path $web)) { throw "the old app didn't create its WebView data (where its settings live)" }
+          "user files recorded: $($files.Count); WebView data at $web"
+      - name: Build this version's installer
+        shell: bash
+        run: |
+          npm ci
+          npx tauri build --bundles nsis --config '{"version":"0.99.0"}'
+      - name: Install it over the old one and check nothing of the user's changed
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem target\release\bundle\nsis -Filter *_x64-setup.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList "/S" -Wait
+          $exes = @(Get-ChildItem "$env:LOCALAPPDATA\RomCrate","$env:ProgramFiles\RomCrate" -Include romcrate.exe -Recurse -ErrorAction SilentlyContinue)
+          if ($exes.Count -ne 1) { throw "expected one installed romcrate.exe, found $($exes.Count): $($exes.FullName -join ', ')" }
+          $v = $exes[0].VersionInfo.ProductVersion
+          if ($v -notlike "0.99.0*") { throw "the new version didn't replace the old one (still $v)" }
+          "PASS  updated in place to $v"
+          $before = Get-Content "$env:RUNNER_TEMP\before.txt"
+          foreach ($line in $before) {
+            $path, $hash = $line -split '\|'
+            if (-not (Test-Path $path)) { throw "FAIL  user file gone after the update: $path" }
+            if ((Get-FileHash $path).Hash -ne $hash) { throw "FAIL  user file changed by the update: $path" }
+          }
+          "PASS  all $($before.Count) user files are still there, unchanged"
+          if (-not (Test-Path "$env:LOCALAPPDATA\io.github.obamna1234.romcrate\EBWebView")) { throw "FAIL  the app's saved settings (WebView data) are gone" }
+          "PASS  the app's saved settings (WebView data) are still there"
+          $p = Start-Process $exes[0].FullName -PassThru; Start-Sleep 20
+          if ($p.HasExited) { throw "FAIL  the updated app exited within 20s (code $($p.ExitCode))" }
+          Stop-Process $p
+          "PASS  the updated app starts and runs"
