@@ -575,11 +575,9 @@ fn cache_size() -> u64 {
 
 #[tauri::command]
 fn clear_cache() -> Result<(), String> {
-    let dir = default_cache_dir();
-    if dir.exists() {
-        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    // Only the downloads: never the log or RomCrate's kept pictures and import
+    // records (on Windows they sit inside the same folder by default).
+    romcrate_core::datadir::clear_downloads().map_err(|e| e.to_string())
 }
 
 /// Ask where to save the "missing games" report and write it. The path comes
@@ -1445,35 +1443,47 @@ fn review_batches() -> Vec<romcrate_core::review::Batch> {
 
 /// Put back the pictures from an earlier replacement.
 #[tauri::command]
-async fn review_put_back(id: String, serial: Option<String>) -> Result<usize, String> {
+async fn review_put_back(
+    id: String,
+    serial: Option<String>,
+) -> Result<romcrate_core::review::PutBack, String> {
     let data = romcrate_core::datadir::keep_dir();
-    let r = tokio::task::spawn_blocking(move || -> anyhow::Result<usize> {
-        let b = romcrate_core::review::batches(&data)
-            .into_iter()
-            .find(|b| b.id == id)
-            .ok_or_else(|| anyhow::anyhow!("that set of pictures is gone"))?;
-        let mut n = 0;
-        if b.kept.iter().any(|k| k.on_handheld) {
-            let adb = find_adb().map_err(|e| anyhow::anyhow!(e))?;
-            let serial = serial
-                .ok_or_else(|| anyhow::anyhow!("connect the handheld to put its pictures back"))?;
-            n += romcrate_core::handheld_art::put_back_on_handheld(&adb, &serial, &data, &id)?;
-        }
-        if b.kept.iter().any(|k| !k.on_handheld) {
-            n += romcrate_core::review::put_back_on_pc(&data, &id)?;
-        }
-        Ok(n)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-    .map_err(|e| e.to_string())?;
+    let r =
+        tokio::task::spawn_blocking(move || -> anyhow::Result<romcrate_core::review::PutBack> {
+            let b = romcrate_core::review::batches(&data)
+                .into_iter()
+                .find(|b| b.id == id)
+                .ok_or_else(|| anyhow::anyhow!("that set of pictures is gone"))?;
+            let mut n = romcrate_core::review::PutBack::default();
+            if b.kept.iter().any(|k| k.on_handheld) {
+                let adb = find_adb().map_err(|e| anyhow::anyhow!(e))?;
+                let serial = serial.ok_or_else(|| {
+                    anyhow::anyhow!("connect the handheld to put its pictures back")
+                })?;
+                let r =
+                    romcrate_core::handheld_art::put_back_on_handheld(&adb, &serial, &data, &id)?;
+                n.restored += r.restored;
+                n.left.extend(r.left);
+            }
+            if b.kept.iter().any(|k| !k.on_handheld) {
+                let r = romcrate_core::review::put_back_on_pc(&data, &id)?;
+                n.restored += r.restored;
+                n.left.extend(r.left);
+            }
+            Ok(n)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
     romcrate_core::activity::append(
         &romcrate_core::activity::log_dir(),
         "Artwork",
-        &[format!(
-            "Put back {r} picture(s) from {}",
-            "an earlier replacement"
-        )],
+        &std::iter::once(format!(
+            "Put back {} picture(s) from an earlier replacement",
+            r.restored
+        ))
+        .chain(r.left.iter().cloned())
+        .collect::<Vec<_>>(),
     );
     Ok(r)
 }

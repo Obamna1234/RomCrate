@@ -1030,11 +1030,12 @@ async function cmpKeepAll() {
 
 async function putBack(b: Batch) {
   const onHandheld = b.kept.some((k) => k.onHandheld);
-  if (!confirm(`Put back the ${b.kept.length} picture${b.kept.length === 1 ? "" : "s"} you replaced on ${b.id.replace("_", " at ").replace(/(\d\d)(\d\d)(\d\d)$/, "$1:$2")}?${onHandheld ? "\n\nThe handheld needs to be connected." : ""}`)) return;
+  if (!confirm(`Put back the ${b.kept.length} picture${b.kept.length === 1 ? "" : "s"} you replaced on ${b.id.replace("_", " at ").replace(/(\d\d)(\d\d)(\d\d)(-\d+)?$/, "$1:$2")}?${onHandheld ? "\n\nThe handheld needs to be connected." : ""}`)) return;
   cmp.busy = true; render();
   try {
-    const n = await invoke<number>("review_put_back", { id: b.id, serial: snd.serial || null });
-    toast(`Put back ${n} picture${n === 1 ? "" : "s"}.`);
+    const r = await invoke<{ restored: number; left: string[] }>("review_put_back", { id: b.id, serial: snd.serial || null });
+    const n = r.restored;
+    toast(`Put back ${n} picture${n === 1 ? "" : "s"}.` + (r.left.length ? ` Left ${r.left.length} as ${r.left.length === 1 ? "it is" : "they are"}: changed since, or the kept copy is missing.` : ""));
     if (cmp.last?.id === b.id) cmp.last = null;
   } catch (e) { toast(String(e)); }
   cmp.busy = false;
@@ -1070,7 +1071,7 @@ function viewCompare(out: (Node | null)[]) {
   if (cmp.batches.length) {
     out.push(h("h2", {}, "Pictures you replaced"),
       h("div", { class: "card toggles" }, cmp.batches.slice(0, 5).map((b) => h("div", { class: "emu-row" },
-        h("div", {}, h("div", { class: "t" }, `${b.kept.length} picture${b.kept.length === 1 ? "" : "s"}${b.kept.some((k) => k.onHandheld) ? " on the handheld" : ""}`), h("div", { class: "desc" }, b.id.replace("_", " at ").replace(/(\d\d)(\d\d)(\d\d)$/, "$1:$2"))),
+        h("div", {}, h("div", { class: "t" }, `${b.kept.length} picture${b.kept.length === 1 ? "" : "s"}${b.kept.some((k) => k.onHandheld) ? " on the handheld" : ""}`), h("div", { class: "desc" }, b.id.replace("_", " at ").replace(/(\d\d)(\d\d)(\d\d)(-\d+)?$/, "$1:$2"))),
         h("span", {}),
         h("button", { class: "btn", disabled: cmp.busy, onclick: () => putBack(b) }, "Put them back")))));
   }

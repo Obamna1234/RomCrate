@@ -214,3 +214,36 @@ fn unauthorized_handheld_gets_a_clear_message() {
     let e = a.volumes("FAKE0001").unwrap_err().to_string();
     assert!(e.contains("tap \"Allow\""), "{e}");
 }
+
+#[test]
+fn a_file_that_appears_after_the_check_is_never_replaced_or_removed() {
+    let _g = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let t = tempfile::tempdir().unwrap();
+    let a = stand_in(t.path(), "device");
+    let pc = t.path().join("pc/ROMs");
+    game(&pc.join("n64/Homebrew Racer.z64"), 2 * 1024 * 1024, 7);
+    game(&pc.join("n64/Other.z64"), 4096, 8);
+    let vols = a.volumes("FAKE0001").unwrap();
+    let targets = vec![Target {
+        local: pc.join("n64"),
+        system_id: "n64".into(),
+        volume: "/storage/emulated/0".into(),
+    }];
+    let plan = adb::plan(&targets, &vols, &mut |d| {
+        a.list_files("FAKE0001", d).unwrap()
+    })
+    .unwrap();
+    assert_eq!(plan.files.len(), 2);
+    // Meanwhile, the person copies their own file there by hand. And this copy
+    // would come out damaged, which used to mean "remove what's there".
+    let theirs = t
+        .path()
+        .join("device/storage/emulated/0/ROMs/n64/Homebrew Racer.z64");
+    fs::create_dir_all(theirs.parent().unwrap()).unwrap();
+    fs::write(&theirs, b"their own file").unwrap();
+    std::env::set_var("FAKE_ADB_CORRUPT", "Homebrew Racer");
+    let sum = adb::send(&a, "FAKE0001", &plan, &|_| {}, &|| false);
+    std::env::remove_var("FAKE_ADB_CORRUPT");
+    assert_eq!(fs::read(&theirs).unwrap(), b"their own file");
+    assert_eq!((sum.copied, sum.failed, sum.conflicts), (1, 0, 1));
+}

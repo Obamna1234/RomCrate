@@ -40,12 +40,8 @@ pub fn safe_name(s: &str) -> String {
             }
         })
         .collect();
-    let t = t.trim().trim_matches('.').to_string();
-    if t.is_empty() {
-        "_".into()
-    } else {
-        t
-    }
+    // Also no Windows-reserved names (CON, NUL, COM1...) and a sane length.
+    crate::paths::safe_component(t.trim())
 }
 
 /// Where RomCrate keeps candidates while you decide.
@@ -66,6 +62,12 @@ pub struct Kept {
     pub on_handheld: bool,
     /// The copy RomCrate kept.
     pub backup: PathBuf,
+    /// Size and CRC of the picture RomCrate put there, so putting back never
+    /// replaces a picture that has been changed since. (Older records: none.)
+    #[serde(default)]
+    pub ours_size: Option<u64>,
+    #[serde(default)]
+    pub ours_crc: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -75,11 +77,38 @@ pub struct Batch {
     pub kept: Vec<Kept>,
     pub replaced: usize,
     pub failed: Vec<String>,
+    /// The handheld these pictures were on (handheld batches only).
+    #[serde(default)]
+    pub serial: Option<String>,
+}
+
+/// What putting back did.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PutBack {
+    pub restored: usize,
+    /// Pictures left as they are, and why.
+    pub left: Vec<String>,
+}
+
+pub(crate) fn crc_of(p: &Path) -> Option<u32> {
+    std::fs::read(p).ok().map(|b| crc32fast::hash(&b))
 }
 
 fn new_batch(data: &Path) -> (Batch, PathBuf) {
-    let id = chrono::Local::now().format("%Y-%m-%d_%H%M%S").to_string();
-    let dir = replaced_dir(data).join(&id);
+    // A new folder every time: two batches in the same second never share one
+    // (that would overwrite the first batch's kept pictures).
+    let base = chrono::Local::now().format("%Y-%m-%d_%H%M%S").to_string();
+    let root = replaced_dir(data);
+    let _ = std::fs::create_dir_all(&root);
+    let mut id = base.clone();
+    for n in 2.. {
+        match std::fs::create_dir(root.join(&id)) {
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => id = format!("{base}-{n}"),
+            _ => break,
+        }
+    }
+    let dir = root.join(&id);
     (
         Batch {
             id,
@@ -123,16 +152,21 @@ pub fn replace_on_pc(data: &Path, items: &[ReviewItem]) -> Batch {
                         place: t.to_string_lossy().into_owned(),
                         on_handheld: false,
                         backup,
+                        ours_size: std::fs::metadata(&it.candidate).ok().map(|m| m.len()),
+                        ours_crc: crc_of(&it.candidate),
                     });
                 }
             }
+            // Recorded before anything is replaced, so even a half-done item
+            // can be put back.
+            b.kept.extend(kept);
+            let _ = save_manifest(&dir, &b);
             for t in &it.targets {
                 if let Some(p) = t.parent() {
                     std::fs::create_dir_all(p)?;
                 }
                 std::fs::copy(&it.candidate, t)?;
             }
-            b.kept.extend(kept);
             Ok(())
         })();
         match r {
@@ -162,18 +196,46 @@ pub fn batches(data: &Path) -> Vec<Batch> {
 
 /// Put back the pictures from a batch that were on this PC. (Handheld ones are
 /// put back by `handheld_art::put_back`.) The batch is removed once it's done.
-pub fn put_back_on_pc(data: &Path, id: &str) -> anyhow::Result<usize> {
+pub fn put_back_on_pc(data: &Path, id: &str) -> anyhow::Result<PutBack> {
     let dir = replaced_dir(data).join(safe_name(id));
-    let b: Batch = serde_json::from_str(&std::fs::read_to_string(dir.join("manifest.json"))?)?;
-    let mut n = 0;
-    for k in b.kept.iter().filter(|k| !k.on_handheld) {
-        std::fs::copy(&k.backup, &k.place)?;
-        n += 1;
+    let mut b: Batch = serde_json::from_str(&std::fs::read_to_string(dir.join("manifest.json"))?)?;
+    let mut out = PutBack::default();
+    let mut remaining = Vec::new();
+    for k in std::mem::take(&mut b.kept) {
+        if k.on_handheld {
+            remaining.push(k);
+            continue;
+        }
+        let place = PathBuf::from(&k.place);
+        let changed = place.is_file()
+            && k.ours_crc.is_some()
+            && (std::fs::metadata(&place).ok().map(|m| m.len()) != k.ours_size
+                || crc_of(&place) != k.ours_crc);
+        if !k.backup.is_file() {
+            out.left
+                .push(format!("{}: the kept copy is missing", k.place));
+            remaining.push(k);
+        } else if changed {
+            out.left.push(format!(
+                "{}: it was changed after RomCrate replaced it, so it's left as it is",
+                k.place
+            ));
+            remaining.push(k);
+        } else {
+            if let Some(p) = place.parent() {
+                std::fs::create_dir_all(p)?;
+            }
+            std::fs::copy(&k.backup, &place)?;
+            out.restored += 1;
+        }
     }
-    if b.kept.iter().all(|k| !k.on_handheld) {
+    b.kept = remaining;
+    if b.kept.is_empty() {
         std::fs::remove_dir_all(&dir)?;
+    } else {
+        save_manifest(&dir, &b)?;
     }
-    Ok(n)
+    Ok(out)
 }
 
 /// Record handheld replacements in a batch (used by `handheld_art`).
@@ -212,7 +274,7 @@ mod tests {
         assert_eq!(b.replaced, 1, "{:?}", b.failed);
         assert_eq!(std::fs::read(&mine).unwrap(), b"romcrate cover");
         assert_eq!(batches(&data).len(), 1);
-        assert_eq!(put_back_on_pc(&data, &b.id).unwrap(), 1);
+        assert_eq!(put_back_on_pc(&data, &b.id).unwrap().restored, 1);
         assert_eq!(std::fs::read(&mine).unwrap(), b"my own cover");
         assert!(batches(&data).is_empty());
 
@@ -225,11 +287,82 @@ mod tests {
     }
 
     #[test]
+    fn put_back_leaves_a_picture_you_changed_since_and_batches_never_share_a_folder() {
+        let t = tempfile::tempdir().unwrap();
+        let data = t.path().join("data");
+        let media = t.path().join("ROMs/snes/media");
+        std::fs::create_dir_all(&media).unwrap();
+        let cand = t.path().join("cand.png");
+        std::fs::write(&cand, b"romcrate cover").unwrap();
+        let item = |name: &str| {
+            let p = media.join(name);
+            std::fs::write(&p, format!("my {name}")).unwrap();
+            ReviewItem {
+                system_id: "snes".into(),
+                game: name.into(),
+                kind: "boxart".into(),
+                existing: p.clone(),
+                candidate: cand.clone(),
+                targets: vec![p],
+                remote: vec![],
+            }
+        };
+        // Two replacements in the same second: separate records.
+        let b1 = replace_on_pc(&data, &[item("A.png")]);
+        let b2 = replace_on_pc(&data, &[item("B.png")]);
+        assert_ne!(b1.id, b2.id);
+        assert_eq!(batches(&data).len(), 2);
+        // You draw your own new A afterwards: putting back leaves it alone.
+        std::fs::write(media.join("A.png"), b"newer art I made").unwrap();
+        let r = put_back_on_pc(&data, &b1.id).unwrap();
+        assert_eq!((r.restored, r.left.len()), (0, 1), "{r:?}");
+        assert_eq!(
+            std::fs::read(media.join("A.png")).unwrap(),
+            b"newer art I made"
+        );
+        assert_eq!(batches(&data).len(), 2, "still there to try again");
+        let r = put_back_on_pc(&data, &b2.id).unwrap();
+        assert_eq!(r.restored, 1);
+        assert_eq!(std::fs::read(media.join("B.png")).unwrap(), b"my B.png");
+    }
+
+    #[test]
+    fn a_half_done_replacement_can_still_be_put_back() {
+        let t = tempfile::tempdir().unwrap();
+        let data = t.path().join("data");
+        let media = t.path().join("ROMs/snes/media");
+        std::fs::create_dir_all(&media).unwrap();
+        let cand = t.path().join("cand.png");
+        std::fs::write(&cand, b"romcrate cover").unwrap();
+        let first = media.join("Game.png");
+        std::fs::write(&first, b"mine").unwrap();
+        // The second target can't be written (its folder is a file).
+        std::fs::write(media.join("blocked"), b"").unwrap();
+        let item = ReviewItem {
+            system_id: "snes".into(),
+            game: "Game".into(),
+            kind: "boxart".into(),
+            existing: first.clone(),
+            candidate: cand,
+            targets: vec![first.clone(), media.join("blocked/Game.png")],
+            remote: vec![],
+        };
+        let b = replace_on_pc(&data, &[item]);
+        assert_eq!(b.failed.len(), 1);
+        assert_eq!(std::fs::read(&first).unwrap(), b"romcrate cover");
+        assert_eq!(b.kept.len(), 1, "your picture's copy is on record");
+        assert_eq!(put_back_on_pc(&data, &b.id).unwrap().restored, 1);
+        assert_eq!(std::fs::read(&first).unwrap(), b"mine");
+    }
+
+    #[test]
     fn safe_names() {
         assert_eq!(
             safe_name("Ratchet & Clank: Up Your Arsenal?"),
             "Ratchet & Clank_ Up Your Arsenal_"
         );
         assert_eq!(safe_name("../.."), "_");
+        assert_eq!(safe_name("CON"), "_CON");
+        assert_eq!(safe_name("nul.png"), "_nul.png");
     }
 }

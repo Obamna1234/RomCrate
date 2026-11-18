@@ -309,6 +309,19 @@ fn per_game_files_are_written_safely_and_undo_puts_everything_back() {
     assert_eq!(bad.failed, 1);
     assert!(get(r, "storage/emulated/0/DCIM/photo.ini").is_none());
 
+    // Only values from the setting's own list: never free text that could
+    // add lines to the emulator's file.
+    let before = get(r, &file_of("Crash"));
+    let bad = pergame::apply(
+        &mut dev,
+        &[
+            choice("psx", "Crash", Some("2\nvideo_driver = \"evil\"")),
+            choice("psx", "Crash", Some("999")),
+        ],
+    );
+    assert_eq!(bad.failed, 2, "{:?}", bad.lines);
+    assert_eq!(get(r, &file_of("Crash")), before, "nothing written");
+
     // Undo everything.
     let u = pergame::undo_all(&mut dev);
     assert_eq!(u.failed, 0, "{:?}", u.lines);

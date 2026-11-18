@@ -1536,14 +1536,7 @@ pub fn execute_logged(
         }
         let t = targets(&plan.dest, it);
         if let Some(r) = rec.as_mut() {
-            let pairs: Vec<(PathBuf, PathBuf)> = it
-                .files
-                .iter()
-                .cloned()
-                .zip(t.iter().cloned())
-                .filter(|(a, b)| a != b)
-                .collect();
-            if let Err(e) = r.begin(&it.name, &pairs) {
+            if let Err(e) = r.begin(&it.name, &begin_pairs(&it.files, &t)) {
                 sum.errors.push(format!(
                     "Stopped: couldn't write the import record ({e}). Nothing more was changed."
                 ));
@@ -1614,6 +1607,18 @@ pub fn execute_logged(
 
 /// Copy/move every file of one game. All-or-nothing: if any file fails, the
 /// copies already made for this game are removed and the originals are kept.
+/// The files a game is about to write, for the import record. One already in
+/// the library is left as it is by the import, so it's left out here and a
+/// recovery after a crash can never touch it.
+fn begin_pairs(files: &[PathBuf], targets: &[PathBuf]) -> Vec<(PathBuf, PathBuf)> {
+    files
+        .iter()
+        .cloned()
+        .zip(targets.iter().cloned())
+        .filter(|(a, b)| a != b && !b.exists())
+        .collect()
+}
+
 fn transfer_item(
     it: &ImportItem,
     targets: &[PathBuf],
@@ -2142,6 +2147,40 @@ mod tests {
             snes_rom(false),
             "both survive"
         );
+    }
+
+    #[test]
+    fn recovery_never_removes_a_file_that_was_already_in_the_library() {
+        let t = tempfile::tempdir().unwrap();
+        let (src, dest, log) = (
+            t.path().join("in"),
+            t.path().join("ROMs"),
+            t.path().join("log"),
+        );
+        // A disc game whose .bin is already in the library (identical), copied
+        // from a folder that's kept: the crash hits while the .cue is copying.
+        let bin = vec![7u8; 300_000];
+        write(&src.join("Game.cue"), b"FILE \"Game.bin\" BINARY\n");
+        write(&src.join("Game.bin"), &bin);
+        let (cue_to, bin_to) = (dest.join("psx/Game.cue"), dest.join("psx/Game.bin"));
+        write(&bin_to, &bin);
+        let mut rec = crate::importlog::Recorder::start(&log, false, &dest).unwrap();
+        let pairs = begin_pairs(
+            &[src.join("Game.cue"), src.join("Game.bin")],
+            &[cue_to.clone(), bin_to.clone()],
+        );
+        assert_eq!(pairs, vec![(src.join("Game.cue"), cue_to.clone())]);
+        rec.begin("Game.cue", &pairs).unwrap();
+        fs::copy(src.join("Game.cue"), &cue_to).unwrap();
+        drop(rec); // power cut
+        crate::importlog::recover(&log);
+        assert!(!cue_to.exists(), "the half-imported file is rolled back");
+        assert_eq!(
+            fs::read(&bin_to).unwrap(),
+            bin,
+            "the library's own file stays"
+        );
+        assert!(src.join("Game.cue").exists() && src.join("Game.bin").exists());
     }
 
     #[test]

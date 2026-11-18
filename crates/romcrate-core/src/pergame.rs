@@ -469,7 +469,22 @@ pub fn apply(fs: &mut dyn DeviceFs, choices: &[Choice]) -> ApplyResult {
             }),
             _ => false,
         };
-        if !expected_dir_ok || c.settings_file.contains("..") {
+        // Only a value from this setting's own list (never free text, which
+        // could add lines to the file).
+        if let Some(v) = &c.value {
+            if !(pg.ladder.iter().any(|st| st.value == *v) || pg.default == *v) {
+                res.failed += 1;
+                res.lines.push(format!(
+                    "FAILED {}: {v:?} isn't one of this setting's choices",
+                    stem(&c.file)
+                ));
+                continue;
+            }
+        }
+        if !expected_dir_ok
+            || c.settings_file.contains("..")
+            || c.settings_file.chars().any(|ch| ch.is_control())
+        {
             res.failed += 1;
             res.lines.push(format!(
                 "FAILED {}: not a settings file RomCrate manages ({})",
