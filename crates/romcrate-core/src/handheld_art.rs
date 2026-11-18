@@ -40,8 +40,16 @@ impl Staging {
     }
     /// The handheld path for a staged file.
     pub fn remote_of(&self, local: &Path) -> Option<(String, String)> {
+        let resolved = local
+            .parent()
+            .and_then(|p| fs::canonicalize(p).ok())
+            .zip(local.file_name())
+            .map(|(p, n)| p.join(n));
         self.roots.iter().find_map(|(l, r, vol)| {
-            let rel = local.strip_prefix(l).ok()?;
+            let rel = local
+                .strip_prefix(l)
+                .ok()
+                .or_else(|| resolved.as_deref().and_then(|x| x.strip_prefix(l).ok()))?;
             let rel = rel
                 .components()
                 .map(|c| c.as_os_str().to_string_lossy().into_owned())
@@ -79,6 +87,9 @@ pub fn stage(
             .join(review::safe_name(&v.label))
             .join(review::safe_name(dir));
         fs::create_dir_all(&local_root)?;
+        // The resolved path (on macOS /var is a link to /private/var), so it
+        // matches the paths the artwork step reports back.
+        let local_root = fs::canonicalize(&local_root)?;
         let files = list(&remote_root);
         let mut any = false;
         for (path, size) in files {
@@ -86,10 +97,14 @@ pub fn stage(
                 continue;
             };
             let parts: Vec<&str> = rel.split('/').collect();
+            // Names come from the handheld: only mirror ones that are already
+            // plain, safe file names here (no "..", "\\", ":", drive letters,
+            // control characters, Windows-reserved names). Anything else is
+            // skipped, never renamed, so the way back stays exact.
             if parts.len() < 2
                 || parts
                     .iter()
-                    .any(|p| p.is_empty() || *p == "." || *p == "..")
+                    .any(|p| p.is_empty() || crate::paths::safe_component(p) != *p)
             {
                 continue;
             }
@@ -98,6 +113,9 @@ pub fn stage(
             };
             let name = parts[parts.len() - 1];
             let local = parts.iter().fold(local_root.clone(), |p, c| p.join(c));
+            if !crate::paths::is_within(&local_root, &local) {
+                continue;
+            }
             if let Some(d) = local.parent() {
                 fs::create_dir_all(d)?;
             }
@@ -244,6 +262,7 @@ pub fn prepare_review(
 /// current picture (already copied to this PC) is kept first.
 pub fn replace_on_handheld(adb: &Adb, serial: &str, data: &Path, items: &[ReviewItem]) -> Batch {
     let (mut b, dir) = review::handheld_batch(data);
+    b.serial = Some(serial.to_string());
     for (i, it) in items.iter().enumerate() {
         let r = (|| -> anyhow::Result<()> {
             anyhow::ensure!(
@@ -263,6 +282,18 @@ pub fn replace_on_handheld(adb: &Adb, serial: &str, data: &Path, items: &[Review
             let backup = dir.join(format!("{i:05}-{}", review::safe_name(&name)));
             fs::copy(&it.existing, &backup)?;
             let want = fs::metadata(&it.candidate)?.len();
+            // Recorded before anything on the handheld changes, so a half-done
+            // item can still be put back.
+            for r in &it.remote {
+                b.kept.push(Kept {
+                    place: r.clone(),
+                    on_handheld: true,
+                    backup: backup.clone(),
+                    ours_size: Some(want),
+                    ours_crc: review::crc_of(&it.candidate),
+                });
+            }
+            review::finish_batch(&dir, &b);
             for r in &it.remote {
                 adb.push(serial, &it.candidate, r)?;
                 let d = r.rsplit_once('/').map(|(d, _)| d).unwrap_or("/");
@@ -271,13 +302,6 @@ pub fn replace_on_handheld(adb: &Adb, serial: &str, data: &Path, items: &[Review
                     got == Some(want),
                     "the picture on the handheld didn't arrive whole"
                 );
-            }
-            for r in &it.remote {
-                b.kept.push(Kept {
-                    place: r.clone(),
-                    on_handheld: true,
-                    backup: backup.clone(),
-                });
             }
             Ok(())
         })();
@@ -296,21 +320,58 @@ pub fn put_back_on_handheld(
     serial: &str,
     data: &Path,
     id: &str,
-) -> anyhow::Result<usize> {
+) -> anyhow::Result<review::PutBack> {
     let dir = review::replaced_dir(data).join(review::safe_name(id));
-    let b: Batch = serde_json::from_str(&fs::read_to_string(dir.join("manifest.json"))?)?;
-    let mut n = 0;
+    let mut b: Batch = serde_json::from_str(&fs::read_to_string(dir.join("manifest.json"))?)?;
+    if let Some(s) = b.serial.as_deref().filter(|s| *s != serial) {
+        anyhow::bail!(
+            "these pictures came from another handheld ({s}) — connect that one to put them back"
+        );
+    }
+    let mut out = review::PutBack::default();
+    let mut remaining = Vec::new();
     let mut done = HashSet::new();
-    for k in b.kept.iter().filter(|k| k.on_handheld) {
-        if done.insert(k.place.clone()) {
+    let mut listed: HashMap<String, HashMap<String, u64>> = HashMap::new();
+    for k in std::mem::take(&mut b.kept) {
+        if !k.on_handheld {
+            remaining.push(k);
+            continue;
+        }
+        if !done.insert(k.place.clone()) {
+            continue;
+        }
+        let d = k
+            .place
+            .rsplit_once('/')
+            .map(|(d, _)| d)
+            .unwrap_or("/")
+            .to_string();
+        if !listed.contains_key(&d) {
+            listed.insert(d.clone(), adb.list_files(serial, &d)?);
+        }
+        let now = listed[&d].get(&k.place).copied();
+        if !k.backup.is_file() {
+            out.left
+                .push(format!("{}: the kept copy is missing", k.place));
+            remaining.push(k);
+        } else if now.is_some() && k.ours_size.is_some() && now != k.ours_size {
+            out.left.push(format!(
+                "{}: it was changed after RomCrate replaced it, so it's left as it is",
+                k.place
+            ));
+            remaining.push(k);
+        } else {
             adb.push(serial, &k.backup, &k.place)?;
-            n += 1;
+            out.restored += 1;
         }
     }
-    if b.kept.iter().all(|k| k.on_handheld) {
+    b.kept = remaining;
+    if b.kept.is_empty() {
         fs::remove_dir_all(&dir)?;
+    } else {
+        review::finish_batch(&dir, &b);
     }
-    Ok(n)
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -326,6 +387,65 @@ mod tests {
             roms_dir: Some(roms.into()),
             console_folders: vec![],
         }
+    }
+
+    #[test]
+    fn handheld_names_can_never_write_outside_the_staging_folder() {
+        let t = tempfile::tempdir().unwrap();
+        let cache = t.path().join("cache");
+        let sd = "/storage/1A2B-3C4D/ROMs";
+        let bad = [
+            "snes/..\\..\\..\\..\\evil.sfc",
+            "snes/media/box2dfront/..\\..\\..\\..\\..\\evil.png",
+            "snes/C:evil.sfc",
+            "snes/C:\\evil.sfc",
+            "snes/bad\u{7}name.sfc",
+            "snes/CON.sfc",
+            "snes/trailing. ",
+            "../../evil/x.sfc",
+            "snes/../../../evil.sfc",
+        ];
+        let mut remote: HashMap<String, u64> = HashMap::new();
+        for b in bad {
+            remote.insert(format!("{sd}/{b}"), 3);
+        }
+        remote.insert(format!("{sd}/snes/Good Game.sfc"), 3);
+        remote.insert(format!("{sd}/snes/metadata.pegasus.txt"), 3);
+        let vols = vec![vol("/storage/1A2B-3C4D", "SD", "ROMs")];
+        let mut pulled = vec![];
+        let st = stage(
+            "../../FAKE\\0001",
+            &vols,
+            &cache,
+            &mut |d| {
+                remote
+                    .iter()
+                    .filter(|(k, _)| k.starts_with(d))
+                    .map(|(k, v)| (k.clone(), *v))
+                    .collect()
+            },
+            &mut |r, local| {
+                pulled.push((r.to_string(), local.to_path_buf()));
+                fs::write(local, "x")?;
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(st.games, 1, "only the plain-named game");
+        let root = fs::canonicalize(&st.root).unwrap();
+        for f in st.from_device.keys() {
+            assert!(f.starts_with(&root), "{} escaped", f.display());
+        }
+        for (_, l) in &pulled {
+            assert!(l.starts_with(&root));
+        }
+        // Nothing at all landed outside the cache folder.
+        let mut all = vec![];
+        walk(t.path(), &mut all);
+        for f in all {
+            assert!(f.starts_with(&cache), "{} written outside", f.display());
+        }
+        assert_eq!(st.from_device.len(), 2, "{:?}", st.from_device.keys());
     }
 
     #[test]

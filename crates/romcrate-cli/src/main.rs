@@ -26,6 +26,9 @@ USAGE:
   romcrate-cli pegasus --roms <dir>... [--pegasus-on android] [--emulator s=id] [--fix-launch]
                                     (write just the Pegasus launch lines, no artwork)
   romcrate-cli import --from <folder|zip> --to <ROMs folder> [options]
+  romcrate-cli import-history                 earlier imports (newest first)
+  romcrate-cli import-undo [--last|<id>]      put an import back (never overwrites)
+  romcrate-cli import-recover                 roll back a game an import was cut off in
 
 CHECK MY FILES:
   Finds unfinished downloads, damaged zips, PlayStation Store packages, damaged N64 ROMs,
@@ -252,6 +255,54 @@ fn main() -> anyhow::Result<()> {
         }
         Some("scrape") => rt.block_on(scrape(&args[1..])),
         Some("import") => rt.block_on(import(&args[1..])),
+        Some("import-history") => {
+            for r in romcrate_core::importlog::runs(&romcrate_core::importlog::default_dir()) {
+                println!(
+                    "{}  {} game(s) {} into {}{}{}",
+                    r.id,
+                    r.games,
+                    if r.moving { "moved" } else { "copied" },
+                    r.dest.display(),
+                    if r.undone { "  [undone]" } else { "" },
+                    r.interrupted
+                        .map(|g| format!("  [cut off at {g}]"))
+                        .unwrap_or_default()
+                );
+            }
+            Ok(())
+        }
+        Some("import-undo") => {
+            let dir = romcrate_core::importlog::default_dir();
+            let id = match args.get(1).map(String::as_str) {
+                Some("--last") | None => romcrate_core::importlog::runs(&dir)
+                    .into_iter()
+                    .find(|r| !r.undone && r.games > 0)
+                    .map(|r| r.id)
+                    .ok_or_else(|| anyhow::anyhow!("no import to undo"))?,
+                Some(id) => id.to_string(),
+            };
+            let r = romcrate_core::importlog::undo(&dir, &id)?;
+            println!(
+                "Undid {id}: {} moved back, {} copies removed, {} left as they are",
+                r.moved_back,
+                r.copies_removed,
+                r.kept.len()
+            );
+            for k in r.kept {
+                println!("  kept {k}");
+            }
+            Ok(())
+        }
+        Some("import-recover") => {
+            let fixed = romcrate_core::importlog::recover(&romcrate_core::importlog::default_dir());
+            if fixed.is_empty() {
+                println!("Nothing to recover.");
+            }
+            for (g, r) in fixed {
+                println!("{g}: put back as it was ({} moved back, {} partial copies removed, {} left as they are)", r.moved_back, r.copies_removed, r.kept.len());
+            }
+            Ok(())
+        }
         _ => {
             print!("{HELP}");
             Ok(())
@@ -389,7 +440,8 @@ async fn import(args: &[String]) -> anyhow::Result<()> {
         bail!("not enough free space — nothing was changed");
     }
     let last = std::sync::Mutex::new(0u64);
-    let summary = import::execute(
+    let log_dir = romcrate_core::importlog::default_dir();
+    let summary = import::execute_logged(
         &plan,
         &assign,
         &exclude,
@@ -412,6 +464,7 @@ async fn import(args: &[String]) -> anyhow::Result<()> {
             }
             _ => {}
         },
+        Some(&log_dir),
     );
     println!(
         "\nDone: {} imported, {} already there, {} skipped, {} failed ({}).",

@@ -81,6 +81,44 @@ pub fn is_within(root: &Path, p: &Path) -> bool {
     q.len() >= r.len() && q[..r.len()] == r[..]
 }
 
+/// Copy `src` to a new file `dst` (never overwriting), then check the copy
+/// reads back the same.
+pub fn copy_new_checked(src: &Path, dst: &Path) -> anyhow::Result<()> {
+    let mut input = std::fs::File::open(src)?;
+    let mut out = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dst)?;
+    std::io::copy(&mut input, &mut out)?;
+    out.sync_all()?;
+    drop(out);
+    if !same_contents(src, dst)? {
+        let _ = std::fs::remove_file(dst);
+        anyhow::bail!("the copy didn't match the original");
+    }
+    Ok(())
+}
+
+/// Do two files hold exactly the same bytes?
+pub fn same_contents(a: &Path, b: &Path) -> std::io::Result<bool> {
+    use std::io::Read;
+    if std::fs::metadata(a)?.len() != std::fs::metadata(b)?.len() {
+        return Ok(false);
+    }
+    let (mut fa, mut fb) = (std::fs::File::open(a)?, std::fs::File::open(b)?);
+    let (mut ba, mut bb) = (vec![0u8; 1 << 20], vec![0u8; 1 << 20]);
+    loop {
+        let na = fa.read(&mut ba)?;
+        if na == 0 {
+            return Ok(true);
+        }
+        fb.read_exact(&mut bb[..na])?;
+        if ba[..na] != bb[..na] {
+            return Ok(false);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,8 +9,8 @@
 //! removes them. A per-game file without the marker is yours and is never touched.
 
 use crate::gamesettings::{
-    find_preset, preset_text, retroarch_shader_info, style_of_preset, ApplyResult, DeviceFs, PresetFound,
-    MARKER, STYLE_NONE,
+    find_preset, preset_text, retroarch_shader_info, style_of_preset, ApplyResult, DeviceFs,
+    PresetFound, MARKER, STYLE_NONE,
 };
 use crate::pergame::{games_in, manifest, profile_for, save_manifest, stem};
 use serde::{Deserialize, Serialize};
@@ -29,9 +29,16 @@ pub struct StyleGame {
 }
 
 fn files_for(cfg: &str, core: &str, driver: &str, game_file: &str) -> (String, String) {
-    let ext = if driver == "vulkan" { "slangp" } else { "glslp" };
+    let ext = if driver == "vulkan" {
+        "slangp"
+    } else {
+        "glslp"
+    };
     let s = stem(game_file);
-    (format!("{cfg}/{core}/{s}.{ext}"), format!("{cfg}/{core}/{s}.cfg"))
+    (
+        format!("{cfg}/{core}/{s}.{ext}"),
+        format!("{cfg}/{core}/{s}.cfg"),
+    )
 }
 
 /// The games in these console folders (system, folder) that can have a style of their own.
@@ -49,7 +56,8 @@ pub fn games(fs: &mut dyn DeviceFs, dirs: &[(String, String)]) -> Vec<StyleGame>
             let (preset, _) = files_for(&cfg, &core, &driver, &file);
             let (style, own) = match fs.read(&preset).ok().flatten() {
                 Some(t) if t.starts_with(MARKER) => (
-                    style_of_preset(p, &t).or_else(|| t.contains("/stock.").then(|| STYLE_NONE.to_string())),
+                    style_of_preset(p, &t)
+                        .or_else(|| t.contains("/stock.").then(|| STYLE_NONE.to_string())),
                     false,
                 ),
                 Some(_) => (None, true),
@@ -80,7 +88,8 @@ pub fn apply(fs: &mut dyn DeviceFs, picks: &[Pick]) -> ApplyResult {
     let mut res = ApplyResult::default();
     let Some((cfg, driver, shader_dir)) = retroarch_shader_info(fs) else {
         res.failed += 1;
-        res.lines.push("FAILED RetroArch wasn't found on the handheld".into());
+        res.lines
+            .push("FAILED RetroArch wasn't found on the handheld".into());
         return res;
     };
     let mut record = manifest(fs);
@@ -118,7 +127,11 @@ pub fn apply(fs: &mut dyn DeviceFs, picks: &[Pick]) -> ApplyResult {
                     // The console has a shader; to turn it off for this game alone,
                     // the game's preset is one pass of RetroArch's plain pass-through
                     // shader (`stock.slang` / `stock.glsl`, at the top of both packs).
-                    let (folder, ext) = if driver == "vulkan" { ("shaders_slang", "slang") } else { ("shaders_glsl", "glsl") };
+                    let (folder, ext) = if driver == "vulkan" {
+                        ("shaders_slang", "slang")
+                    } else {
+                        ("shaders_glsl", "glsl")
+                    };
                     let stock = shader_dir
                         .as_deref()
                         .map(|d| format!("{d}/{folder}/stock.{ext}"))
@@ -135,11 +148,23 @@ pub fn apply(fs: &mut dyn DeviceFs, picks: &[Pick]) -> ApplyResult {
                         .into_iter()
                         .find(|s| s.id == id)
                         .ok_or_else(|| anyhow::anyhow!("unknown style {id}"))?;
-                    write_preset(fs, &driver, shader_dir.as_deref(), &st, &preset, &mut record)?;
+                    write_preset(
+                        fs,
+                        &driver,
+                        shader_dir.as_deref(),
+                        &st,
+                        &preset,
+                        &mut record,
+                    )?;
                     if id == "sharp" {
                         remove(fs, &cfgf, &mut record)?;
                     } else {
-                        write_text(fs, &cfgf, &format!("{MARKER}\nvideo_smooth = \"false\"\n"), &mut record)?;
+                        write_text(
+                            fs,
+                            &cfgf,
+                            &format!("{MARKER}\nvideo_smooth = \"false\"\n"),
+                            &mut record,
+                        )?;
                     }
                     Ok(st.label)
                 }
@@ -152,12 +177,15 @@ pub fn apply(fs: &mut dyn DeviceFs, picks: &[Pick]) -> ApplyResult {
             }
             Err(e) => {
                 res.failed += 1;
-                res.lines.push(format!("FAILED {name} ({}): {e}", pk.system));
+                res.lines
+                    .push(format!("FAILED {name} ({}): {e}", pk.system));
             }
         }
     }
     if let Err(e) = save_manifest(fs, &record) {
-        res.lines.push(format!("Couldn't update RomCrate's list of created files: {e}"));
+        res.lines.push(format!(
+            "Couldn't update RomCrate's list of created files: {e}"
+        ));
     }
     res
 }
@@ -181,9 +209,17 @@ fn write_preset(
 }
 
 /// Write one of RomCrate's own per-game files and note it for Undo.
-fn write_text(fs: &mut dyn DeviceFs, path: &str, text: &str, record: &mut Vec<(String, String)>) -> anyhow::Result<()> {
+fn write_text(
+    fs: &mut dyn DeviceFs,
+    path: &str,
+    text: &str,
+    record: &mut Vec<(String, String)>,
+) -> anyhow::Result<()> {
     fs.write(path, text)?;
-    anyhow::ensure!(fs.read(path)?.as_deref() == Some(text), "didn't read back the same");
+    anyhow::ensure!(
+        fs.read(path)?.as_deref() == Some(text),
+        "didn't read back the same"
+    );
     if !record.iter().any(|(_, x)| x == path) {
         record.push(("created".into(), path.to_string()));
     }
@@ -191,7 +227,11 @@ fn write_text(fs: &mut dyn DeviceFs, path: &str, text: &str, record: &mut Vec<(S
 }
 
 /// Remove one of RomCrate's own per-game files (checked to be ours before).
-fn remove(fs: &mut dyn DeviceFs, path: &str, record: &mut Vec<(String, String)>) -> anyhow::Result<()> {
+fn remove(
+    fs: &mut dyn DeviceFs,
+    path: &str,
+    record: &mut Vec<(String, String)>,
+) -> anyhow::Result<()> {
     if fs.read(path)?.is_some() {
         fs.remove(path)?;
     }

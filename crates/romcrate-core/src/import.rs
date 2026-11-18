@@ -1150,6 +1150,9 @@ fn finish_plan(
     let folders = existing_folders(dest);
     let mut totals: BTreeMap<String, SystemTotal> = BTreeMap::new();
     let mut needed = 0u64;
+    // Where earlier games in this import will land (lower-case: Windows and
+    // macOS treat "Game.nes" and "game.nes" as the same file).
+    let mut taken: HashMap<String, PathBuf> = HashMap::new();
     for it in items.iter_mut() {
         let Some(sys) = it.system.clone() else {
             continue;
@@ -1158,6 +1161,9 @@ fn finish_plan(
         it.dest_folder = Some(folder.clone());
         if it.state == ItemState::Ready {
             check_destination(dest, it);
+        }
+        if it.state == ItemState::Ready {
+            keep_apart(dest, it, &mut taken);
         }
         if it.state == ItemState::Ready {
             let same = mode == Mode::Move
@@ -1273,6 +1279,60 @@ fn check_destination(dest: &Path, it: &mut ImportItem) {
     }
 }
 
+/// Two games in one import that would land on the same file: the same file
+/// twice is imported once; two different files both survive — a single-file
+/// game gets " (2)" added to its name, a game with several files (whose
+/// sheet names its other files) is left out with the reason.
+fn keep_apart(dest: &Path, it: &mut ImportItem, taken: &mut HashMap<String, PathBuf>) {
+    let key = |p: &Path| p.to_string_lossy().to_lowercase();
+    let clash = |t: &[PathBuf], taken: &HashMap<String, PathBuf>| {
+        t.iter().find_map(|p| taken.get(&key(p)).cloned())
+    };
+    let t = targets(dest, it);
+    if let Some(first) = clash(&t, taken) {
+        let same = it.files.len() == 1
+            && fs::metadata(&first).map(|m| m.len()).ok()
+                == fs::metadata(&it.files[0]).map(|m| m.len()).ok()
+            && file_crc(&first).ok() == file_crc(&it.files[0]).ok();
+        if same {
+            it.state = ItemState::AlreadyThere;
+            it.warnings.push(format!(
+                "The same file is also at {} — imported once",
+                first.display()
+            ));
+            return;
+        }
+        if it.files.len() > 1 {
+            it.state = ItemState::Conflict(
+                "another game in this import has the same name — import it on its own".into(),
+            );
+            return;
+        }
+        let (stem, ext) = match it.dest_name.rsplit_once('.') {
+            Some((a, b)) => (a.to_string(), format!(".{b}")),
+            None => (it.dest_name.clone(), String::new()),
+        };
+        let original = it.dest_name.clone();
+        for n in 2..1000 {
+            it.dest_name = format!("{stem} ({n}){ext}");
+            let t2 = targets(dest, it);
+            if clash(&t2, taken).is_none() && !t2[0].exists() {
+                break;
+            }
+        }
+        it.warnings.push(format!(
+            "Another file in this import is also called \"{original}\" — this one becomes \"{}\" so both are kept",
+            it.dest_name
+        ));
+        check_destination(dest, it);
+    }
+    if it.state == ItemState::Ready {
+        for p in targets(dest, it) {
+            taken.insert(key(&p), it.files[0].clone());
+        }
+    }
+}
+
 fn free_space(dest: &Path) -> Option<u64> {
     let mut p = Some(dest);
     while let Some(d) = p {
@@ -1372,6 +1432,8 @@ pub struct ImportSummary {
     /// System folders that received games (for scraping straight after).
     pub folders: Vec<PathBuf>,
     pub errors: Vec<String>,
+    /// This run's record, for "Undo this import" (None if it couldn't be kept).
+    pub undo_id: Option<String>,
 }
 
 /// Copy or move the planned games. `assign` sets the console for items the
@@ -1382,6 +1444,19 @@ pub fn execute(
     exclude: &HashSet<usize>,
     cancel: &AtomicBool,
     progress: &dyn Fn(ImportEvent),
+) -> ImportSummary {
+    execute_logged(plan, assign, exclude, cancel, progress, None)
+}
+
+/// Like `execute`, keeping a record of the run in `log_dir` so it can be undone
+/// (and cleaned up after a crash): see `importlog.rs`.
+pub fn execute_logged(
+    plan: &ImportPlan,
+    assign: &HashMap<usize, String>,
+    exclude: &HashSet<usize>,
+    cancel: &AtomicBool,
+    progress: &dyn Fn(ImportEvent),
+    log_dir: Option<&Path>,
 ) -> ImportSummary {
     let folders = existing_folders(&plan.dest);
     let mut work: Vec<ImportItem> = Vec::new();
@@ -1435,6 +1510,23 @@ pub fn execute(
         }
     }
 
+    let mut rec = match log_dir.filter(|_| !work.is_empty()) {
+        Some(d) => {
+            match crate::importlog::Recorder::start(d, plan.mode == Mode::Move, &plan.dest) {
+                Ok(r) => Some(r),
+                Err(e) => {
+                    sum.errors.push(format!(
+                        "Couldn't keep a record of this import, so it can't be undone later ({e})"
+                    ));
+                    None
+                }
+            }
+        }
+        None => None,
+    };
+    sum.undo_id = rec
+        .as_ref()
+        .and_then(|r| r.path.file_stem().map(|s| s.to_string_lossy().into_owned()));
     let mut done_bytes = 0u64;
     let mut folders_used: Vec<PathBuf> = Vec::new();
     for it in &work {
@@ -1443,6 +1535,14 @@ pub fn execute(
             break;
         }
         let t = targets(&plan.dest, it);
+        if let Some(r) = rec.as_mut() {
+            if let Err(e) = r.begin(&it.name, &begin_pairs(&it.files, &t)) {
+                sum.errors.push(format!(
+                    "Stopped: couldn't write the import record ({e}). Nothing more was changed."
+                ));
+                break;
+            }
+        }
         let res = transfer_item(it, &t, plan.mode, cancel, &mut |n| {
             done_bytes += n;
             progress(ImportEvent::Progress {
@@ -1451,8 +1551,14 @@ pub fn execute(
                 current: it.name.clone(),
             });
         });
+        if let Some(r) = rec.as_mut() {
+            let _ = match &res {
+                Ok(ops) => r.done(&it.name, ops.clone()),
+                Err(_) => r.failed(&it.name),
+            };
+        }
         match res {
-            Ok(()) => {
+            Ok(_) => {
                 sum.imported += 1;
                 sum.bytes += it.size;
                 if let Some(dir) = t[0].parent() {
@@ -1490,6 +1596,9 @@ pub fn execute(
         }
     }
     sum.folders = folders_used;
+    if let Some(r) = rec {
+        let _ = r.finish();
+    }
     progress(ImportEvent::Finished {
         summary: sum.clone(),
     });
@@ -1498,13 +1607,25 @@ pub fn execute(
 
 /// Copy/move every file of one game. All-or-nothing: if any file fails, the
 /// copies already made for this game are removed and the originals are kept.
+/// The files a game is about to write, for the import record. One already in
+/// the library is left as it is by the import, so it's left out here and a
+/// recovery after a crash can never touch it.
+fn begin_pairs(files: &[PathBuf], targets: &[PathBuf]) -> Vec<(PathBuf, PathBuf)> {
+    files
+        .iter()
+        .cloned()
+        .zip(targets.iter().cloned())
+        .filter(|(a, b)| a != b && !b.exists())
+        .collect()
+}
+
 fn transfer_item(
     it: &ImportItem,
     targets: &[PathBuf],
     mode: Mode,
     cancel: &AtomicBool,
     on_bytes: &mut dyn FnMut(u64),
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Vec<crate::importlog::FileOp>> {
     let mut written: Vec<PathBuf> = Vec::new();
     let mut renamed: Vec<(PathBuf, PathBuf)> = Vec::new();
     let result = (|| -> anyhow::Result<()> {
@@ -1537,15 +1658,24 @@ fn transfer_item(
     })();
     match result {
         Ok(()) => {
-            if mode == Mode::Move {
-                // Originals are removed only once every copy is verified.
-                for (src, dst) in it.files.iter().zip(targets) {
-                    if written.contains(dst) {
-                        let _ = fs::remove_file(src);
-                    }
+            let mut ops = Vec::new();
+            for (src, dst) in it.files.iter().zip(targets) {
+                let was_renamed = renamed.iter().any(|(_, d)| d == dst);
+                let was_written = written.contains(dst);
+                if !was_renamed && !was_written {
+                    continue; // already there, untouched
                 }
+                // Originals are removed only once every copy is verified.
+                let moved = was_renamed || (mode == Mode::Move && fs::remove_file(src).is_ok());
+                ops.push(crate::importlog::FileOp {
+                    from: src.clone(),
+                    to: dst.clone(),
+                    moved,
+                    size: fs::metadata(dst).map(|m| m.len()).unwrap_or(0),
+                    mtime: crate::importlog::mtime(dst),
+                });
             }
-            Ok(())
+            Ok(ops)
         }
         Err(e) => {
             for w in &written {
@@ -1849,6 +1979,345 @@ mod tests {
             .filter(|p| p.to_string_lossy().ends_with(".part"))
             .collect();
         assert!(parts.is_empty());
+    }
+
+    fn plan_of(src: &Path, dest: &Path, mode: Mode) -> ImportPlan {
+        let opts = ImportOptions {
+            mode,
+            ..ImportOptions::default()
+        };
+        rt().block_on(plan(
+            std::slice::from_ref(&src.to_path_buf()),
+            dest,
+            &opts,
+            None,
+        ))
+        .unwrap()
+    }
+
+    fn snapshot(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+        let mut v: Vec<_> = walkdir_all(root)
+            .into_iter()
+            .filter(|p| p.is_file())
+            .map(|p| {
+                (
+                    p.strip_prefix(root).unwrap().to_path_buf(),
+                    fs::read(&p).unwrap(),
+                )
+            })
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn undo_a_move_puts_everything_back_exactly() {
+        let t = tempfile::tempdir().unwrap();
+        let (src, dest, log) = (
+            t.path().join("in"),
+            t.path().join("ROMs"),
+            t.path().join("log"),
+        );
+        write(&src.join("A.sfc"), &snes_rom(false));
+        write(&src.join("sub/B.gba"), &gba_rom());
+        write(&src.join("ünïcødé 🎮 game.nes"), b"NES\x1a unicode");
+        let before = snapshot(&src);
+        let p = plan_of(&src, &dest, Mode::Move);
+        let s = execute_logged(
+            &p,
+            &HashMap::new(),
+            &HashSet::new(),
+            &AtomicBool::new(false),
+            &|_| {},
+            Some(&log),
+        );
+        assert_eq!(s.imported, 3, "{s:?}");
+        assert!(!src.join("A.sfc").exists(), "moved");
+        let id = s.undo_id.clone().unwrap();
+        let runs = crate::importlog::runs(&log);
+        assert_eq!(
+            (
+                runs[0].games,
+                runs[0].files,
+                runs[0].finished,
+                runs[0].moving
+            ),
+            (3, 3, true, true)
+        );
+
+        let r = crate::importlog::undo(&log, &id).unwrap();
+        assert_eq!((r.moved_back, r.kept.len()), (3, 0), "{r:?}");
+        assert_eq!(snapshot(&src), before, "every file back, byte for byte");
+        assert!(
+            snapshot(&dest).is_empty(),
+            "nothing left in the ROMs folder"
+        );
+        assert!(
+            !dest.join("snes").exists(),
+            "folders the import made are tidied away"
+        );
+        assert!(
+            crate::importlog::undo(&log, &id).is_err(),
+            "can't undo twice"
+        );
+        assert!(crate::importlog::runs(&log)[0].undone);
+    }
+
+    #[test]
+    fn undo_a_copy_removes_only_unchanged_copies_and_never_overwrites() {
+        let t = tempfile::tempdir().unwrap();
+        let (src, dest, log) = (
+            t.path().join("in"),
+            t.path().join("ROMs"),
+            t.path().join("log"),
+        );
+        write(&src.join("A.sfc"), &snes_rom(false));
+        write(&src.join("B.gba"), &gba_rom());
+        write(&src.join("C.nes"), b"NES\x1a c");
+        write(
+            &dest.join("snes/Keep me.sfc"),
+            b"already in the ROMs folder",
+        );
+        let p = plan_of(&src, &dest, Mode::Copy);
+        let s = execute_logged(
+            &p,
+            &HashMap::new(),
+            &HashSet::new(),
+            &AtomicBool::new(false),
+            &|_| {},
+            Some(&log),
+        );
+        assert_eq!(s.imported, 3);
+        // You edit one copy afterwards (e.g. patch it): undo keeps it.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        fs::write(dest.join("gba/B.gba"), b"patched by you").unwrap();
+        // You delete one original: its copy is kept.
+        fs::remove_file(src.join("C.nes")).unwrap();
+        let r = crate::importlog::undo(&log, &s.undo_id.unwrap()).unwrap();
+        assert_eq!(r.copies_removed, 1, "{r:?}");
+        assert!(!dest.join("snes/A.sfc").exists());
+        assert_eq!(fs::read(dest.join("gba/B.gba")).unwrap(), b"patched by you");
+        assert!(dest.join("nes/C.nes").exists(), "only copy left of C: kept");
+        assert_eq!(r.kept.len(), 2, "{r:?}");
+        assert!(r
+            .kept
+            .iter()
+            .any(|k| k.contains("changed since the import")));
+        assert!(r
+            .kept
+            .iter()
+            .any(|k| k.contains("original") && k.contains("gone")));
+        assert_eq!(
+            fs::read(dest.join("snes/Keep me.sfc")).unwrap(),
+            b"already in the ROMs folder"
+        );
+        assert!(
+            src.join("A.sfc").exists() && src.join("B.gba").exists(),
+            "originals untouched"
+        );
+    }
+
+    #[test]
+    fn undo_never_overwrites_a_file_back_at_the_original_place() {
+        let t = tempfile::tempdir().unwrap();
+        let (src, dest, log) = (
+            t.path().join("in"),
+            t.path().join("ROMs"),
+            t.path().join("log"),
+        );
+        write(&src.join("A.sfc"), &snes_rom(false));
+        let p = plan_of(&src, &dest, Mode::Move);
+        let s = execute_logged(
+            &p,
+            &HashMap::new(),
+            &HashSet::new(),
+            &AtomicBool::new(false),
+            &|_| {},
+            Some(&log),
+        );
+        write(&src.join("A.sfc"), b"a new file with the same name");
+        let r = crate::importlog::undo(&log, &s.undo_id.unwrap()).unwrap();
+        assert_eq!(r.moved_back, 0);
+        assert_eq!(
+            fs::read(src.join("A.sfc")).unwrap(),
+            b"a new file with the same name"
+        );
+        assert_eq!(
+            fs::read(dest.join("snes/A.sfc")).unwrap(),
+            snes_rom(false),
+            "both survive"
+        );
+    }
+
+    #[test]
+    fn recovery_never_removes_a_file_that_was_already_in_the_library() {
+        let t = tempfile::tempdir().unwrap();
+        let (src, dest, log) = (
+            t.path().join("in"),
+            t.path().join("ROMs"),
+            t.path().join("log"),
+        );
+        // A disc game whose .bin is already in the library (identical), copied
+        // from a folder that's kept: the crash hits while the .cue is copying.
+        let bin = vec![7u8; 300_000];
+        write(&src.join("Game.cue"), b"FILE \"Game.bin\" BINARY\n");
+        write(&src.join("Game.bin"), &bin);
+        let (cue_to, bin_to) = (dest.join("psx/Game.cue"), dest.join("psx/Game.bin"));
+        write(&bin_to, &bin);
+        let mut rec = crate::importlog::Recorder::start(&log, false, &dest).unwrap();
+        let pairs = begin_pairs(
+            &[src.join("Game.cue"), src.join("Game.bin")],
+            &[cue_to.clone(), bin_to.clone()],
+        );
+        assert_eq!(pairs, vec![(src.join("Game.cue"), cue_to.clone())]);
+        rec.begin("Game.cue", &pairs).unwrap();
+        fs::copy(src.join("Game.cue"), &cue_to).unwrap();
+        drop(rec); // power cut
+        crate::importlog::recover(&log);
+        assert!(!cue_to.exists(), "the half-imported file is rolled back");
+        assert_eq!(
+            fs::read(&bin_to).unwrap(),
+            bin,
+            "the library's own file stays"
+        );
+        assert!(src.join("Game.cue").exists() && src.join("Game.bin").exists());
+    }
+
+    #[test]
+    fn a_crash_midway_is_rolled_back_next_time() {
+        let t = tempfile::tempdir().unwrap();
+        let (src, dest, log) = (
+            t.path().join("in"),
+            t.path().join("ROMs"),
+            t.path().join("log"),
+        );
+        // A disc game: two files. The crash hits after the first was moved and
+        // while the second was half-copied (cross-drive copy).
+        write(
+            &src.join("Game.cue"),
+            b"FILE \"Game.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n",
+        );
+        write(&src.join("Game.bin"), &vec![7u8; 300_000]);
+        write(&src.join("A.sfc"), &snes_rom(false));
+        let before = snapshot(&src);
+        let mut rec = crate::importlog::Recorder::start(&log, true, &dest).unwrap();
+        // A finished game first.
+        let a_to = dest.join("snes/A.sfc");
+        fs::create_dir_all(a_to.parent().unwrap()).unwrap();
+        fs::rename(src.join("A.sfc"), &a_to).unwrap();
+        rec.done(
+            "A.sfc",
+            vec![crate::importlog::FileOp {
+                from: src.join("A.sfc"),
+                to: a_to.clone(),
+                moved: true,
+                size: fs::metadata(&a_to).unwrap().len(),
+                mtime: crate::importlog::mtime(&a_to),
+            }],
+        )
+        .unwrap();
+        // Then the cut-off one.
+        let (cue_to, bin_to) = (dest.join("psx/Game.cue"), dest.join("psx/Game.bin"));
+        rec.begin(
+            "Game.cue",
+            &[
+                (src.join("Game.cue"), cue_to.clone()),
+                (src.join("Game.bin"), bin_to.clone()),
+            ],
+        )
+        .unwrap();
+        fs::create_dir_all(dest.join("psx")).unwrap();
+        fs::rename(src.join("Game.cue"), &cue_to).unwrap();
+        fs::write(dest.join("psx/Game.bin.part"), vec![7u8; 1000]).unwrap();
+        drop(rec); // power cut: no "done", no "finished"; plus a torn half line
+        let path = fs::read_dir(&log).unwrap().next().unwrap().unwrap().path();
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .write_all(b"{\"op\":\"do")
+            .unwrap();
+
+        let runs = crate::importlog::runs(&log);
+        assert_eq!(runs[0].interrupted.as_deref(), Some("Game.cue"));
+        let fixed = crate::importlog::recover(&log);
+        assert_eq!(fixed.len(), 1);
+        assert_eq!(fixed[0].0, "Game.cue");
+        assert!(
+            src.join("Game.cue").exists() && src.join("Game.bin").exists(),
+            "the cut-off game is whole where it was"
+        );
+        assert!(
+            !dest.join("psx/Game.bin.part").exists() && !cue_to.exists(),
+            "no half-written leftovers"
+        );
+        assert!(a_to.exists(), "the finished game stays imported");
+        assert!(
+            crate::importlog::recover(&log).is_empty(),
+            "nothing left to recover"
+        );
+        // And the whole run can still be undone.
+        let id = runs[0].id.clone();
+        crate::importlog::undo(&log, &id).unwrap();
+        assert_eq!(snapshot(&src), before);
+    }
+
+    #[test]
+    fn same_names_both_survive_and_true_duplicates_import_once() {
+        let t = tempfile::tempdir().unwrap();
+        let (src, dest) = (t.path().join("in"), t.path().join("ROMs"));
+        write(&src.join("a/Same Name.nes"), b"NES\x1a first");
+        write(&src.join("b/Same Name.nes"), b"NES\x1a second, different");
+        write(
+            &src.join("c/same name.NES"),
+            b"NES\x1a third, different again",
+        );
+        write(&src.join("d/Twice.nes"), b"NES\x1a twice");
+        write(&src.join("e/Twice.nes"), b"NES\x1a twice");
+        let p = plan_of(&src, &dest, Mode::Copy);
+        let names: HashSet<String> = p
+            .items
+            .iter()
+            .filter(|i| i.state == ItemState::Ready)
+            .map(|i| i.dest_name.to_lowercase())
+            .collect();
+        assert!(
+            names.contains("same name.nes")
+                && names.contains("same name (2).nes")
+                && names.contains("same name (3).nes"),
+            "{names:?}"
+        );
+        let twice: Vec<_> = p.items.iter().filter(|i| i.name == "Twice.nes").collect();
+        assert_eq!(
+            twice.iter().filter(|i| i.state == ItemState::Ready).count(),
+            1
+        );
+        assert_eq!(
+            twice
+                .iter()
+                .filter(|i| i.state == ItemState::AlreadyThere)
+                .count(),
+            1
+        );
+        let s = execute(
+            &p,
+            &HashMap::new(),
+            &HashSet::new(),
+            &AtomicBool::new(false),
+            &|_| {},
+        );
+        assert_eq!((s.imported, s.failed), (4, 0), "{s:?}");
+        let mut got: Vec<Vec<u8>> = walkdir_all(&dest.join("nes"))
+            .into_iter()
+            .filter(|p| p.is_file())
+            .map(|p| fs::read(p).unwrap())
+            .collect();
+        got.sort();
+        assert_eq!(
+            got.len(),
+            4,
+            "three different files + one copy of the duplicate"
+        );
     }
 
     #[test]

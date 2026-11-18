@@ -231,6 +231,12 @@ impl Adb {
         Ok(())
     }
 
+    /// Is anything at this path on the handheld right now?
+    pub fn exists(&self, serial: &str, remote: &str) -> anyhow::Result<bool> {
+        let out = self.shell(serial, &format!("[ -e {} ] && echo yes; true", q(remote)))?;
+        Ok(out.trim() == "yes")
+    }
+
     pub fn remove(&self, serial: &str, remote: &str) -> anyhow::Result<()> {
         self.shell(serial, &format!("rm -f {}", q(remote)))
             .map(|_| ())
@@ -308,7 +314,10 @@ impl crate::gamesettings::DeviceFs for AdbFs<'_> {
         use base64::Engine;
         // dd in 4 KB blocks (offsets here are always 64 KB-aligned), base64 so
         // the bytes survive the trip through the shell.
-        anyhow::ensure!(offset % 4096 == 0 && len % 4096 == 0, "unaligned read");
+        anyhow::ensure!(
+            offset.is_multiple_of(4096) && len.is_multiple_of(4096),
+            "unaligned read"
+        );
         let out = self.adb.shell(
             self.serial,
             &format!(
@@ -826,6 +835,11 @@ pub fn send(
             break;
         }
         let result = (|| -> anyhow::Result<&'static str> {
+            // Checked again right before copying: the plan may be minutes old,
+            // and a file that has appeared since is never replaced (or removed).
+            if adb.exists(serial, &f.remote)? {
+                return Ok("appeared");
+            }
             adb.push(serial, &f.local, &f.remote)?;
             if f.bytes >= HASH_FROM {
                 let here = md5_file(&f.local)?;
@@ -848,6 +862,17 @@ pub fn send(
             }
         })();
         match result {
+            Ok("appeared") => {
+                sum.conflicts += 1;
+                emit(SendEvent::File {
+                    index: i,
+                    remote: f.remote.clone(),
+                    bytes: 0,
+                    ok: true,
+                    message: "a file with this name is on the handheld now — left as it is"
+                        .to_string(),
+                });
+            }
             Ok(how) => {
                 sum.copied += 1;
                 if how == "copied and checked" {

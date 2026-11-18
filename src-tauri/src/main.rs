@@ -434,51 +434,59 @@ async fn start_import(
     let exclude: HashSet<usize> = exclude.into_iter().collect();
     tauri::async_runtime::spawn_blocking(move || {
         let last = Mutex::new(std::time::Instant::now());
-        let summary = import::execute(&plan, &assign, &exclude, &cancel, &|e| {
-            if let import::ImportEvent::Progress {
-                done_bytes,
-                total_bytes,
-                ..
-            } = &e
-            {
-                let mut l = last.lock().unwrap();
-                if l.elapsed().as_millis() < 120 && done_bytes != total_bytes {
-                    return;
+        let log_dir = romcrate_core::importlog::default_dir();
+        let summary = import::execute_logged(
+            &plan,
+            &assign,
+            &exclude,
+            &cancel,
+            &|e| {
+                if let import::ImportEvent::Progress {
+                    done_bytes,
+                    total_bytes,
+                    ..
+                } = &e
+                {
+                    let mut l = last.lock().unwrap();
+                    if l.elapsed().as_millis() < 120 && done_bytes != total_bytes {
+                        return;
+                    }
+                    *l = std::time::Instant::now();
                 }
-                *l = std::time::Instant::now();
-            }
-            match &e {
-                import::ImportEvent::ItemDone { ok, message, .. } => {
-                    romcrate_core::activity::append(
-                        &romcrate_core::activity::log_dir(),
-                        "Import",
-                        &[format!("{} {message}", if *ok { "OK" } else { "FAILED" })],
-                    )
+                match &e {
+                    import::ImportEvent::ItemDone { ok, message, .. } => {
+                        romcrate_core::activity::append(
+                            &romcrate_core::activity::log_dir(),
+                            "Import",
+                            &[format!("{} {message}", if *ok { "OK" } else { "FAILED" })],
+                        )
+                    }
+                    import::ImportEvent::Finished { summary } => {
+                        let mut l = vec![format!(
+                            "Finished: {} imported, {} already there, {} left out, {} failed{}",
+                            summary.imported,
+                            summary.already_there,
+                            summary.skipped,
+                            summary.failed,
+                            if summary.cancelled {
+                                " (stopped early)"
+                            } else {
+                                ""
+                            }
+                        )];
+                        l.extend(summary.errors.iter().cloned());
+                        romcrate_core::activity::append(
+                            &romcrate_core::activity::log_dir(),
+                            "Import",
+                            &l,
+                        );
+                    }
+                    _ => {}
                 }
-                import::ImportEvent::Finished { summary } => {
-                    let mut l = vec![format!(
-                        "Finished: {} imported, {} already there, {} left out, {} failed{}",
-                        summary.imported,
-                        summary.already_there,
-                        summary.skipped,
-                        summary.failed,
-                        if summary.cancelled {
-                            " (stopped early)"
-                        } else {
-                            ""
-                        }
-                    )];
-                    l.extend(summary.errors.iter().cloned());
-                    romcrate_core::activity::append(
-                        &romcrate_core::activity::log_dir(),
-                        "Import",
-                        &l,
-                    );
-                }
-                _ => {}
-            }
-            let _ = app.emit("import-event", &e);
-        });
+                let _ = app.emit("import-event", &e);
+            },
+            Some(&log_dir),
+        );
         drop(summary);
         running.store(false, Ordering::SeqCst);
     });
@@ -567,11 +575,9 @@ fn cache_size() -> u64 {
 
 #[tauri::command]
 fn clear_cache() -> Result<(), String> {
-    let dir = default_cache_dir();
-    if dir.exists() {
-        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    // Only the downloads: never the log or RomCrate's kept pictures and import
+    // records (on Windows they sit inside the same folder by default).
+    romcrate_core::datadir::clear_downloads().map_err(|e| e.to_string())
 }
 
 /// Ask where to save the "missing games" report and write it. The path comes
@@ -919,7 +925,10 @@ fn device_console_dirs(adb: &romcrate_core::adb::Adb, serial: &str) -> Vec<(Stri
             let roms = v.roms_dir.clone();
             v.console_folders.iter().filter_map(move |f| {
                 let sys = romcrate_core::systems::detect_from_folder(f)?;
-                Some((sys.id.to_string(), format!("{}/{}/{f}", v.path, roms.as_deref()?)))
+                Some((
+                    sys.id.to_string(),
+                    format!("{}/{}/{f}", v.path, roms.as_deref()?),
+                ))
             })
         })
         .collect()
@@ -931,7 +940,10 @@ async fn style_games(serial: String) -> Result<Vec<romcrate_core::picstyle::Styl
     let adb = find_adb()?;
     tokio::task::spawn_blocking(move || {
         let dirs = device_console_dirs(&adb, &serial);
-        let mut dev = romcrate_core::adb::AdbFs { adb: &adb, serial: &serial };
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &serial,
+        };
         romcrate_core::picstyle::games(&mut dev, &dirs)
     })
     .await
@@ -948,15 +960,33 @@ async fn style_apply(
     let res = tokio::task::spawn_blocking(move || {
         // Only games that are really on the handheld.
         let dirs = device_console_dirs(&adb, &serial);
-        let mut dev = romcrate_core::adb::AdbFs { adb: &adb, serial: &serial };
+        let mut dev = romcrate_core::adb::AdbFs {
+            adb: &adb,
+            serial: &serial,
+        };
         let known: std::collections::HashSet<String> =
-            romcrate_core::picstyle::games(&mut dev, &dirs).into_iter().map(|g| g.file).collect();
-        let picks: Vec<_> = picks.into_iter().filter(|p| known.contains(&p.file)).collect();
+            romcrate_core::picstyle::games(&mut dev, &dirs)
+                .into_iter()
+                .map(|g| g.file)
+                .collect();
+        let picks: Vec<_> = picks
+            .into_iter()
+            .filter(|p| known.contains(&p.file))
+            .collect();
         romcrate_core::picstyle::apply(&mut dev, &picks)
     })
     .await
     .map_err(|e| e.to_string())?;
-    log_settings(&[vec![format!("Picture style for single games: {} changed, {} failed", res.changed_files, res.failed)], res.lines.clone()].concat());
+    log_settings(
+        &[
+            vec![format!(
+                "Picture style for single games: {} changed, {} failed",
+                res.changed_files, res.failed
+            )],
+            res.lines.clone(),
+        ]
+        .concat(),
+    );
     Ok(res)
 }
 
@@ -1154,7 +1184,68 @@ async fn pergame_apply(
     Ok(res)
 }
 
-/// Open the activity log folder in the file manager.
+// ---------------------------------------------------------------- undo an import
+
+/// Earlier Import & sort runs, newest first.
+#[tauri::command]
+fn import_runs() -> Vec<romcrate_core::importlog::Run> {
+    romcrate_core::importlog::runs(&romcrate_core::importlog::default_dir())
+}
+
+/// Put an earlier import back: moved files go back, copies are removed.
+#[tauri::command]
+async fn import_undo(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<romcrate_core::importlog::UndoResult, String> {
+    if state.running.swap(true, Ordering::SeqCst) {
+        return Err("Something is already running".into());
+    }
+    let running = state.running.clone();
+    let r = tokio::task::spawn_blocking(move || {
+        romcrate_core::importlog::undo(&romcrate_core::importlog::default_dir(), &id)
+    })
+    .await
+    .map_err(|e| e.to_string());
+    running.store(false, Ordering::SeqCst);
+    let r = r?.map_err(|e| e.to_string())?;
+    let mut lines = vec![format!(
+        "Undo: {} moved back, {} copies removed, {} left as they are",
+        r.moved_back,
+        r.copies_removed,
+        r.kept.len()
+    )];
+    lines.extend(r.kept.iter().map(|k| format!("Kept {k}")));
+    romcrate_core::activity::append(&romcrate_core::activity::log_dir(), "Import", &lines);
+    Ok(r)
+}
+
+/// At start-up: roll back any game an import was in the middle of when the app
+/// or computer stopped. Returns one line per game, for a message.
+#[tauri::command]
+async fn import_recover() -> Vec<String> {
+    let fixed = tokio::task::spawn_blocking(|| {
+        romcrate_core::importlog::recover(&romcrate_core::importlog::default_dir())
+    })
+    .await
+    .unwrap_or_default();
+    let lines: Vec<String> = fixed
+        .iter()
+        .map(|(g, r)| {
+            format!(
+                "{g}: the last import stopped while copying it, so it was put back as it was ({} moved back, {} partial copies removed{})",
+                r.moved_back,
+                r.copies_removed,
+                if r.kept.is_empty() { String::new() } else { format!(", {} left as they are", r.kept.len()) }
+            )
+        })
+        .collect();
+    if !lines.is_empty() {
+        romcrate_core::activity::append(&romcrate_core::activity::log_dir(), "Import", &lines);
+    }
+    lines
+}
+
 // ---------------------------------------------------------------- device check
 
 /// Which device and system is plugged in.
@@ -1352,35 +1443,47 @@ fn review_batches() -> Vec<romcrate_core::review::Batch> {
 
 /// Put back the pictures from an earlier replacement.
 #[tauri::command]
-async fn review_put_back(id: String, serial: Option<String>) -> Result<usize, String> {
+async fn review_put_back(
+    id: String,
+    serial: Option<String>,
+) -> Result<romcrate_core::review::PutBack, String> {
     let data = romcrate_core::datadir::keep_dir();
-    let r = tokio::task::spawn_blocking(move || -> anyhow::Result<usize> {
-        let b = romcrate_core::review::batches(&data)
-            .into_iter()
-            .find(|b| b.id == id)
-            .ok_or_else(|| anyhow::anyhow!("that set of pictures is gone"))?;
-        let mut n = 0;
-        if b.kept.iter().any(|k| k.on_handheld) {
-            let adb = find_adb().map_err(|e| anyhow::anyhow!(e))?;
-            let serial = serial
-                .ok_or_else(|| anyhow::anyhow!("connect the handheld to put its pictures back"))?;
-            n += romcrate_core::handheld_art::put_back_on_handheld(&adb, &serial, &data, &id)?;
-        }
-        if b.kept.iter().any(|k| !k.on_handheld) {
-            n += romcrate_core::review::put_back_on_pc(&data, &id)?;
-        }
-        Ok(n)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-    .map_err(|e| e.to_string())?;
+    let r =
+        tokio::task::spawn_blocking(move || -> anyhow::Result<romcrate_core::review::PutBack> {
+            let b = romcrate_core::review::batches(&data)
+                .into_iter()
+                .find(|b| b.id == id)
+                .ok_or_else(|| anyhow::anyhow!("that set of pictures is gone"))?;
+            let mut n = romcrate_core::review::PutBack::default();
+            if b.kept.iter().any(|k| k.on_handheld) {
+                let adb = find_adb().map_err(|e| anyhow::anyhow!(e))?;
+                let serial = serial.ok_or_else(|| {
+                    anyhow::anyhow!("connect the handheld to put its pictures back")
+                })?;
+                let r =
+                    romcrate_core::handheld_art::put_back_on_handheld(&adb, &serial, &data, &id)?;
+                n.restored += r.restored;
+                n.left.extend(r.left);
+            }
+            if b.kept.iter().any(|k| !k.on_handheld) {
+                let r = romcrate_core::review::put_back_on_pc(&data, &id)?;
+                n.restored += r.restored;
+                n.left.extend(r.left);
+            }
+            Ok(n)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
     romcrate_core::activity::append(
         &romcrate_core::activity::log_dir(),
         "Artwork",
-        &[format!(
-            "Put back {r} picture(s) from {}",
-            "an earlier replacement"
-        )],
+        &std::iter::once(format!(
+            "Put back {} picture(s) from an earlier replacement",
+            r.restored
+        ))
+        .chain(r.left.iter().cloned())
+        .collect::<Vec<_>>(),
     );
     Ok(r)
 }
@@ -1559,6 +1662,7 @@ async fn handheld_plan_back(
     Ok(plan)
 }
 
+/// Open the activity log folder in the file manager.
 #[tauri::command]
 fn open_log_folder(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
@@ -1608,6 +1712,9 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             device_identity,
+            import_runs,
+            import_undo,
+            import_recover,
             style_games,
             style_apply,
             playmode_choices,

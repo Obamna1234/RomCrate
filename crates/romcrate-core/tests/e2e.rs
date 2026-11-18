@@ -796,8 +796,17 @@ fn artwork_for_games_on_the_handheld() {
         fs::read(&cover).unwrap(),
         fs::read(&items[0].candidate).unwrap()
     );
+    // Another handheld plugged in: refused, nothing pushed.
+    let other = handheld_art::put_back_on_handheld(&adb, "OTHER0002", &data, &b.id);
+    assert!(other.unwrap_err().to_string().contains("another handheld"));
     assert_eq!(
-        handheld_art::put_back_on_handheld(&adb, s, &data, &b.id).unwrap(),
+        fs::read(&cover).unwrap(),
+        fs::read(&items[0].candidate).unwrap()
+    );
+    assert_eq!(
+        handheld_art::put_back_on_handheld(&adb, s, &data, &b.id)
+            .unwrap()
+            .restored,
         1
     );
     assert_eq!(fs::read(&cover).unwrap(), own, "put back exactly");
