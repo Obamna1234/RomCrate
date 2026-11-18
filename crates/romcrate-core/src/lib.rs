@@ -16,6 +16,7 @@ pub mod handheld_art;
 pub mod identify;
 pub mod imaging;
 pub mod import;
+pub mod importlog;
 pub mod launch;
 pub mod launchbox;
 pub mod launchers;

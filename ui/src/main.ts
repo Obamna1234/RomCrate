@@ -1202,7 +1202,9 @@ interface ImportPlan {
   systems: { id: string; name: string; folder: string; games: number; bytes: number }[];
   neededBytes: number; freeBytes?: number; enoughSpace: boolean; ignoredFiles: number; notes: string[];
 }
-interface ImportSummary { imported: number; alreadyThere: number; failed: number; skipped: number; bytes: number; cancelled: boolean; folders: string[]; errors: string[] }
+interface ImportSummary { imported: number; alreadyThere: number; failed: number; skipped: number; bytes: number; cancelled: boolean; folders: string[]; errors: string[]; undoId: string | null }
+interface ImportRun { id: string; moving: boolean; dest: string; games: number; files: number; finished: boolean; undone: boolean; interrupted: string | null }
+interface UndoResult { movedBack: number; copiesRemoved: number; kept: string[] }
 
 interface Finding { severity: "info" | "warn" | "error"; path: string; title: string; advice: string; check: string }
 interface CheckReport { findings: Finding[]; filesChecked: number; errors: number; warnings: number }
@@ -1348,6 +1350,48 @@ function itemBadge(it: ImportItem) {
   return it.confidence === "sure" ? h("span", { class: "badge sure" }, "Checked inside") : h("span", { class: "badge likely" }, "Best guess");
 }
 
+// ---------- undo an import
+
+const undo = { runs: null as ImportRun[] | null, busy: false, last: null as UndoResult | null };
+
+async function loadRuns() {
+  undo.runs = await invoke<ImportRun[]>("import_runs").catch(() => []);
+  if (view === "import") render();
+}
+
+async function undoImport(id: string, moving: boolean) {
+  if (!confirm(moving
+    ? "Move every game from this import back to where it was?\n\nNothing is overwritten: a game that has changed since, or whose old place is taken, is left where it is."
+    : "Remove the copies this import made?\n\nYour originals were never touched. A copy that has changed since, or whose original is gone, is kept.")) return;
+  undo.busy = true; render();
+  try {
+    undo.last = await invoke<UndoResult>("import_undo", { id });
+    const l = undo.last;
+    toast(`${moving ? `${l.movedBack} moved back` : `${l.copiesRemoved} copies removed`}${l.kept.length ? `, ${l.kept.length} left as they are` : ""}.`);
+    if (imp.summary?.undoId === id) { imp.summary = null; imp.plan = null; }
+  } catch (e) { toast(String(e)); }
+  undo.busy = false;
+  await loadRuns();
+}
+
+/** Earlier imports, each with "Undo". */
+function importHistory(out: (Node | null)[]) {
+  if (!undo.runs) { void loadRuns(); return; }
+  const runs = undo.runs.filter((r) => r.games > 0).slice(0, 6);
+  if (undo.last?.kept.length) {
+    out.push(h("div", { class: "banner warn" }, h("div", {}, h("div", {}, "Left as they are:"), h("ul", { style: "margin:6px 0 0;padding-left:18px" }, undo.last.kept.slice(0, 20).map((k) => h("li", {}, k))))));
+  }
+  if (!runs.length) return;
+  const when = (id: string) => id.replace(/_(\d\d)(\d\d)(\d\d).*/, " at $1:$2");
+  out.push(h("h2", {}, "Earlier imports"),
+    h("div", { class: "card toggles" }, runs.map((r) => h("div", { class: "emu-row" },
+      h("div", {}, h("div", { class: "t" }, `${r.games} game${r.games === 1 ? "" : "s"} ${r.moving ? "moved" : "copied"}`),
+        h("div", { class: "desc" }, `${when(r.id)} · into ${r.dest}${r.finished ? "" : " · stopped early"}`)),
+      h("span", {}),
+      r.undone ? h("span", { class: "pill" }, "Undone") :
+        h("button", { class: "btn", disabled: undo.busy || imp.running, onclick: () => undoImport(r.id, r.moving) }, "Undo")))));
+}
+
 function viewImport(): Node[] {
   const out: (Node | null)[] = [
     h("h1", {}, "Import & sort games"),
@@ -1388,6 +1432,7 @@ function viewImport(): Node[] {
 
   const p = imp.plan;
   if (!p) {
+    importHistory(out);
     out.push(h("div", { class: "footer-bar" },
       h("button", { class: "btn", onclick: () => go("home") }, "Home"),
       h("button", { class: "btn", onclick: () => go("library") }, "Skip, my games are already sorted")));
@@ -1431,7 +1476,8 @@ function viewImport(): Node[] {
         ...s.errors.map((e) => h("div", { class: "banner warn" }, e)),
         h("div", { class: "row" },
           h("button", { class: "btn primary big", onclick: scrapeImported }, "Get artwork for these games"),
-          h("button", { class: "btn", onclick: () => invoke("open_folder", { path: p.dest }).catch((e) => toast(String(e))) }, "Open ROMs folder")));
+          h("button", { class: "btn", onclick: () => invoke("open_folder", { path: p.dest }).catch((e) => toast(String(e))) }, "Open ROMs folder"),
+          s.undoId && s.imported ? h("button", { class: "btn", onclick: () => undoImport(s.undoId!, p.mode === "move") }, "Undo this import") : null));
     }
     if (imp.log.length) prog.push(h("h2", {}, "Activity"), h("div", { class: "log" }, imp.log.slice(-2000).map((l) => h("div", { class: l.ok ? "" : "error" }, `${l.ok ? "✓" : "✗"} ${l.message}`))), logButtons());
   }
@@ -2184,6 +2230,10 @@ async function boot() {
   document.getElementById("nav-device")!.addEventListener("click", () => go("device"));
   view = prefs.device ? "home" : "device";
   photos = await invoke<Record<string, string>>("device_photos").catch(() => ({}));
+  // An import cut off by a crash or power cut is put back as it was.
+  invoke<string[]>("import_recover").then((lines) => {
+    if (lines.length) toast(`RomCrate's last import was cut off. ${lines.length === 1 ? "That game was" : `Those ${lines.length} games were`} put back as they were — see the log.`);
+  }).catch(() => {});
   await listen("import-event", (ev) => handleImportEvent(ev.payload));
   await listen("send-event", (ev) => handleSendEvent(ev.payload));
   await listen<{ done: number; total: number | null }>("adb-install-progress", (ev) => { snd.installPct = ev.payload.total ? Math.round((ev.payload.done / ev.payload.total) * 100) : 0; if (view === "send" || view === "tune") render(); });

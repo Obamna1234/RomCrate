@@ -389,7 +389,8 @@ async fn import(args: &[String]) -> anyhow::Result<()> {
         bail!("not enough free space — nothing was changed");
     }
     let last = std::sync::Mutex::new(0u64);
-    let summary = import::execute(
+    let log_dir = romcrate_core::importlog::default_dir();
+    let summary = import::execute_logged(
         &plan,
         &assign,
         &exclude,
@@ -412,6 +413,7 @@ async fn import(args: &[String]) -> anyhow::Result<()> {
             }
             _ => {}
         },
+        Some(&log_dir),
     );
     println!(
         "\nDone: {} imported, {} already there, {} skipped, {} failed ({}).",

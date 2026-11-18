@@ -434,51 +434,59 @@ async fn start_import(
     let exclude: HashSet<usize> = exclude.into_iter().collect();
     tauri::async_runtime::spawn_blocking(move || {
         let last = Mutex::new(std::time::Instant::now());
-        let summary = import::execute(&plan, &assign, &exclude, &cancel, &|e| {
-            if let import::ImportEvent::Progress {
-                done_bytes,
-                total_bytes,
-                ..
-            } = &e
-            {
-                let mut l = last.lock().unwrap();
-                if l.elapsed().as_millis() < 120 && done_bytes != total_bytes {
-                    return;
+        let log_dir = romcrate_core::importlog::default_dir();
+        let summary = import::execute_logged(
+            &plan,
+            &assign,
+            &exclude,
+            &cancel,
+            &|e| {
+                if let import::ImportEvent::Progress {
+                    done_bytes,
+                    total_bytes,
+                    ..
+                } = &e
+                {
+                    let mut l = last.lock().unwrap();
+                    if l.elapsed().as_millis() < 120 && done_bytes != total_bytes {
+                        return;
+                    }
+                    *l = std::time::Instant::now();
                 }
-                *l = std::time::Instant::now();
-            }
-            match &e {
-                import::ImportEvent::ItemDone { ok, message, .. } => {
-                    romcrate_core::activity::append(
-                        &romcrate_core::activity::log_dir(),
-                        "Import",
-                        &[format!("{} {message}", if *ok { "OK" } else { "FAILED" })],
-                    )
+                match &e {
+                    import::ImportEvent::ItemDone { ok, message, .. } => {
+                        romcrate_core::activity::append(
+                            &romcrate_core::activity::log_dir(),
+                            "Import",
+                            &[format!("{} {message}", if *ok { "OK" } else { "FAILED" })],
+                        )
+                    }
+                    import::ImportEvent::Finished { summary } => {
+                        let mut l = vec![format!(
+                            "Finished: {} imported, {} already there, {} left out, {} failed{}",
+                            summary.imported,
+                            summary.already_there,
+                            summary.skipped,
+                            summary.failed,
+                            if summary.cancelled {
+                                " (stopped early)"
+                            } else {
+                                ""
+                            }
+                        )];
+                        l.extend(summary.errors.iter().cloned());
+                        romcrate_core::activity::append(
+                            &romcrate_core::activity::log_dir(),
+                            "Import",
+                            &l,
+                        );
+                    }
+                    _ => {}
                 }
-                import::ImportEvent::Finished { summary } => {
-                    let mut l = vec![format!(
-                        "Finished: {} imported, {} already there, {} left out, {} failed{}",
-                        summary.imported,
-                        summary.already_there,
-                        summary.skipped,
-                        summary.failed,
-                        if summary.cancelled {
-                            " (stopped early)"
-                        } else {
-                            ""
-                        }
-                    )];
-                    l.extend(summary.errors.iter().cloned());
-                    romcrate_core::activity::append(
-                        &romcrate_core::activity::log_dir(),
-                        "Import",
-                        &l,
-                    );
-                }
-                _ => {}
-            }
-            let _ = app.emit("import-event", &e);
-        });
+                let _ = app.emit("import-event", &e);
+            },
+            Some(&log_dir),
+        );
         drop(summary);
         running.store(false, Ordering::SeqCst);
     });
@@ -1178,6 +1186,68 @@ async fn pergame_apply(
     Ok(res)
 }
 
+// ---------------------------------------------------------------- undo an import
+
+/// Earlier Import & sort runs, newest first.
+#[tauri::command]
+fn import_runs() -> Vec<romcrate_core::importlog::Run> {
+    romcrate_core::importlog::runs(&romcrate_core::importlog::default_dir())
+}
+
+/// Put an earlier import back: moved files go back, copies are removed.
+#[tauri::command]
+async fn import_undo(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<romcrate_core::importlog::UndoResult, String> {
+    if state.running.swap(true, Ordering::SeqCst) {
+        return Err("Something is already running".into());
+    }
+    let running = state.running.clone();
+    let r = tokio::task::spawn_blocking(move || {
+        romcrate_core::importlog::undo(&romcrate_core::importlog::default_dir(), &id)
+    })
+    .await
+    .map_err(|e| e.to_string());
+    running.store(false, Ordering::SeqCst);
+    let r = r?.map_err(|e| e.to_string())?;
+    let mut lines = vec![format!(
+        "Undo: {} moved back, {} copies removed, {} left as they are",
+        r.moved_back,
+        r.copies_removed,
+        r.kept.len()
+    )];
+    lines.extend(r.kept.iter().map(|k| format!("Kept {k}")));
+    romcrate_core::activity::append(&romcrate_core::activity::log_dir(), "Import", &lines);
+    Ok(r)
+}
+
+/// At start-up: roll back any game an import was in the middle of when the app
+/// or computer stopped. Returns one line per game, for a message.
+#[tauri::command]
+async fn import_recover() -> Vec<String> {
+    let fixed = tokio::task::spawn_blocking(|| {
+        romcrate_core::importlog::recover(&romcrate_core::importlog::default_dir())
+    })
+    .await
+    .unwrap_or_default();
+    let lines: Vec<String> = fixed
+        .iter()
+        .map(|(g, r)| {
+            format!(
+                "{g}: the last import stopped while copying it, so it was put back as it was ({} moved back, {} partial copies removed{})",
+                r.moved_back,
+                r.copies_removed,
+                if r.kept.is_empty() { String::new() } else { format!(", {} left as they are", r.kept.len()) }
+            )
+        })
+        .collect();
+    if !lines.is_empty() {
+        romcrate_core::activity::append(&romcrate_core::activity::log_dir(), "Import", &lines);
+    }
+    lines
+}
+
 // ---------------------------------------------------------------- device check
 
 /// Which device and system is plugged in.
@@ -1632,6 +1702,9 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             device_identity,
+            import_runs,
+            import_undo,
+            import_recover,
             style_games,
             style_apply,
             playmode_choices,
