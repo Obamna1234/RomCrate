@@ -1,0 +1,48 @@
+== Pegasus output
+FAIL  snes: metadata.pegasus.txt written
+FAIL  NES: metadata.pegasus.txt written
+FAIL  Nintendo 64: metadata.pegasus.txt written
+FAIL  gba: metadata.pegasus.txt written
+FAIL  megadrive: metadata.pegasus.txt written
+FAIL  psx: metadata.pegasus.txt written
+FAIL  ps2: metadata.pegasus.txt written
+FAIL  wii: metadata.pegasus.txt written
+FAIL  gc: metadata.pegasus.txt written
+PASS  junk file not treated as a game: ._Super Mario World (USA).sfc
+PASS  junk file not treated as a game: .DS_Store
+PASS  junk file not treated as a game: Thumbs.db
+PASS  junk file not treated as a game: desktop.ini
+PASS  junk file not treated as a game: empty.sfc
+FAIL  multi-disc FF7 shows once (via .m3u), not as 3 discs
+
+== Identification of badly named files (title shown in the launcher)
+FAIL  ps2/game disc 1.iso → '<missing>'
+FAIL  wii/mystery disc.iso → '<missing>'
+FAIL  gc/smash.iso → '<missing>'
+FAIL  wii/Wii Sports (USA) (Rev 1).wbfs → '<missing>'
+FAIL  snes/super metroid.smc → '<missing>'
+FAIL  snes/Street Fighter II Turbo (U) [!].smc → '<missing>'
+FAIL  Nintendo 64/Mario Kart 64 (U) [!].v64 → '<missing>'
+FAIL  NES/Duck Tales.nes → '<missing>'
+FAIL  gba/Pokémon - Emerald Version (USA, Europe).gba → '<missing>'
+
+== Pegasus launch lines (Android)
+FAIL  PS2 gets the tested ARMSX2 (Play Store) launch line
+FAIL  exactly one active launch line for PS2
+FAIL  SNES RetroArch line is written switched off (untested)
+
+== Cover coverage: 0/0 games (0%)
+FAIL  at least 80% of games got a cover
+PASS  second run re-downloads nothing (0 files saved)
+FAIL  warns about the .cue whose .bin is missing
+PASS  no crashes in the logs
+
+== ES-DE output
+FAIL  ES-DE gamelist for snes
+FAIL  ES-DE gamelist for ps2
+FAIL  ES-DE gamelist for wii
+FAIL  ES-DE snes covers: 0
+
+== Notes (not failures)
+
+28 failure(s)

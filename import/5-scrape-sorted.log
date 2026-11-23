@@ -1,0 +1,9 @@
+note: this build has no ScreenScraper access; using the free collection only
+
+== PlayStation (3 games)
+   [error] PlayStation: couldn't load the artwork list (rate limited by server, try again later). Check your internet connection.
+
+== PlayStation 2 (2 games)
+   [error] PlayStation 2: couldn't load the artwork list (rate limited by server, try again later). Check your internet connection.
+
+Done: 5 games — 0 complete, 0 partial, 0 already had art, 0 not found, 5 failed. 0 files saved.
