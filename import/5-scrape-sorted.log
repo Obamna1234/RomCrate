@@ -1,0 +1,13 @@
+note: this build has no ScreenScraper access; using the free collection only
+
+== PlayStation (3 games)
+   10184 artwork entries, 12749 database entries
+   [Missing] Big Game  missing: boxart,snap,logo
+   [Partial] Crash Bandicoot (USA)  →  Crash Bandicoot (USA) (exact)  saved: boxart,snap  missing: logo
+   [Partial] My Game  →  Crash Bandicoot (USA) (hash)  saved: boxart,snap  missing: logo
+   [info] PlayStation: created metadata.pegasus.txt — add a 'launch:' line so Pegasus can start the games.
+
+== PlayStation 2 (2 games)
+   [error] PlayStation 2: couldn't load the artwork list (HTTP status 500). Check your internet connection.
+
+Done: 5 games — 0 complete, 2 partial, 0 already had art, 1 not found, 2 failed. 4 files saved.
