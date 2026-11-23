@@ -1,0 +1,77 @@
+note: this build has no ScreenScraper access; using the free collection only
+
+== Game Boy Advance (3 games)
+   6127 artwork entries, 3509 database entries
+   [Done] Metroid Fusion (USA)  →  Metroid Fusion (USA) (exact)  saved: boxart,snap,logo
+   [Done] Mario & Luigi - Superstar Saga (USA)  →  Mario _ Luigi - Superstar Saga (USA) (exact)  saved: boxart,snap,logo
+   [Done] Pokémon - Emerald Version (USA, Europe)  →  Pokemon - Emerald Version (USA, Europe) (title)  saved: boxart,snap,logo
+   [info] Game Boy Advance: D:\a\_temp/sim/ES-DE\gamelists\gba\gamelist.xml updated
+
+== GameCube (2 games)
+   1961 artwork entries, 1985 database entries
+   [Done] Legend of Zelda, The - The Wind Waker (USA)  →  Legend of Zelda, The - The Wind Waker (USA) (exact)  saved: boxart,snap,logo
+   [Done] smash  →  Super Smash Bros. Melee (USA) (En,Ja) (Rev 2) (hash)  saved: boxart,snap,logo
+   [info] GameCube: D:\a\_temp/sim/ES-DE\gamelists\gc\gamelist.xml updated
+
+== NES / Famicom (5 games)
+   17878 artwork entries, 13296 database entries
+   [Done] Castlevania (USA)  →  Castlevania (USA) (exact)  saved: boxart,snap,logo
+   [Done] Mega Man 2 (USA)  →  Mega Man 2 (USA) (exact)  saved: boxart,snap,logo
+   [Done] Duck Tales  →  DuckTales (USA) (title)  saved: boxart,snap,logo
+   [Done] Legend of Zelda, The (USA)  →  Legend of Zelda, The (USA) (exact)  saved: boxart,snap,logo
+   [Done] Super Mario Bros. 3 (USA)  →  Super Mario Bros. 3 (USA) (exact)  saved: boxart,snap,logo
+   [info] NES / Famicom: D:\a\_temp/sim/ES-DE\gamelists\NES\gamelist.xml updated
+
+== Nintendo 64 (4 games)
+   1134 artwork entries, 2263 database entries
+   [Done] Mario Kart 64 (U) [!]  →  Mario Kart 64 (USA) (title)  saved: boxart,snap,logo
+   [Done] Legend of Zelda, The - Ocarina of Time (USA) (Rev 2)  →  Legend of Zelda, The - Ocarina of Time (USA) (Rev 2) (exact)  saved: boxart,snap,logo
+   [Done] GoldenEye 007 (USA)  →  GoldenEye 007 (USA) (exact)  saved: boxart,snap,logo
+   [Done] Super Mario 64 (USA)  →  Super Mario 64 (USA) (exact)  saved: boxart,snap,logo
+   [info] Nintendo 64: D:\a\_temp/sim/ES-DE\gamelists\Nintendo 64\gamelist.xml updated
+
+== Super Nintendo / Super Famicom (8 games)
+   4259 artwork entries, 3746 database entries
+   [Done] Legend of Zelda, The - A Link to the Past (USA)  →  Legend of Zelda, The - A Link to the Past (USA) (exact)  saved: boxart,snap,logo
+   [Done] Donkey Kong Country 2 - Diddy's Kong Quest (USA) (En,Fr) (Rev 1)  →  Donkey Kong Country 2 - Diddy's Kong Quest (USA) (En,Fr) (Rev 1) (exact)  saved: boxart,snap,logo
+   [Done] Chrono Trigger (USA)  →  Chrono Trigger (USA) (exact)  saved: boxart,snap,logo
+   [Done] Earthbound  →  EarthBound (USA) (title)  saved: boxart,snap,logo
+   [Done] Street Fighter II Turbo (U) [!]  →  Street Fighter II Turbo (USA) (title)  saved: boxart,snap,logo
+   [Done] Super Mario Kart (USA)  →  Super Mario Kart (USA) (exact)  saved: boxart,snap,logo
+   [Done] Super Mario World (USA)  →  Super Mario World (USA) (exact)  saved: boxart,snap,logo
+   [Done] super metroid  →  Super Metroid (Japan, USA) (En,Ja) (title)  saved: boxart,snap,logo
+   [info] Super Nintendo / Super Famicom: D:\a\_temp/sim/ES-DE\gamelists\snes\gamelist.xml updated
+
+== Wii (3 games)
+   6804 artwork entries, 3723 database entries
+   [Done] Wii Sports (USA) (Rev 1)  →  Wii Sports (USA) (Rev 1) (hash)  saved: boxart,snap,logo
+   [Done] Mario Kart Wii (USA)  →  Mario Kart Wii (USA) (exact)  saved: boxart,snap,logo
+   [Done] mystery disc  →  Super Mario Galaxy (USA) (En,Fr,Es) (hash)  saved: boxart,snap,logo
+   [info] Wii: D:\a\_temp/sim/ES-DE\gamelists\wii\gamelist.xml updated
+
+== Mega Drive / Genesis (3 games)
+   2479 artwork entries, 2800 database entries
+   [Done] Streets of Rage 2 (USA)  →  Streets of Rage 2 (USA) (exact)  saved: boxart,snap,logo
+   [Done] Gunstar Heroes (USA)  →  Gunstar Heroes (USA) (exact)  saved: boxart,snap,logo
+   [Done] Sonic The Hedgehog 2 (World) (Rev A)  →  Sonic The Hedgehog 2 (World) (Rev A) (exact)  saved: boxart,snap,logo
+   [info] Mega Drive / Genesis: D:\a\_temp/sim/ES-DE\gamelists\megadrive\gamelist.xml updated
+
+== PlayStation (5 games)
+   10184 artwork entries, 12749 database entries
+   [Done] Metal Gear Solid (USA) (Disc 1)  →  Metal Gear Solid (USA) (Disc 1) (exact)  saved: boxart,snap,logo
+        Disc data missing: Metal Gear Solid (USA) (Disc 1).bin (the cue file points to it — the download may be incomplete)
+   [Done] Final Fantasy VII (USA)  →  Final Fantasy VII (USA) (exact)  saved: boxart,snap,logo
+   [Done] Crash Bandicoot (USA)  →  Crash Bandicoot (USA) (exact)  saved: boxart,snap,logo
+   [Done] Tony Hawk's Pro Skater 2 (USA)  →  Tony Hawk's Pro Skater 2 (USA) (exact)  saved: boxart,snap,logo
+   [Done] Spyro the Dragon (USA)  →  Spyro the Dragon (USA) (exact)  saved: boxart,snap,logo
+   [info] PlayStation: D:\a\_temp/sim/ES-DE\gamelists\psx\gamelist.xml updated
+
+== PlayStation 2 (4 games)
+   9797 artwork entries, 12977 database entries
+   [Done] Ratchet & Clank (USA)  →  Ratchet _ Clank (USA) (En,Fr,De,Es,It) (title)  saved: boxart,snap,logo
+   [Done] game disc 1  →  Grand Theft Auto III (USA) (hash)  saved: boxart,snap,logo
+   [Done] Shadow of the Colossus (USA)  →  Shadow of the Colossus (USA) (exact)  saved: boxart,snap,logo
+   [Done] Kingdom Hearts (USA)  →  Kingdom Hearts (USA) (exact)  saved: boxart,snap,logo
+   [info] PlayStation 2: D:\a\_temp/sim/ES-DE\gamelists\ps2\gamelist.xml updated
+
+Done: 37 games — 37 complete, 0 partial, 0 already had art, 0 not found, 0 failed. 111 files saved.

@@ -1,0 +1,74 @@
+note: this build has no ScreenScraper access; using the free collection only
+   [info] Downloading the free LaunchBox games database (weekly)… 10 MB of 105 MB
+   [info] Downloading the free LaunchBox games database (weekly)… 20 MB of 105 MB
+   [info] Downloading the free LaunchBox games database (weekly)… 30 MB of 105 MB
+   [info] Downloading the free LaunchBox games database (weekly)… 40 MB of 105 MB
+   [info] Downloading the free LaunchBox games database (weekly)… 50 MB of 105 MB
+   [info] Downloading the free LaunchBox games database (weekly)… 60 MB of 105 MB
+   [info] Downloading the free LaunchBox games database (weekly)… 70 MB of 105 MB
+   [info] Downloading the free LaunchBox games database (weekly)… 80 MB of 105 MB
+   [info] Downloading the free LaunchBox games database (weekly)… 90 MB of 105 MB
+   [info] Downloading the free LaunchBox games database (weekly)… 100 MB of 105 MB
+
+== Game Boy Advance (3 games)
+   6127 artwork entries, 3509 database entries
+   [Done] Pokémon - Emerald Version (USA, Europe)  →  Pokemon - Emerald Version (USA, Europe) (title)  saved: boxart,snap,logo
+   [Done] Mario & Luigi - Superstar Saga (USA)  →  Mario _ Luigi - Superstar Saga (USA) (exact)  saved: boxart,snap,logo
+   [Done] Metroid Fusion (USA)  →  Metroid Fusion (USA) (exact)  saved: boxart,snap,logo
+   [info] Game Boy Advance: created metadata.pegasus.txt. The launch line for RetroArch (Play Store) · mGBA core hasn't been tested on a device yet, so it's commented out — remove the '# ' to try it.
+
+== GameCube (2 games)
+   1961 artwork entries, 1985 database entries
+   [Done] Legend of Zelda, The - The Wind Waker (USA)  →  Legend of Zelda, The - The Wind Waker (USA) (exact)  saved: boxart,snap,logo
+   [Done] smash  →  Super Smash Bros. Melee (USA) (En,Ja) (Rev 2) (hash)  saved: boxart,snap,logo
+   [info] GameCube: created metadata.pegasus.txt. The launch line for Dolphin hasn't been tested on a device yet, so it's commented out — remove the '# ' to try it.
+
+== NES / Famicom (5 games)
+   [error] NES / Famicom: couldn't load the artwork list (HTTP status 500). Check your internet connection.
+
+== Nintendo 64 (4 games)
+   1134 artwork entries, 2263 database entries
+   [Done] Mario Kart 64 (U) [!]  →  Mario Kart 64 (USA) (title)  saved: boxart,snap,logo
+   [Done] GoldenEye 007 (USA)  →  GoldenEye 007 (USA) (exact)  saved: boxart,snap,logo
+   [Done] Super Mario 64 (USA)  →  Super Mario 64 (USA) (exact)  saved: boxart,snap,logo
+   [Done] Legend of Zelda, The - Ocarina of Time (USA) (Rev 2)  →  Legend of Zelda, The - Ocarina of Time (USA) (Rev 2) (exact)  saved: boxart,snap,logo
+   [info] Nintendo 64: created metadata.pegasus.txt with the tested launch line for RetroArch (Play Store) · Mupen64Plus-Next core.
+
+== Super Nintendo / Super Famicom (8 games)
+   4259 artwork entries, 3746 database entries
+   [Done] Chrono Trigger (USA)  →  Chrono Trigger (USA) (exact)  saved: boxart,snap,logo
+   [Done] Earthbound  →  EarthBound (USA) (title)  saved: boxart,snap,logo
+   [Done] Legend of Zelda, The - A Link to the Past (USA)  →  Legend of Zelda, The - A Link to the Past (USA) (exact)  saved: boxart,snap,logo
+   [Done] Donkey Kong Country 2 - Diddy's Kong Quest (USA) (En,Fr) (Rev 1)  →  Donkey Kong Country 2 - Diddy's Kong Quest (USA) (En,Fr) (Rev 1) (exact)  saved: boxart,snap,logo
+   [Done] Street Fighter II Turbo (U) [!]  →  Street Fighter II Turbo (USA) (title)  saved: boxart,snap,logo
+   [Done] Super Mario Kart (USA)  →  Super Mario Kart (USA) (exact)  saved: boxart,snap,logo
+   [Done] Super Mario World (USA)  →  Super Mario World (USA) (exact)  saved: boxart,snap,logo
+   [Done] super metroid  →  Super Metroid (Japan, USA) (En,Ja) (title)  saved: boxart,snap,logo
+   [info] Super Nintendo / Super Famicom: created metadata.pegasus.txt. The launch line for RetroArch (Play Store) · Snes9x core hasn't been tested on a device yet, so it's commented out — remove the '# ' to try it.
+
+== Wii (3 games)
+   6804 artwork entries, 3723 database entries
+   [Done] Wii Sports (USA) (Rev 1)  →  Wii Sports (USA) (Rev 1) (hash)  saved: boxart,snap,logo
+   [Done] Mario Kart Wii (USA)  →  Mario Kart Wii (USA) (exact)  saved: boxart,snap,logo
+   [Done] mystery disc  →  Super Mario Galaxy (USA) (En,Fr,Es) (hash)  saved: boxart,snap,logo
+   [info] Wii: created metadata.pegasus.txt with the tested launch line for Dolphin.
+
+== Mega Drive / Genesis (3 games)
+   2479 artwork entries, 2800 database entries
+   [Done] Streets of Rage 2 (USA)  →  Streets of Rage 2 (USA) (exact)  saved: boxart,snap,logo
+   [Done] Gunstar Heroes (USA)  →  Gunstar Heroes (USA) (exact)  saved: boxart,snap,logo
+   [Done] Sonic The Hedgehog 2 (World) (Rev A)  →  Sonic The Hedgehog 2 (World) (Rev A) (exact)  saved: boxart,snap,logo
+   [info] Mega Drive / Genesis: created metadata.pegasus.txt — add a 'launch:' line so Pegasus can start the games.
+
+== PlayStation (5 games)
+   [error] PlayStation: couldn't load the artwork list (HTTP status 500). Check your internet connection.
+
+== PlayStation 2 (4 games)
+   9797 artwork entries, 12977 database entries
+   [Done] Shadow of the Colossus (USA)  →  Shadow of the Colossus (USA) (exact)  saved: boxart,snap,logo
+   [Done] Ratchet & Clank (USA)  →  Ratchet _ Clank (USA) (En,Fr,De,Es,It) (title)  saved: boxart,snap,logo
+   [Done] Kingdom Hearts (USA)  →  Kingdom Hearts (USA) (exact)  saved: boxart,snap,logo
+   [Done] game disc 1  →  Grand Theft Auto III (USA) (hash)  saved: boxart,snap,logo
+   [info] PlayStation 2: created metadata.pegasus.txt with the tested launch line for ARMSX2 (Play Store).
+
+Done: 37 games — 27 complete, 0 partial, 0 already had art, 0 not found, 10 failed. 81 files saved.

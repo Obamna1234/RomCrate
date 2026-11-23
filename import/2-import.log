@@ -1,0 +1,111 @@
+Import into ROMs sorted
+  Dreamcast                             1 games      33 KB   → dreamcast/
+  Game Boy                              1 games      32 KB   → gb/
+  Game Boy Color                        1 games      32 KB   → gbc/
+  GameCube                              1 games      64 KB   → gc/
+  Mega Drive / Genesis                  1 games      32 KB   → megadrive/
+  Nintendo 64                           2 games       2 MB   → Nintendo 64/
+  Nintendo DS                           1 games      16 KB   → nds/
+  NES / Famicom                         2 games      65 KB   → nes/
+  PC (Windows) discs                    1 games      58 KB   → pc/
+  PlayStation 2                         2 games      87 KB   → ps2/
+  PlayStation Portable                  1 games      52 KB   → psp/
+  PlayStation                           3 games     195 KB   → psx/
+  Saturn                                1 games      65 KB   → saturn/
+  Wii                                   1 games      64 KB   → wii/
+
+  Shenmue (USA) (Disc 1).chd  [Dreamcast GD-ROM (CHD)]
+      → dreamcast/Shenmue (USA) (Disc 1).chd
+  pokemon red.gb  [Game Boy cartridge header]
+      → gb/pokemon red.gb
+  pokemon crystal.gb  [Game Boy Color cartridge header]
+      → gbc/pokemon crystal.gb
+  gc.iso  [GameCube disc (GALE01)]
+      → gc/gc.iso
+  Sonic.bin  [Mega Drive / Genesis cartridge header]
+      → megadrive/Sonic.bin
+  game1.bin  [NES cartridge header]
+      → nes/game1.bin
+  Mega Man 2 (USA).zip  [NES cartridge header]
+      → nes/Mega Man 2 (USA).zip
+  Pokémon Stadium (USA).z64  [Nintendo 64 cartridge header · checksum OK]
+      → Nintendo 64/Pokémon Stadium (USA).z64
+  Super Mario 64 (USA).v64  [Nintendo 64 cartridge header · checksum OK]
+      → Nintendo 64/Super Mario 64 (USA).v64
+  nds game.nds  [Nintendo DS cartridge header]
+      → nds/nds game.nds
+  Enter the Matrix PC Disc 1.iso  [PC disc (autorun/setup files, no console boot file) — even though it was in "PS2 games"]
+      → pc/Enter the Matrix PC Disc 1.iso
+  Big Game.m3u  [PlayStation disc SLUS-00892]
+      → psx/Big Game.m3u
+  Crash Bandicoot (USA).chd  [name found in the official PlayStation list]
+      → psx/Crash Bandicoot (USA).chd
+  My Game.cue  [PlayStation disc SCUS-94900]
+      → psx/My Game.cue
+  Kingdom Hearts (USA).chd  [was in a folder called "PS2 games"]
+      → ps2/Kingdom Hearts (USA).chd
+  thing.iso  [PlayStation 2 disc SLUS-20062]
+      → ps2/thing.iso
+  UMD.iso  [PSP disc]
+      → psp/UMD.iso
+  Nights.cue  [Sega Saturn disc]
+      → saturn/Nights.cue
+  mystery.iso  [Wii disc (RMGE01)]
+      → wii/mystery.iso
+  SMW.smc  [Super Nintendo cartridge header]
+      already in your ROMs folder
+  GTA San Andreas.mdf  [Couldn't tell which console this is for]
+      ? console unknown — use --assign "name=console" or --skip
+  GTA San Andreas.mds  [Couldn't tell which console this is for]
+      ? console unknown — use --assign "name=console" or --skip
+      ! Disc image in .mds/.mdf format — emulators and chdman can't read it — Mount it and save it as an .iso (or .bin/.cue) first, or use a converter.
+  mystery.dat2  [Couldn't tell which console this is for]
+      ? console unknown — use --assign "name=console" or --skip
+  Zelda Minish.gba  [Game Boy Advance cartridge header]
+      NOT imported: a different file called "Zelda Minish.gba" is already there
+  Broken (USA).cue  [Couldn't tell which console this is for]
+      skipped: incomplete — fix or re-download it first
+      ! Incomplete: a file it needs is missing (Broken (USA).bin).
+  evil.m3u  [Couldn't tell which console this is for]
+      skipped: incomplete — fix or re-download it first
+      ! Incomplete: a file it needs is missing (../../../../etc/passwd).
+  Half Game (USA).iso.part  [Couldn't tell which console this is for]
+      skipped: Download didn't finish — This file is an incomplete download. Re-download it — never copy it to your handheld.
+  Manhunt (Europe) (Disc 1).zip  [Couldn't tell which console this is for]
+      skipped: This archive is damaged — "Manhunt (Europe) (Disc 1).bin" is broken (Invalid checksum). Re-download it — ideally using the site's torrent link, which checks every piece.
+  Manhunt (PS2 Classics Vault) [SLUS20827].pkg  [Couldn't tell which console this is for]
+      skipped: PlayStation Store package, not a disc image — This is a PS3/PS4 store package. PS2 emulators can't use it — you need a PS2 disc image (.iso or .chd) of the game.
+  scph1001.bin  [Looks like a BIOS file]
+      skipped: BIOS files go in your emulator's BIOS folder, not with games
+  Unconfirmed 812733.crdownload  [Couldn't tell which console this is for]
+      skipped: Download didn't finish — This file is an incomplete download. Re-download it — never copy it to your handheld.
+  Broken Kart (USA).z64  [Nintendo 64 cartridge header]
+      skipped: N64 ROM is damaged or modified — Its checksum is 4D12F9E4 B0BB39EA but the header says 6512F9E4 0E1D092A. Re-download it (hacks and translations can also cause this).
+  note: 1 empty file skipped (failed copies or downloads).
+  note: 9 non-game files (text, pictures, installers…) left alone.
+
+Needs 3 MB on the destination drive; 146.1 GB free.
+  ✓ Copied → dreamcast/Shenmue (USA) (Disc 1).chd
+  ✓ Copied → gb/pokemon red.gb
+  ✓ Copied → gbc/pokemon crystal.gb
+  ✓ Copied → gc/gc.iso
+  ✓ Copied → megadrive/Sonic.bin
+  ✓ Copied → nes/game1.bin
+  ✓ Copied → nes/Mega Man 2 (USA).zip
+  45%
+  ✓ Copied → Nintendo 64/Pokémon Stadium (USA).z64
+  81%
+  ✓ Copied → Nintendo 64/Super Mario 64 (USA).v64
+  ✓ Copied → nds/nds game.nds
+  ✓ Copied → pc/Enter the Matrix PC Disc 1.iso
+  ✓ Copied → psx/Big Game.m3u
+  ✓ Copied → psx/Crash Bandicoot (USA).chd
+  ✓ Copied → psx/My Game.cue
+  91%
+  ✓ Copied → ps2/Kingdom Hearts (USA).chd
+  ✓ Copied → ps2/thing.iso
+  ✓ Copied → psp/UMD.iso
+  ✓ Copied → saturn/Nights.cue
+  ✓ Copied → wii/mystery.iso
+
+Done: 19 imported, 1 already there, 12 skipped, 0 failed (3 MB).

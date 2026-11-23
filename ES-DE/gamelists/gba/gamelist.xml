@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<gameList>
+	<game>
+		<path>./Metroid Fusion (USA).gba</path>
+		<name>Metroid Fusion</name>
+		<desc>Samus Aran returns in an all-new Metroid adventure!
+
+While lending mission support on planet SR388, interstellar bounty hunter Samus Aran is attacked by an X parasite, an organism with the ability to mimic the abilities of any creature it infects. Near death, Samus is saved by a vaccine made from the DNA of the last Metroid -- the X parasite&apos;s only natural predator. When the X spread to a research station in orbit around SR388, a weakened Samus is forced to exterminate them all ... or die trying.</desc>
+		<releasedate>20021101T000000</releasedate>
+		<developer>Nintendo R&amp;D1</developer>
+		<publisher>Nintendo</publisher>
+		<genre>Action, Adventure, Platform</genre>
+		<players>1</players>
+		<rating>0.89</rating>
+	</game>
+	<game>
+		<path>./Mario &amp; Luigi - Superstar Saga (USA).gba</path>
+		<name>Mario &amp; Luigi: Superstar Saga</name>
+		<desc>Princess Peach&apos;s voice has been stolen by Cackletta and replaced with explosives! Mario and Luigi with the help of Bowser follow her trail to the neighboring Beanbean Kingdom, where they interact with a new cast of characters in their quest to stop her.
+
+Battle gameplay further continues the Super Mario RPG and Paper Mario traditions. Rather than merely making selections from a menu as in many RPGs, timing your button presses correctly can inflict or defend from extra damage.</desc>
+		<releasedate>20031117T000000</releasedate>
+		<developer>AlphaDream</developer>
+		<publisher>Nintendo</publisher>
+		<genre>Action, Platform, Role-Playing</genre>
+		<players>1</players>
+		<rating>0.88</rating>
+	</game>
+	<game>
+		<path>./Pokémon - Emerald Version (USA, Europe).gba</path>
+		<name>Pokémon Emerald Version</name>
+		<desc>Pokémon Emerald Version takes Trainers back to the land of Hoenn for an expanded adventure, this time against both Team Magma and Team Aqua! Pokémon Emerald also features an even more exciting storyline featuring the Legendary Rayquaza, and the chance to catch more Legendary Pokémon such as both Latios and Latias!
+Around the region you&apos;ll notice exciting locales, especially the Battle Frontier. The Battle Frontier is basically an amusement park for Trainers, with a variety of challenges in a number of arenas headed by the always-intimidating Frontier Brains, some of the most formidable Trainers you&apos;ve ever faced.</desc>
+		<releasedate>20040916T000000</releasedate>
+		<developer>Game Freak</developer>
+		<publisher>Nintendo</publisher>
+		<genre>Adventure, Role-Playing</genre>
+		<players>4</players>
+		<rating>0.91</rating>
+	</game>
+</gameList>

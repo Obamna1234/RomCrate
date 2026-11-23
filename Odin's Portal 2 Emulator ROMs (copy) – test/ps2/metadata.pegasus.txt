@@ -1,0 +1,66 @@
+# Created by RomCrate. Edit freely — RomCrate never overwrites this file.
+collection: PlayStation 2
+shortname: ps2
+extensions: bin, chd, cso, cue, gz, iso, m3u, zso
+# Launch line for ARMSX2 (Play Store) — tested on AYN Odin 2 Portal, Android 13, ARMSX2 2.7.x from the Play Store (2026-11-15).
+launch: am start
+  -n come.nanodata.armsx2/com.armsx2.MainActivity
+  -a android.intent.action.VIEW
+  -d "{file.uri}"
+  --activity-clear-task
+  --activity-clear-top
+  --activity-no-history
+# Note: The Play Store build keeps the package id 'come.nanodata.armsx2' (note: 'come', not 'com') but its classes moved to 'com.armsx2.*', so the fully qualified activity is required.
+
+game: Grand Theft Auto III
+file: game disc 1.iso
+developer: Rockstar North
+publisher: Rockstar Games
+genre: Sandbox
+players: 1
+release: 2001-10-22
+rating: 88%
+description:
+  Grand Theft Auto III is a 2001 action-adventure game developed by DMA Design and published by Rockstar Games. It was the first 3D game in the Grand Theft Auto series. Set in Liberty City, loosely based on New York City, the story follows Claude, a silent protagonist who becomes entangled in a world of crime, drugs, gang warfare and corruption. The game is played from a third-person perspective and its world is navigated on foot or by vehicle. Its open world design lets players freely roam Liberty City.
+  .
+  Development was shared between DMA Design, based in Edinburgh, and Rockstar, based in New York City. Development involved transforming popular Grand Theft Auto elements into a fully 3D world for the first time. The game was delayed following the September 11 attacks to allow the team to change references and gameplay deemed inappropriate. Grand Theft Auto III was released in October 2001 for the PlayStation 2, in May 2002 for Windows, and in November 2003 for the Xbox. Mobile ports were released for the tenth anniversary in 2011, followed by a remastered version for the twentieth in 2021.
+  .
+  Grand Theft Auto III received acclaim for its concept, gameplay, sound design, and visual fidelity, but generated controversies for its violence and sex. It received year-end accolades from several gaming publications, and it is considered a landmark game in the open world concept, one of the most significant games of the sixth generation of consoles, and among the best video games. It was the best-selling video game of 2001 and among the best-selling PlayStation 2 games with over 11.6 million copies sold; it has sold over 14.5 million copies overall. The game was followed by Grand Theft Auto: Vice City (2002) and two prequels, Advance (2004) and Liberty City Stories (2005).
+
+game: Kingdom Hearts
+file: Kingdom Hearts (USA).chd
+developer: Square
+publisher: Square Enix
+genre: Action, Adventure, Platform, Role-Playing
+players: 1
+release: 2002-03-28
+rating: 89%
+description:
+  For the first time ever, Disney films come together in one game, but it's up to you make it their world the happiest place on Earth. Kingdom Hearts follows Sora in his quest to find his friends and Court Wizard Donald and Captain Goofy as they set out to find the missing King Mickey. The three searchers meet and embark on a magnificent, but dangerous, journey across familiar Disney worlds filled with monsters. Over 100 characters appear in the game including Jafar, Tarzan, and Hercules.
+
+game: Ratchet & Clank
+file: Ratchet & Clank (USA).chd
+developer: Insomniac Games
+publisher: Sony Computer Entertainment
+genre: Action, Adventure, Platform
+players: 1
+release: 2002-11-01
+rating: 85%
+description:
+  Ratchet & Clank is a platform/adventure game in a similar vein to the 3D versions of the Rayman, Sonic, Mario, or other games. It involves the two protagonists Ratchet, a furry alien creature, and Clank, a nerdy little robot, going on a quest to find Captain Qwark and ultimately to help save the galaxy.
+  .
+  Ratchet & Clank includes many of the best features of previous similar games, but makes itself unique in a number of ways. Firstly each of the game's levels are huge sweeping vistas with extremely detailed buildings which are visible at all times (i.e. there is no distance fog). This means that a building on the horizon is not just a "backdrop"; in all likelihood Ratchet will be exploring it in a few moments time. Secondly, the game includes a number of sub-games, such as a space fight sequence and a number of turret shoot-outs which are akin to Missile Command in the first person.
+  .
+  The game has over twenty levels (planets) and includes as many real-time cut-scenes which tell the story. Also of note is that the story is non-linear, requiring the player to return to previous levels to complete objectives and to choose between multiple paths forward. There is also a respectable array of weapons, gadgets, and accessories to find or buy as the game progresses, which offer some unique gameplay features.
+
+game: Shadow of the Colossus
+file: Shadow of the Colossus (USA).chd
+developer: Team ICO
+publisher: Sony Computer Entertainment Europe
+genre: Action, Adventure
+players: 1
+release: 2005-10-18
+rating: 91%
+description:
+  Tales speak of a distant place where creatures the size of mountains roam free. Bound to the land, these beasts hold the key to a mystical power - a power capable of bringing the departed back from the other side. Spurred by love, yet armed only with sword and bow, one man faces an extraordinary challenge - a solitary quest to find and slay opponents so immense they seem to possess no weakness. But in this desolate, beautiful land, very little is ever as it seems. And the journey is only just beginning...
+

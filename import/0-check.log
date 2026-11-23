@@ -1,0 +1,32 @@
+PROBLEM  Downloads\Broken Kart (USA).z64
+         N64 ROM is damaged or modified
+         Its checksum is 4D12F9E4 B0BB39EA but the header says 6512F9E4 0E1D092A. Re-download it (hacks and translations can also cause this).
+PROBLEM  Downloads\Half Game (USA).iso.part
+         Download didn't finish
+         This file is an incomplete download. Re-download it — never copy it to your handheld.
+PROBLEM  Downloads\Manhunt (Europe) (Disc 1).zip
+         This archive is damaged
+         "Manhunt (Europe) (Disc 1).bin" is broken (Invalid checksum). Re-download it — ideally using the site's torrent link, which checks every piece.
+PROBLEM  Downloads\Manhunt (PS2 Classics Vault) [SLUS20827].pkg
+         PlayStation Store package, not a disc image
+         This is a PS3/PS4 store package. PS2 emulators can't use it — you need a PS2 disc image (.iso or .chd) of the game.
+PROBLEM  Downloads\Unconfirmed 812733.crdownload
+         Download didn't finish
+         This file is an incomplete download. Re-download it — never copy it to your handheld.
+WARNING  Downloads\GTA San Andreas\GTA San Andreas.mds
+         Disc image in .mds/.mdf format — emulators and chdman can't read it
+         Mount it and save it as an .iso (or .bin/.cue) first, or use a converter.
+WARNING  Downloads\PC\FEAR
+         This PC game uses SecuROM disc copy protection
+         It probably won't start in GameNative/Wine on Android, and may not run on Windows 10/11 either. Check whether there's a digital (Steam/GOG) or console version.
+WARNING  Downloads\PC\Manhunt
+         This PC game uses SecuROM disc copy protection
+         It probably won't start in GameNative/Wine on Android, and may not run on Windows 10/11 either. Check whether there's a digital (Steam/GOG) or console version.
+info     Downloads\Pokémon Stadium (USA).z64
+         N64 ROM verified (CIC-6102)
+         The cartridge checksum matches.
+info     Downloads\n64\Super Mario 64 (USA).v64
+         N64 ROM verified (CIC-6102)
+         The cartridge checksum matches.
+
+Checked 49 files: 5 problems, 3 warnings.
