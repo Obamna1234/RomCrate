@@ -1,0 +1,85 @@
+# Created by RomCrate. Edit freely — RomCrate never overwrites this file.
+collection: NES / Famicom
+shortname: NES
+extensions: 7z, nes, unf, unif, zip
+# Launch line for RetroArch (Play Store) · Nestopia core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/nestopia_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Nintendo - NES / Famicom (Nestopia UE)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.
+
+game: Castlevania
+file: Castlevania (USA).nes
+developer: Konami
+publisher: Konami
+genre: Platform
+players: 1
+release: 1986-09-26
+rating: 85%
+description:
+  If you think it's scary on the outside, wait'll you see the basement! You're in for the longest night of your life. Ghosts, goblins, demons, wolves, bats - creatures lurking around every corner. As you descend deeper and deeper, they get thicker and thicker. Better stick close to the cavern floor - it's your only chance of finding a weapon or two. You're gonna need 'em. Because when you finally meet the Count, you know he'll be going for the jugular. So keep your courage up and your stake sharp. And say your prayers!
+
+game: DuckTales
+file: Duck Tales.nes
+developer: Capcom
+publisher: Capcom
+genre: Platform
+players: 1
+release: 1989-09-01
+rating: 86%
+description:
+  Bless me bagpipes! When will that thrill-seeker, Scrooge McDuck, ever quit? Never one to turn away from adventure, Uncle Scrooge has taken on his greatest challenge - to discover the legendary Five Lost Treasures and become the "Richest Duck in the World!"
+  .
+  Join Scrooge and the DUCKTALES gang: gung-ho flying ace, Launchpad; the nephews, Huey, Dewey and Louie, and little Webby on their search. Together, they must trek through the treacherous Amazon jungle, down into the diamond mines of Africa, and even to the Moon!
+  .
+  Are you "Duck" enough to join them on their adventure? Come along to Duckburg Headquarters and see for yourself!
+
+game: The Legend of Zelda
+file: Legend of Zelda, The (USA).nes
+developer: Nintendo
+publisher: Nintendo
+genre: Action, Adventure
+players: 1
+release: 1986-02-21
+rating: 91%
+description:
+  Welcome to the Legend of Zelda.  Where the only sound you’ll hear is your own heart pounding as you race through forests, lakes, mountains and dungeonous mazes in an attempt to restore peace to the land of Hyrule.  Along the way you’ll be challenged by Tektites, Wizzrobes and an endless array of ruthless creatures who’ll stop at nothing to prevent you from finding the lost fragments of the Triforce of Wisdom.  But don’t despair.  With a little luck and a lot of courage, you’ll conquer your adversaries, unite the Triforce fragments and unravel the mystery of the Legend of Zelda!
+  .
+  * Explore the vast Overworld terrain of the land of Hyrule and discover hidden treasures.
+  * Explore the mystical labyrinths of the Underworld and ward-off ruthless enemies.
+
+game: Mega Man 2
+file: Mega Man 2 (USA).nes
+developer: Capcom
+publisher: Capcom
+genre: Platform, Shooter
+players: 1
+release: 1988-12-24
+rating: 88%
+description:
+  He's Back! And this time the evil Dr. Wily (once the supreme power in the universe) has created even more sinister robots to mount his attack. But as MegaMan, you've also grown in power and ability. Can you save mankind from the evil desires of Dr. Wily? Each of the eight empires is ruled by a different super-robot. You must defeat each enemy on his own turf, building up weapons as you go. Only after all are destroyed will you go head-on with the mastermind himself, the evil Dr. Wily.
+
+game: Super Mario Bros. 3
+file: Super Mario Bros. 3 (USA).nes
+developer: Nintendo EAD
+publisher: Nintendo
+genre: Platform
+players: 2
+release: 1988-10-23
+rating: 95%
+description:
+  Fight monsters and mini-bosses, avoid ghosts and the burning sun.  Make your way through water and quicksand.  Dodge cannon balls and bullets and rescue the King’s wand!
+  .
+  In Super Mario Bros. 3 there are more warps, more chances at extra lives, and new special suits!  The raccoon suit lets you fly and knock out blocks.  The frog suit helps you out-swim the deadly fish.  There are suits for every occasion!
+  .
+  Store up flowers and mushrooms to use later on.  Play game-show type bonus rounds!  Go back to that last screen and get a mushroom!  Pause to take a break, then continue where you left off!
+  .
+  Super Mario Bros. 3 is fun to play alone, or team up with a buddy to prolong the adventure!
+

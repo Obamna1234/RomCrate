@@ -1,0 +1,78 @@
+# Created by RomCrate. Edit freely — RomCrate never overwrites this file.
+collection: PlayStation
+shortname: psx
+extensions: ccd, chd, cue, ecm, img, iso, m3u, mds, pbp
+# Launch line for RetroArch (Play Store) · SwanStation core — NOT tested on a device yet. Remove the '# ' in front of
+# the lines below to try it, and please report whether it works.
+# launch: am start
+#   -n com.retroarch/.browser.retroactivity.RetroActivityFuture
+#   -e ROM "{file.path}"
+#   -e LIBRETRO /data/data/com.retroarch/cores/swanstation_libretro_android.so
+#   -e CONFIGFILE /storage/emulated/0/Android/data/com.retroarch/files/retroarch.cfg
+#   -e IME com.android.inputmethod.latin/.LatinIME
+#   -e DATADIR /data/data/com.retroarch
+#   -e SDCARD /storage/emulated/0
+#   -e EXTERNAL /storage/emulated/0/Android/data/com.retroarch/files
+# Note: Install the 'Sony - PlayStation (SwanStation)' core first (RetroArch → Online Updater → Core Downloader). This is for RetroArch from the Play Store; the 64-bit build from retroarch.com uses 'com.retroarch.aarch64'.
+
+game: Crash Bandicoot
+file: Crash Bandicoot (USA).chd
+developer: Naughty Dog
+publisher: Sony Computer Entertainment
+genre: Action, Platform
+players: 1
+release: 1996-08-31
+rating: 85%
+description:
+  Experience the game that revolutionized 3D platforming on Playstation! When Dr. Neo Cortex's plan to use Crash Bandicoot as part of his world domination army fails, Crash manages to escape but in the confusion leaves his girlfriend Tanya behind. Now washed up on N. Sanity Beach, Crash teams up with ancient spirit Aku-Aku in order to fight his way back to Cortex's lair in order to save Tanya from the same fate Crash narrowly avoided. With 32 levels of 3D platforming mayhem and gems to collect don't expect any mercy.
+
+game: Final Fantasy VII
+file: Final Fantasy VII (USA).m3u
+developer: Square
+publisher: Sony Computer Entertainment Europe
+genre: Role-Playing
+players: 1
+release: 1997-01-31
+rating: 92%
+description:
+  Mako—the discovery of this natural resource drawn directly from the planet’s life force marked the dawn of a new era, and now the energy sustains the lives of people across the world. However, the Shinra Company has monopolized Mako production, and in doing so established a powerful hegemony--its influence reaching the far corners of the globe.
+  .
+  Cloud, a former member of Shinra's military organization, SOLDIER, joins the anti-Shinra resistance group AVALANCHE, despite caring little for their motives. During one of the group’s attempts to stop the company, they learn of the return of Sephiroth, Cloud’s nemesis, and that with his reemergence, the planet is in greater danger than anyone had expected. With the fate of the world riding on their success, Cloud and his allies set out to quell this deadly threat.
+  .
+  Experience the game that popularized the JRPG in the West and propelled Final Fantasy to become the quintessential RPG franchise across the globe and in the video game history.
+
+game: Metal Gear Solid
+file: Metal Gear Solid (USA) (Disc 1).cue
+developer: Konami Computer Entertainment Japan
+publisher: Konami
+genre: Shooter, Stealth
+players: 1
+release: 1998-09-03
+rating: 94%
+description:
+  Metal Gear Solid follows Solid Snake, a soldier who infiltrates a nuclear weapons facility to neutralize the terrorist threat from FOXHOUND, a renegade special forces unit. Snake must liberate two hostages, the head of DARPA and the president of a major arms manufacturer, confront the terrorists, and stop them from launching a nuclear strike.
+  .
+  Note: For those who don't have the box art of the back, this game uses a security feature of the time of telling you to use the station number on the back of the box. That radio frequency is "140.15"
+
+game: Spyro the Dragon
+file: Spyro the Dragon (USA).chd
+developer: Insomniac Games
+publisher: Sony Computer Entertainment
+genre: Action, Platform
+players: 1
+release: 1998-09-10
+rating: 85%
+description:
+  He's cute. He's purple. A nasty burp could send those in his vicinity to the burn unit. Allow us to introduce you to Spyro the Dragon. In his debut adventure, Spyro must free his fellow fire-breathers from their crystalline prisons that are located across six worlds. He'll have to run, jump, glide, walk, roll, and fly his way through each of the 35 levels. And when things get physical, he can use a number of attacks on enemies, including fireballs, charge attacks, and superflames.
+
+game: Tony Hawk's Pro Skater 2
+file: Tony Hawk's Pro Skater 2 (USA).chd
+developer: Neversoft Entertainment
+publisher: Activision
+genre: Sports
+players: 2
+release: 2000-09-02
+rating: 90%
+description:
+  Tony Hawk's Pro Skater 2 features the series' trademark open-ended gameplay, in which the player (playing as a professional skateboarder) completes a number of tasks which result in cash rewards. With money gained, the player can then purchase skill improvements and better skateboards. THPS2 was also the first game in the series to introduce the manual, a skateboarding trick where the performer balances on two wheels. This enables players to string together trick combos. The game also introduced the Noseslide, Tailslide, Bluntslide, Nosebluntside, Feeble, and Overcrook grinds. It was also the first of the Pro Skater games to feature Create-a-Skater and Park Editor features, now staples in the series.
+

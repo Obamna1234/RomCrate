@@ -1,0 +1,26 @@
+# Created by RomCrate. Edit freely — RomCrate never overwrites this file.
+collection: PlayStation 2
+shortname: ps2
+extensions: bin, chd, cso, cue, gz, iso, m3u, zso
+# Launch line for ARMSX2 (Play Store) — tested on AYN Odin 2 Portal, Android 13, ARMSX2 2.7.x from the Play Store (2026-11-15).
+launch: am start
+  -n come.nanodata.armsx2/com.armsx2.MainActivity
+  -a android.intent.action.VIEW
+  -d "{file.uri}"
+  --activity-clear-task
+  --activity-clear-top
+  --activity-no-history
+# Note: The Play Store build keeps the package id 'come.nanodata.armsx2' (note: 'come', not 'com') but its classes moved to 'com.armsx2.*', so the fully qualified activity is required.
+
+game: game disc 1
+file: game disc 1.iso
+
+game: Kingdom Hearts
+file: Kingdom Hearts (USA).chd
+
+game: Ratchet & Clank
+file: Ratchet & Clank (USA).chd
+
+game: Shadow of the Colossus
+file: Shadow of the Colossus (USA).chd
+
